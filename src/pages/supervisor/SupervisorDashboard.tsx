@@ -3,7 +3,7 @@ import { Card, Button, Loader } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { useAuthStore } from '../../utils/authStore';
-import { CheckCircle, Clock, Link as LinkIcon, FileText } from 'lucide-react';
+import { CheckCircle, Clock, Link as LinkIcon } from 'lucide-react';
 
 export const SupervisorDashboard: React.FC = () => {
    const [projects, setProjects] = useState<any[]>([]);

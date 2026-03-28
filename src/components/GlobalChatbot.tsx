@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MessageSquare, X, Send, Bot } from 'lucide-react';
-import { Card, Button, Input } from './index';
+import { Card } from './index';
 
 export const GlobalChatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
