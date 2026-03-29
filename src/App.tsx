@@ -10,9 +10,18 @@ const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const AdminDashboard = React.lazy(() => import('./pages/admin/AdminDashboard'));
 const CreateForm = React.lazy(() => import('./pages/admin/CreateForm'));
 const FormDetails = React.lazy(() => import('./pages/admin/FormDetails'));
+const AdminRequests = React.lazy(() => import('./pages/admin/AdminRequests'));
+const AdminSupervisors = React.lazy(() => import('./pages/admin/AdminSupervisors'));
+const AdminProjectsOverview = React.lazy(() => import('./pages/admin/AdminProjectsOverview'));
+const AdminTasks = React.lazy(() => import('./pages/admin/AdminTasks'));
 const Enrollment = React.lazy(() => import('./pages/Enrollment'));
 const SupervisorDashboard = React.lazy(() => import('./pages/supervisor/SupervisorDashboard'));
+const SupervisorTeamOverview = React.lazy(() => import('./pages/supervisor/SupervisorTeamOverview'));
+const SupervisorTasks = React.lazy(() => import('./pages/supervisor/SupervisorTasks'));
+const SupervisorReview = React.lazy(() => import('./pages/supervisor/SupervisorReview'));
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
+const Chat = React.lazy(() => import('./pages/Chat'));
+const Settings = React.lazy(() => import('./pages/Settings'));
 
 const App: React.FC = () => {
   const initializeAuth = useAuthStore(state => state.initialize);
@@ -32,13 +41,26 @@ const App: React.FC = () => {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="enroll" element={<Enrollment />} />
             
+            {/* Student/Shared Routes */}
+            <Route path="chat" element={<Chat />} />
+            <Route path="settings" element={<Settings />} />
+
             {/* Admin Routes */}
             <Route path="admin/dashboard" element={<AdminDashboard />} />
+            <Route path="admin/projects" element={<AdminProjectsOverview />} />
+            <Route path="admin/tasks" element={<AdminTasks />} />
+            <Route path="admin/requests" element={<AdminRequests />} />
+            <Route path="admin/supervisors" element={<AdminSupervisors />} />
             <Route path="admin/create-form" element={<CreateForm />} />
             <Route path="admin/form-details/:formId" element={<FormDetails />} />
             
             {/* Supervisor Routes */}
-            <Route path="supervisor/dashboard" element={<SupervisorDashboard />} />
+            <Route path="supervisor">
+              <Route path="dashboard" element={<SupervisorDashboard />} />
+              <Route path="teams/:teamId" element={<SupervisorTeamOverview />} />
+              <Route path="tasks" element={<SupervisorTasks />} />
+              <Route path="submissions/:projectId" element={<SupervisorReview />} />
+            </Route>
             
             {/* Catch all - 404 fallback */}
             <Route path="*" element={

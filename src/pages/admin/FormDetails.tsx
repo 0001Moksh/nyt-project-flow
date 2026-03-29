@@ -4,14 +4,16 @@ import { Card, Button, Loader } from '../../components';
 import { adminService } from '../../services/adminService';
 import type { FormResponse } from '../../services/adminService';
 import type { ProjectResponse } from '../../services/studentService';
-import { ArrowLeft, Search, FileText } from 'lucide-react';
+import { ArrowLeft, Search, FileText, Users } from 'lucide-react';
+import { api } from '../../services/api';
 
 export const FormDetails: React.FC = () => {
   const { formId } = useParams();
   const navigate = useNavigate();
 
   const [formConfig, setFormConfig] = useState<FormResponse | null>(null);
-  const [projects, setProjects] = useState<ProjectResponse[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [supervisors, setSupervisors] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -25,8 +27,34 @@ export const FormDetails: React.FC = () => {
         ]);
         
         setFormConfig(formRes);
-        // Filter projects by this specific formId
-        setProjects(allProjectsRes.filter(p => p.formId === formId));
+        const targetedProjects = allProjectsRes.filter((p: any) => p.formId === formId);
+        
+        const [teamsRes, studentsRes, supervisorsRes] = await Promise.all([
+             api.get('/teams'),
+             api.get('/students'),
+             api.get('/supervisors')
+        ]);
+
+        const sups = supervisorsRes.data.map((sup: any) => ({
+            ...sup,
+            assignedCount: allProjectsRes.filter((p: any) => p.supervisorId === sup.supervisorId).length
+        }));
+        setSupervisors(sups);
+
+        const enriched = targetedProjects.map((p: any) => {
+             const team = teamsRes.data.find((t: any) => t.teamId === p.teamId);
+             let memberDetails: any[] = [];
+             if (team) {
+                  const arr = JSON.parse(team.teamMemberArray || '[]');
+                  memberDetails = arr.map((sid: string) => {
+                      const st = studentsRes.data.find((s:any) => s.studentId === sid);
+                      return st || { studentId: sid, name: 'Unknown', mail: 'N/A' };
+                  });
+             }
+             return { ...p, team, memberDetails };
+        });
+
+        setProjects(enriched);
       } catch (err) {
         console.error(err);
       } finally {
@@ -36,6 +64,19 @@ export const FormDetails: React.FC = () => {
 
     fetchDetails();
   }, [formId]);
+
+  const assignSupervisor = async (projectId: string, supervisorId: string) => {
+      try {
+          await api.put(`/projects/${projectId}`, { supervisorId });
+          setProjects(projects.map(p => p.projectId === projectId ? { ...p, supervisorId } : p));
+          setSupervisors(supervisors.map(s => {
+              if (s.supervisorId === supervisorId) return { ...s, assignedCount: s.assignedCount + 1 };
+              return s;
+          }));
+      } catch (err) {
+          console.error("Failed to assign supervisor");
+      }
+  };
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: '64px' }}><Loader size="lg" /></div>;
   if (!formConfig) return <div style={{ textAlign: 'center', padding: '64px', color: 'var(--danger)' }}><h1>Form Not Found</h1></div>;
@@ -65,28 +106,82 @@ export const FormDetails: React.FC = () => {
           </p>
         </Card>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {projects.map((project) => (
-            <Card key={project.projectId} elevation={2}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {projects.map((project: any) => (
+            <Card key={project.projectId} elevation={2} style={{ borderLeft: '4px solid var(--primary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
                 <div>
-                  <h3 style={{ fontSize: '20px', margin: 0 }}>{project.projectTitle}</h3>
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                  <h3 style={{ fontSize: '22px', margin: '0 0 8px' }}>{project.projectTitle}</h3>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <FileText size={14} /> ID: {project.projectId.slice(0, 8)}
                     </span>
-                    <span style={{ fontSize: '12px', backgroundColor: 'var(--primary)', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '11px', backgroundColor: 'var(--primary)', color: 'white', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                       {project.status.toUpperCase()}
                     </span>
                   </div>
                 </div>
-                <Button size="sm" variant="outline">Review Proposal</Button>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Evaluation Stage</div>
+                  <div style={{ fontWeight: 600 }}>{project.stageStatus}</div>
+                </div>
               </div>
 
-              <div style={{ backgroundColor: 'var(--surface-hover)', padding: '16px', borderRadius: '8px', fontSize: '14px', whiteSpace: 'pre-wrap' }}>
-                <strong>Project Description & Form Data:</strong><br /><br />
-                {project.projectDescription}
+              <div style={{ padding: '16px 24px', backgroundColor: 'var(--background)', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                   <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Assign Supervisor:</div>
+                   <select 
+                      value={project.supervisorId || ''} 
+                      onChange={(e) => assignSupervisor(project.projectId, e.target.value)}
+                      style={{ flex: 1, maxWidth: '400px', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)' }}
+                   >
+                       <option value="">-- Unassigned --</option>
+                       {supervisors.map(sup => (
+                           <option key={sup.supervisorId} value={sup.supervisorId}>
+                               {sup.name} ({sup.assignedCount} Projects Assigned)
+                           </option>
+                       ))}
+                   </select>
+                   {project.supervisorId && <div style={{ fontSize: '12px', color: 'var(--success)' }}>Active Supervisor Notification Sent</div>}
               </div>
+
+              <div style={{ display: 'flex', gap: '24px', padding: '16px 0 0' }}>
+                 {/* TEAM MEMBERS PANEL */}
+                 <div style={{ flex: 1 }}>
+                     <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                         <Users size={16} color="var(--primary)" /> Enrolled Team Members
+                     </h4>
+                     
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                         {project.memberDetails?.map((m: any) => (
+                              <div key={m.studentId} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                   <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', fontWeight: 'bold' }}>
+                                        {m.name.charAt(0)}
+                                   </div>
+                                   <div>
+                                       <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          {m.name}
+                                          {m.studentId === project.team?.leaderId && (
+                                              <span style={{ fontSize: '10px', backgroundColor: 'var(--warning)', color: '#000', padding: '2px 6px', borderRadius: '8px' }}>LEADER</span>
+                                          )}
+                                       </div>
+                                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{m.mail}</div>
+                                   </div>
+                              </div>
+                         ))}
+                     </div>
+                 </div>
+
+                 {/* PROJECT DETAILS PANEL */}
+                 <div style={{ flex: 1 }}>
+                     <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                         <FileText size={16} color="var(--primary)" /> Proposal Context
+                     </h4>
+                     <div style={{ backgroundColor: 'var(--surface-hover)', padding: '16px', borderRadius: '8px', fontSize: '13px', whiteSpace: 'pre-wrap', border: '1px dashed var(--border-color)', height: '100%', maxHeight: '400px', overflowY: 'auto' }}>
+                         {project.projectDescription}
+                     </div>
+                 </div>
+              </div>
+
             </Card>
           ))}
         </div>
