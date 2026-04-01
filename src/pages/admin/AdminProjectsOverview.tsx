@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, Button, Loader } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
-import { ChevronDown, ChevronUp, CheckCircle, Clock, Flag, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle, Clock, Flag, AlertTriangle, ShieldAlert, Users, FileText } from 'lucide-react';
 
 export const AdminProjectsOverview: React.FC = () => {
     const [projects, setProjects] = useState<any[]>([]);
@@ -19,12 +19,38 @@ export const AdminProjectsOverview: React.FC = () => {
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            const [projRes, supRes] = await Promise.all([
+            const [projRes, supRes, teamsRes, studentsRes] = await Promise.all([
                 api.get('/projects').catch(() => ({ data: [] })),
-                api.get('/supervisors').catch(() => ({ data: [] }))
+                api.get('/supervisors').catch(() => ({ data: [] })),
+                api.get('/teams').catch(() => ({ data: [] })),
+                api.get('/students').catch(() => ({ data: [] }))
             ]);
-            setProjects(projRes.data || []);
-            setSupervisors(supRes.data || []);
+            
+            const allProjects = projRes.data || [];
+            const allSupervisors = supRes.data || [];
+            const allTeams = teamsRes.data || [];
+            const allStudents = studentsRes.data || [];
+
+            const sups = allSupervisors.map((sup: any) => ({
+                ...sup,
+                assignedCount: allProjects.filter((p: any) => p.supervisorId === sup.supervisorId).length
+            }));
+
+            const enriched = allProjects.map((p: any) => {
+                 const team = allTeams.find((t: any) => t.teamId === p.teamId);
+                 let memberDetails: any[] = [];
+                 if (team) {
+                      const arr = JSON.parse(team.teamMemberArray || '[]');
+                      memberDetails = arr.map((sid: string) => {
+                          const st = allStudents.find((s:any) => s.studentId === sid);
+                          return st || { studentId: sid, name: 'Unknown', mail: 'N/A' };
+                      });
+                 }
+                 return { ...p, team, memberDetails };
+            });
+
+            setProjects(enriched);
+            setSupervisors(sups);
         } catch (err) {
             console.error(err);
         } finally {
@@ -32,16 +58,28 @@ export const AdminProjectsOverview: React.FC = () => {
         }
     };
 
+    const assignSupervisor = async (projectId: string, supervisorId: string) => {
+        try {
+            await api.put(`/projects/${projectId}`, { supervisorId });
+            setProjects(projects.map(p => p.projectId === projectId ? { ...p, supervisorId } : p));
+            setSupervisors(supervisors.map(s => {
+                if (s.supervisorId === supervisorId) return { ...s, assignedCount: (s.assignedCount || 0) + 1 };
+                return s;
+            }));
+            addToast('Supervisor Assignment Updated successfully.', 'success');
+        } catch (err) {
+            console.error("Failed to assign supervisor");
+            addToast('Failed to assign supervisor.', 'error');
+        }
+    };
+
     const handleAdminOverride = async (projectId: string, action: string) => {
-        // Mock Admin Override logic based on the user requirement "allow status override but log changes"
         try {
             if (action === 'APPROVE') {
                 await api.put(`/projects/${projectId}`, { status: 'approved' });
                 addToast('Admin Override: Stage Approved successfully (Logged).', 'success');
             } else if (action === 'REVISION') {
                 addToast('Admin Override: Revision Requested (Logged).', 'success');
-            } else if (action === 'CHANGE_SUPERVISOR') {
-                addToast('Admin Override: Supervisor Change Initiated.', 'info');
             }
             fetchData();
         } catch(err) {
@@ -165,43 +203,70 @@ export const AdminProjectsOverview: React.FC = () => {
                                     {isExpanded && (
                                         <tr style={{ backgroundColor: '#f8fafc', borderTop: '0' }}>
                                             <td colSpan={5} style={{ padding: '0 24px 24px 24px' }}>
-                                                <div style={{ display: 'flex', gap: '24px', borderLeft: '4px solid #3b82f6', paddingLeft: '24px', marginLeft: '56px' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '4px solid #3b82f6', paddingLeft: '24px', marginLeft: '56px' }}>
                                                     
-                                                    {/* Submission History Mock */}
-                                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                                        <h4 style={{ margin: 0, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', color: '#1e293b' }}><Clock size={16} /> Submission History</h4>
-                                                        <div style={{ position: 'relative', paddingLeft: '16px', borderLeft: '2px solid #e2e8f0' }}>
-                                                            <div style={{ position: 'absolute', left: '-6px', top: '4px', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#2563eb' }}></div>
-                                                            <div style={{ fontSize: '13px', fontWeight: 600 }}>v1.2 Final Draft Submitted</div>
-                                                            <div style={{ fontSize: '11px', color: 'var(--text-disabled)' }}>Today, 2:45 PM by {sup?.name}</div>
-                                                        </div>
-                                                        <div style={{ position: 'relative', paddingLeft: '16px', borderLeft: '2px solid transparent' }}>
-                                                            <div style={{ position: 'absolute', left: '-6px', top: '4px', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10b981' }}></div>
-                                                            <div style={{ fontSize: '13px', fontWeight: 600 }}>Proposal Approved</div>
-                                                            <div style={{ fontSize: '11px', color: 'var(--text-disabled)' }}>Yesterday, 10:15 AM</div>
-                                                        </div>
+                                                    {/* Supervisor Assignment Bar (from FormDetails) */}
+                                                    <div style={{ padding: '16px 24px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                                        <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Assign Supervisor:</div>
+                                                        <select 
+                                                            value={proj.supervisorId || ''} 
+                                                            onChange={(e) => assignSupervisor(proj.projectId, e.target.value)}
+                                                            style={{ flex: 1, maxWidth: '400px', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)' }}
+                                                        >
+                                                            <option value="">-- Unassigned --</option>
+                                                            {supervisors.map(sup => (
+                                                                <option key={sup.supervisorId} value={sup.supervisorId}>
+                                                                    {sup.name} ({sup.assignedCount || 0} Projects Assigned)
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        {proj.supervisorId && <div style={{ fontSize: '12px', color: '#16a34a', fontWeight: 600 }}>Active Supervisor Assigned</div>}
                                                     </div>
 
-                                                    {/* Supervisor Feedback Mock */}
-                                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                                        <h4 style={{ margin: 0, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', color: '#1e293b' }}><CheckCircle size={16} /> Supervisor Feedback</h4>
-                                                        <div style={{ fontSize: '13px', color: '#475569', fontStyle: 'italic', backgroundColor: 'white', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-                                                            "The architecture diagram looks solid. Please ensure the security protocols for the grid nodes are documented in the next version."
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-                                                                <span style={{ fontWeight: 600, color: '#2563eb' }}>{sup?.name || 'Assigned Lead'}</span>
-                                                                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-disabled)' }}>REPLY</span>
+                                                    <div style={{ display: 'flex', gap: '24px' }}>
+                                                        {/* TEAM MEMBERS PANEL (from FormDetails) */}
+                                                        <div style={{ flex: 1, backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                             <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                 <Users size={16} color="var(--primary)" /> Enrolled Team Members
+                                                             </h4>
+                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                 {proj.memberDetails?.map((m: any) => (
+                                                                      <div key={m.studentId} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                                           <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', fontWeight: 'bold' }}>
+                                                                                {m.name.charAt(0)}
+                                                                           </div>
+                                                                           <div>
+                                                                               <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                                  {m.name}
+                                                                                  {m.studentId === proj.team?.leaderId && (
+                                                                                      <span style={{ fontSize: '10px', backgroundColor: 'var(--warning)', color: '#000', padding: '2px 6px', borderRadius: '8px' }}>LEADER</span>
+                                                                                  )}
+                                                                               </div>
+                                                                               <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{m.mail}</div>
+                                                                           </div>
+                                                                      </div>
+                                                                 ))}
+                                                             </div>
+                                                        </div>
+
+                                                        {/* PROJECT DETAILS PANEL (from FormDetails) */}
+                                                        <div style={{ flex: 1, backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                             <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                 <FileText size={16} color="var(--primary)" /> Proposal Context
+                                                             </h4>
+                                                             <div style={{ backgroundColor: 'var(--surface-hover)', padding: '16px', borderRadius: '8px', fontSize: '13px', whiteSpace: 'pre-wrap', border: '1px dashed var(--border-color)', height: '100%', maxHeight: '400px', overflowY: 'auto' }}>
+                                                                 {proj.projectDescription || "No description provided."}
+                                                             </div>
+                                                        </div>
+
+                                                        {/* ADMIN ACTIONS (Original from AdminProjectsOverview) */}
+                                                        <div style={{ width: '280px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 600, color: '#dc2626', marginBottom: '8px' }}>
+                                                                <ShieldAlert size={14} /> ADMIN OVERRIDE PANEL
                                                             </div>
+                                                            <Button style={{ width: '100%', backgroundColor: '#2563eb', color: 'white', border: 'none' }} onClick={() => handleAdminOverride(proj.projectId, 'APPROVE')}>APPROVE CURRENT STAGE</Button>
+                                                            <Button style={{ width: '100%', backgroundColor: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }} onClick={() => handleAdminOverride(proj.projectId, 'REVISION')}>REQUEST REVISION</Button>
                                                         </div>
-                                                    </div>
-
-                                                    {/* Admin Actions */}
-                                                    <div style={{ width: '280px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 600, color: '#dc2626', marginBottom: '8px' }}>
-                                                            <ShieldAlert size={14} /> ADMIN OVERRIDE PANEL
-                                                        </div>
-                                                        <Button style={{ width: '100%', backgroundColor: '#2563eb' }} onClick={() => handleAdminOverride(proj.projectId, 'APPROVE')}>APPROVE CURRENT STAGE</Button>
-                                                        <Button style={{ width: '100%', backgroundColor: '#fef3c7', color: '#d97706', borderColor: '#fde68a' }} variant="outline" onClick={() => handleAdminOverride(proj.projectId, 'REVISION')}>REQUEST REVISION</Button>
-                                                        <Button style={{ width: '100%' }} variant="outline" onClick={() => handleAdminOverride(proj.projectId, 'CHANGE_SUPERVISOR')}>CHANGE SUPERVISOR</Button>
                                                     </div>
                                                 </div>
                                             </td>

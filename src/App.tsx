@@ -12,6 +12,7 @@ const CreateForm = React.lazy(() => import('./pages/admin/CreateForm'));
 const FormDetails = React.lazy(() => import('./pages/admin/FormDetails'));
 const AdminRequests = React.lazy(() => import('./pages/admin/AdminRequests'));
 const AdminSupervisors = React.lazy(() => import('./pages/admin/AdminSupervisors'));
+const AdminStudents = React.lazy(() => import('./pages/admin/AdminStudents'));
 const AdminProjectsOverview = React.lazy(() => import('./pages/admin/AdminProjectsOverview'));
 const AdminTasks = React.lazy(() => import('./pages/admin/AdminTasks'));
 const Enrollment = React.lazy(() => import('./pages/Enrollment'));
@@ -22,6 +23,7 @@ const SupervisorReview = React.lazy(() => import('./pages/supervisor/SupervisorR
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 const Chat = React.lazy(() => import('./pages/Chat'));
 const Settings = React.lazy(() => import('./pages/Settings'));
+const StudentProjects = React.lazy(() => import('./pages/StudentProjects'));
 
 const App: React.FC = () => {
   const initializeAuth = useAuthStore(state => state.initialize);
@@ -42,6 +44,7 @@ const App: React.FC = () => {
             <Route path="enroll" element={<Enrollment />} />
             
             {/* Student/Shared Routes */}
+            <Route path="projects" element={<StudentProjects />} />
             <Route path="chat" element={<Chat />} />
             <Route path="settings" element={<Settings />} />
 
@@ -51,6 +54,7 @@ const App: React.FC = () => {
             <Route path="admin/tasks" element={<AdminTasks />} />
             <Route path="admin/requests" element={<AdminRequests />} />
             <Route path="admin/supervisors" element={<AdminSupervisors />} />
+            <Route path="admin/students" element={<AdminStudents />} />
             <Route path="admin/create-form" element={<CreateForm />} />
             <Route path="admin/form-details/:formId" element={<FormDetails />} />
             

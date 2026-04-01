@@ -44,7 +44,7 @@ export const AdminRequests: React.FC = () => {
     const handleReject = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!rejectingId || !rejectReason) return;
-        
+
         try {
             await api.post(`/requests/${rejectingId}/reject`, { reason: rejectReason });
             addToast('Request Rejected.', 'success');
@@ -56,17 +56,17 @@ export const AdminRequests: React.FC = () => {
         }
     };
 
-    if (isLoading) return <div style={{ display:'flex', justifyContent:'center', padding:'100px'}}><Loader size="lg" /></div>;
+    if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}><Loader size="lg" /></div>;
 
     const pendingRequests = requests.filter(r => r.status === 'PENDING');
-    const pastRequests = requests.filter(r => r.status !== 'PENDING').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const pastRequests = requests.filter(r => r.status !== 'PENDING').sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return (
         <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            
+
             <div>
                 <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: '0 0 8px', fontWeight: 700 }}>Pending Registration Requests</h1>
-                <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '15px' }}>Review and approve new supervisors joining the Nyt Flow project management system.</p>
+                <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '15px' }}>Review and approve new supervisors joining the Nyt Project Flow project management system.</p>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -102,27 +102,27 @@ export const AdminRequests: React.FC = () => {
             </div>
 
             <h2 style={{ fontSize: '20px', margin: '16px 0 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>Audit Log: Past Actions</h2>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {pastRequests.map(req => (
                     <Card key={req.requestId} style={{ padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', opacity: 0.8 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                 <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: req.status === 'APPROVED' ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: req.status === 'APPROVED' ? '#16a34a' : '#dc2626' }}>
-                                     {req.status === 'APPROVED' ? <CheckCircle size={20} /> : <XCircle size={20} />}
-                                 </div>
-                                 <div>
-                                     <div style={{ fontWeight: 600 }}>{req.supervisorName} <span style={{ color: 'var(--text-disabled)', fontWeight: 400, marginLeft: '8px' }}>({req.mail})</span></div>
-                                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                         {req.status === 'APPROVED' ? `Approved by Admins on ${new Date(req.approvedAt || req.createdAt).toLocaleString()}` : 'Request Rejected'}
-                                     </div>
-                                 </div>
-                             </div>
-                             {req.status === 'REJECTED' && req.rejectionReason && (
-                                 <div style={{ fontSize: '13px', color: '#b91c1c', backgroundColor: '#fef2f2', padding: '8px 12px', borderRadius: '6px', maxWidth: '300px' }}>
-                                     <strong>Reason:</strong> {req.rejectionReason}
-                                 </div>
-                             )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: req.status === 'APPROVED' ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: req.status === 'APPROVED' ? '#16a34a' : '#dc2626' }}>
+                                    {req.status === 'APPROVED' ? <CheckCircle size={20} /> : <XCircle size={20} />}
+                                </div>
+                                <div>
+                                    <div style={{ fontWeight: 600 }}>{req.supervisorName} <span style={{ color: 'var(--text-disabled)', fontWeight: 400, marginLeft: '8px' }}>({req.mail})</span></div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                        {req.status === 'APPROVED' ? `Approved by Admins on ${new Date(req.approvedAt || req.createdAt).toLocaleString()}` : 'Request Rejected'}
+                                    </div>
+                                </div>
+                            </div>
+                            {req.status === 'REJECTED' && req.rejectionReason && (
+                                <div style={{ fontSize: '13px', color: '#b91c1c', backgroundColor: '#fef2f2', padding: '8px 12px', borderRadius: '6px', maxWidth: '300px' }}>
+                                    <strong>Reason:</strong> {req.rejectionReason}
+                                </div>
+                            )}
                         </div>
                     </Card>
                 ))}

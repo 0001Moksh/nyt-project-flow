@@ -1,12 +1,12 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../utils/authStore';
-import { 
-  LayoutDashboard, 
-  FolderKanban, 
-  MessageSquare, 
-  Settings, 
-  Users, 
+import {
+  LayoutDashboard,
+  FolderKanban,
+  MessageSquare,
+  Settings,
+  Users,
   FileText,
   LogOut
 } from 'lucide-react';
@@ -67,7 +67,7 @@ export const Sidebar: React.FC = () => {
       zIndex: 100
     }}>
       {/* BRANDING HEADER */}
-      <div 
+      <div
         style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
         onClick={() => navigate('/')}
       >
@@ -81,7 +81,7 @@ export const Sidebar: React.FC = () => {
           N
         </div>
         <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
-          NYT Flow
+          NYT Project Flow
         </h1>
       </div>
 
@@ -134,8 +134,8 @@ export const Sidebar: React.FC = () => {
             </div>
           </div>
         </div>
-        
-        <button 
+
+        <button
           onClick={handleLogout}
           style={{
             display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center',

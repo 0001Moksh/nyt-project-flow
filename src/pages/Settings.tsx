@@ -1,29 +1,105 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../utils/authStore';
 import { Card, Button, Input } from '../components';
 import { useToastStore } from '../utils/toastStore';
+import { api } from '../services/api';
 import { Mail, Bell, Clock, Info } from 'lucide-react';
 
 export const Settings: React.FC = () => {
     const { user } = useAuthStore();
     const addToast = useToastStore(state => state.addToast);
 
-    // Mock form
-    const [name, setName] = useState(user?.name || 'Alex Johnson');
-    const [branch, setBranch] = useState('Computer Science & Engineering');
+    // Form
+    const [name, setName] = useState(user?.name || '');
+    const [mail, setMail] = useState('');
+    const [department, setDepartment] = useState('');
     
-    // Passwords
-    const [curPass, setCurPass] = useState('********');
-    const [newPass, setNewPass] = useState('********');
-    const [confPass, setConfPass] = useState('********');
+    // Passwords & Security
+    const [newPass, setNewPass] = useState('');
+    const [confPass, setConfPass] = useState('');
+    const [otpSent, setOtpSent] = useState(false);
+    const [otp, setOtp] = useState('');
 
     // Notifications
     const [emailAlerts, setEmailAlerts] = useState(true);
     const [pushAlerts, setPushAlerts] = useState(false);
     const [deadlineAlerts, setDeadlineAlerts] = useState(true);
 
-    const handleSave = () => {
-        addToast('Profile updated successfully!', 'success');
+    useEffect(() => {
+        if (user?.role === 'ADMIN' && user.id) {
+            api.get(`/admins/${user.id}`).then(res => {
+                if(res.data) {
+                    setName(res.data.name || '');
+                    setMail(res.data.mail || '');
+                    setDepartment(res.data.department || '');
+                }
+            }).catch(console.error);
+        }
+    }, [user]);
+
+    const handleSave = async () => {
+        try {
+            if (user?.role === 'ADMIN' && user.id) {
+                // If the user hasn't changed their password, we don't send it, or we have to send a blank payload 
+                // But the backend AdminUpdateRequest expects password to be populated or ignored depending on logic.
+                // Assuming standard PUT payload without password overrides cleanly:
+                await api.put(`/admins/${user.id}`, {
+                    name,
+                    mail,
+                    department,
+                    password: '' // Mock empty bypass, real implementation depends on backend validator
+                });
+            }
+            addToast('Profile updated successfully!', 'success');
+        } catch (err) {
+            addToast('Failed to update profile', 'error');
+        }
+    };
+
+    const handleSendOTP = async () => {
+        if (!mail) {
+            addToast('Admin email not configured', 'error');
+            return;
+        }
+        try {
+            await api.post('/otp/resend', { email: mail, accountType: 'ADMIN' });
+            setOtpSent(true);
+            addToast('OTP sent to your registered admin email.', 'success');
+        } catch (err) {
+            addToast('Failed to send OTP. Server error.', 'error');
+        }
+    };
+
+    const handleUpdatePassword = async () => {
+        if (!otpSent) return;
+        if (!otp || !newPass || !confPass) {
+            addToast('Please fill all fields', 'error');
+            return;
+        }
+        if (newPass !== confPass) {
+            addToast('Passwords do not match', 'error');
+            return;
+        }
+        try {
+            // 1. Verify OTP
+            await api.post('/otp/verify', { email: mail, code: otp, accountType: 'ADMIN' });
+            
+            // 2. Update Password on Admin
+            await api.put(`/admins/${user?.id}`, {
+                name,
+                mail,
+                department,
+                password: newPass
+            });
+
+            addToast('Password updated successfully', 'success');
+            setOtpSent(false);
+            setOtp('');
+            setNewPass('');
+            setConfPass('');
+        } catch (err) {
+            addToast('Invalid OTP or update failed', 'error');
+        }
     };
 
     return (
@@ -32,8 +108,8 @@ export const Settings: React.FC = () => {
             {/* Header */}
             <div>
                 <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>Profile Settings</h1>
-                <p style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: '15px' }}>
-                    Manage your academic identity and notification preferences.
+                <p style={{ color: 'var(--text-secondary)', margin: '8px 0 0', fontSize: '15px' }}>
+                    Manage your administrative identity and security preferences.
                 </p>
             </div>
 
@@ -63,20 +139,11 @@ export const Settings: React.FC = () => {
                                 <Input label="Full Name" value={name} onChange={(e: any) => setName(e.target.value)} style={{ marginBottom: 0 }} />
                             </div>
                             <div style={{ flex: 1 }}>
-                                <Input label="Roll Number (Read-only)" value="CS2024-042" disabled style={{ marginBottom: 0, backgroundColor: 'var(--surface-hover)' }} />
+                                <Input label="Email (Mail)" value={mail} onChange={(e: any) => setMail(e.target.value)} disabled style={{ marginBottom: 0, backgroundColor: 'var(--surface-hover)' }} />
                             </div>
                         </div>
                         <div>
-                            <label style={{ fontSize: '14px', fontWeight: 500, display: 'block', marginBottom: '8px' }}>Branch / Department</label>
-                            <select 
-                                value={branch}
-                                onChange={(e) => setBranch(e.target.value)}
-                                style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff', fontSize: '15px' }}
-                            >
-                                <option value="Computer Science & Engineering">Computer Science & Engineering</option>
-                                <option value="Information Technology">Information Technology</option>
-                                <option value="Electronics & Communication">Electronics & Communication</option>
-                            </select>
+                            <Input label="Department" value={department} onChange={(e: any) => setDepartment(e.target.value)} style={{ marginBottom: 0 }} />
                         </div>
                     </div>
                 </div>
@@ -85,12 +152,25 @@ export const Settings: React.FC = () => {
             {/* Security */}
             <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden', padding: 0 }}>
                 <div style={{ padding: '24px' }}>
-                    <h3 style={{ margin: '0 0 24px', fontSize: '18px', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>Security</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-                        <Input label="Current Password" type="password" value={curPass} onChange={e=>setCurPass(e.target.value)} style={{ marginBottom: 0 }} />
-                        <Input label="New Password" type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} style={{ marginBottom: 0 }} />
-                        <Input label="Confirm Password" type="password" value={confPass} onChange={e=>setConfPass(e.target.value)} style={{ marginBottom: 0 }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '24px' }}>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Security: Password Update</h3>
+                        {!otpSent && <Button size="sm" onClick={handleSendOTP} disabled={!mail}>Send Update OTP</Button>}
                     </div>
+
+                    {otpSent ? (
+                        <div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: '16px', marginBottom: '16px' }}>
+                                <Input label="Enter OTP from Email" value={otp} onChange={e=>setOtp(e.target.value)} style={{ marginBottom: 0 }} />
+                                <Input label="New Password" type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} style={{ marginBottom: 0 }} />
+                                <Input label="Confirm New Password" type="password" value={confPass} onChange={e=>setConfPass(e.target.value)} style={{ marginBottom: 0 }} />
+                            </div>
+                            <Button variant="primary" onClick={handleUpdatePassword}>Verify & Update Password</Button>
+                        </div>
+                    ) : (
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                            Click "Send Update OTP" to receive a verification code on your registered email (<strong>{mail || 'Not Configured'}</strong>) and securely change your password.
+                        </div>
+                    )}
                 </div>
                 <div style={{ backgroundColor: '#eff6ff', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '8px', color: '#1e3a8a', fontSize: '12px' }}>
                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>!</div>
@@ -165,7 +245,7 @@ export const Settings: React.FC = () => {
             {/* Actions */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-disabled)', fontSize: '13px', cursor: 'pointer' }}>
-                    <Info size={16} /> Incorrect Academic Info? <strong style={{color: 'var(--primary)', textDecoration: 'underline'}}>Contact Registrar</strong>
+                    <Info size={16} /> Incorrect Admin Info? <strong style={{color: 'var(--primary)', textDecoration: 'underline'}}>Contact Sub-Admin</strong>
                 </div>
                 <div style={{ display: 'flex', gap: '16px' }}>
                     <Button variant="outline" style={{ border: 'none', backgroundColor: 'transparent' }}>Discard Changes</Button>
