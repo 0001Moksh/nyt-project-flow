@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { Card, Input, Button } from '../components';
 import { useAuthStore } from '../utils/authStore';
 import { useToastStore } from '../utils/toastStore';
+import { ToastContainer } from '../components/Toast';
 import { Lock, Mail } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -26,62 +27,62 @@ export const Login: React.FC = () => {
     setIsLoading(true);
     
     try {
-      if (email.includes('admin')) {
-        // Fetch real admin from DB to satisfy PostgreSQL foreign keys
-        const { data: admins } = await api.get('/admins');
-        let realAdminId = 'admin_123';
-        
-        if (admins && admins.length > 0) {
-          realAdminId = admins[0].adminId;
-        } else {
-          const { data: newAdmin } = await api.post('/admins', { 
+      // Fetch all user types to determine role dynamically
+      const [adminsRes, supervisorsRes, studentsRes] = await Promise.all([
+        api.get('/admins').catch(() => ({ data: [] })),
+        api.get('/supervisors').catch(() => ({ data: [] })),
+        api.get('/students').catch(() => ({ data: [] }))
+      ]);
+
+      const admins = adminsRes.data;
+      const supervisors = supervisorsRes.data;
+      const students = studentsRes.data;
+
+      // 1. Check Admin
+      let matchedAdmin = admins?.find((a: any) => a.mail === email && a.password === password);
+      
+      // Fallback for first-time system setup if no admins exist
+      if (!matchedAdmin && email.includes('admin') && (!admins || admins.length === 0)) {
+         const { data: newAdmin } = await api.post('/admins', { 
             name: "System Admin", 
             mail: email, 
             password: password, 
             department: "Computer Science" 
-          });
-          realAdminId = newAdmin.adminId;
-        }
-        login({ id: realAdminId, name: 'Admin User', email, role: 'ADMIN' });
-      } else if (email.includes('super')) {
-        login({ id: 'sup_123', name: 'Supervisor User', email, role: 'SUPERVISOR' });
-      } else {
-        // Fetch or create real student from DB
-        const { data: students } = await api.get('/students');
-        const existingStudent = students?.find((s: any) => s.mail === email);
-        
-        let realStudentId = 'stu_123';
-        let realStudentName = 'Student User';
-        
-        if (existingStudent) {
-          realStudentId = existingStudent.studentId;
-          realStudentName = existingStudent.name;
-        } else {
-          const { data: newStudent } = await api.post('/students', { 
-            name: email.split('@')[0].toUpperCase(), 
-            mail: email, 
-            password: password,
-            rollNo: Math.random().toString(36).substr(2, 8).toUpperCase(),
-            branch: "Computer Science",
-            batch: "2026",
-            enrollStatus: "PENDING"
-          });
-          realStudentId = newStudent.studentId;
-          realStudentName = newStudent.name;
-        }
-        
-        login({ id: realStudentId, name: realStudentName, email, role: 'STUDENT' });
+         });
+         matchedAdmin = newAdmin;
       }
-      
-      addToast('Login successful', 'success');
-      if (email.includes('admin')) {
+
+      if (matchedAdmin) {
+        login({ id: matchedAdmin.adminId, name: matchedAdmin.name || 'Admin', email, role: 'ADMIN' });
+        addToast('Login successful', 'success');
         navigate('/admin/dashboard');
-      } else {
-        navigate('/dashboard');
+        return;
       }
-    } catch (error) {
+
+      // 2. Check Supervisor
+      const matchedSupervisor = supervisors?.find((s: any) => s.mail === email && s.password === password);
+      if (matchedSupervisor) {
+        login({ id: matchedSupervisor.supervisorId, name: matchedSupervisor.name, email, role: 'SUPERVISOR' });
+        addToast('Login successful', 'success');
+        navigate('/supervisor/dashboard');
+        return;
+      }
+
+      // 3. Check Student
+      const matchedStudent = students?.find((s: any) => s.mail === email && s.password === password);
+      if (matchedStudent) {
+        login({ id: matchedStudent.studentId, name: matchedStudent.name, email, role: 'STUDENT' });
+        addToast('Login successful', 'success');
+        navigate('/dashboard');
+        return;
+      }
+
+      // If no match found
+      addToast('Invalid email or password', 'error');
+
+    } catch (error: any) {
        console.error(error);
-       addToast('Failed to sync authentication with backend.', 'error');
+       addToast(error.response?.data?.message || 'Network error occurred.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -129,6 +130,7 @@ export const Login: React.FC = () => {
           </Button>
         </form>
       </Card>
+      <ToastContainer />
     </div>
   );
 };

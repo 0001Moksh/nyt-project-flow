@@ -46,6 +46,65 @@ export const LandingPage: React.FC = () => {
         fetchLeaderboard();
     }, []);
 
+    // Registration Modal States
+    const [showRegisterModal, setShowRegisterModal] = useState(false);
+    const [regStep, setRegStep] = useState<1 | 2>(1);
+    const [isRegistering, setIsRegistering] = useState(false);
+    const [regData, setRegData] = useState({
+        supervisorName: '',
+        department: '',
+        mail: '',
+        phoneNumber: '',
+        password: '',
+        otp: ''
+    });
+
+    const handleRegChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        setRegData({ ...regData, [e.target.name]: e.target.value });
+    };
+
+    const handleSendOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsRegistering(true);
+        try {
+            await api.post('/otp/resend', { email: regData.mail, accountType: 'SUPERVISOR' });
+            // Move to OTP step on success
+            setRegStep(2);
+            alert("OTP sent to your email!");
+        } catch (err: any) {
+            alert(err.response?.data?.message || err.message || "Failed to send OTP.");
+        } finally {
+            setIsRegistering(false);
+        }
+    };
+
+    const handleVerifyOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsRegistering(true);
+        try {
+            // 1. Verify OTP
+            await api.post('/otp/verify', { email: regData.mail, code: regData.otp, accountType: 'SUPERVISOR' });
+            
+            // 2. Submit the registration request
+            await api.post('/requests', {
+                supervisorName: regData.supervisorName,
+                department: regData.department,
+                mail: regData.mail,
+                phoneNumber: regData.phoneNumber,
+                password: regData.password
+            });
+            
+            alert("Registration successful! Your request has been sent to the Admin for approval.");
+            setShowRegisterModal(false);
+            setRegStep(1);
+            setRegData({ supervisorName: '', department: '', mail: '', phoneNumber: '', password: '', otp: '' });
+        } catch (err: any) {
+             alert(err.response?.data?.message || err.message || "OTP Verification failed.");
+        } finally {
+             setIsRegistering(false);
+        }
+    };
+
     return (
         <div className="landing-container">
 
@@ -65,8 +124,8 @@ export const LandingPage: React.FC = () => {
                         <button className="btn btn-primary" onClick={() => navigate('/login')} style={{ padding: '16px 32px', fontSize: '1.1rem' }}>
                             Login via Secure Link <ArrowRight size={20} style={{ marginLeft: '8px' }} />
                         </button>
-                        <button className="btn btn-outline" style={{ padding: '16px 32px', fontSize: '1.1rem', borderColor: '#CCC' }}>
-                            View Documentation
+                        <button className="btn btn-outline" onClick={() => setShowRegisterModal(true)} style={{ padding: '16px 32px', fontSize: '1.1rem', borderColor: '#CCC' }}>
+                            Register as Supervisor
                         </button>
                     </div>
                 </div>
@@ -324,6 +383,63 @@ export const LandingPage: React.FC = () => {
                                 );
                             })}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* SUPERVISOR REGISTRATION MODAL */}
+            {showRegisterModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(4px)' }}>
+                    <div className="glass-card" style={{ width: '90%', maxWidth: '500px', background: '#FFF', padding: '32px', position: 'relative', borderRadius: '16px' }}>
+                        <button onClick={() => { setShowRegisterModal(false); setRegStep(1); }} style={{ position: 'absolute', top: '24px', right: '24px', background: 'none', border: 'none', cursor: 'pointer', color: '#888' }}>
+                            <X size={24} />
+                        </button>
+                        
+                        <h2 style={{ fontSize: '1.8rem', fontWeight: 700, margin: '0 0 8px', color: '#1A1A1A' }}>Supervisor Registration</h2>
+                        <p style={{ color: '#666', marginBottom: '24px' }}>
+                            {regStep === 1 ? 'Enter your details to generate an OTP profile.' : 'Enter the OTP sent to your email to confirm registration.'}
+                        </p>
+
+                        {regStep === 1 ? (
+                            <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Full Name</label>
+                                    <input required name="supervisorName" value={regData.supervisorName} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem' }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Department</label>
+                                    <input required name="department" value={regData.department} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem' }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Email</label>
+                                    <input required type="email" name="mail" value={regData.mail} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem' }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Phone Number</label>
+                                    <input required name="phoneNumber" value={regData.phoneNumber} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem' }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Password</label>
+                                    <input required type="password" name="password" value={regData.password} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem' }} />
+                                </div>
+                                <button type="submit" disabled={isRegistering} className="btn btn-primary" style={{ marginTop: '16px', padding: '14px', fontSize: '1.1rem', background: '#0A2B73', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                                    {isRegistering ? 'Sending OTP...' : 'Send OTP'}
+                                </button>
+                            </form>
+                        ) : (
+                            <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>6-Digit OTP</label>
+                                    <input required type="text" maxLength={6} name="otp" value={regData.otp} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1.5rem', letterSpacing: '8px', textAlign: 'center' }} />
+                                </div>
+                                <button type="submit" disabled={isRegistering} className="btn btn-primary" style={{ marginTop: '16px', padding: '14px', fontSize: '1.1rem', background: '#137333', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                                    {isRegistering ? 'Verifying...' : 'Verify & Submit'}
+                                </button>
+                                <button type="button" onClick={() => setRegStep(1)} style={{ background: 'none', border: 'none', color: '#0A2B73', fontWeight: 600, cursor: 'pointer', marginTop: '8px' }}>
+                                    Go Back
+                                </button>
+                            </form>
+                        )}
                     </div>
                 </div>
             )}

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../utils/authStore';
 import { Card, Button, Loader } from '../components';
 import { useNavigate } from 'react-router-dom';
-import { Check, X, Bell, Users, CheckCircle, Info, Star, ChevronRight, User, Briefcase, Hash, FolderKanban } from 'lucide-react';
+import { Check, X, Bell, Users, CheckCircle, Info, Star, ChevronRight, User, Briefcase, Hash, FolderKanban, History } from 'lucide-react';
 import { api } from '../services/api';
 
 export const StudentProjects: React.FC = () => {
@@ -14,6 +14,7 @@ export const StudentProjects: React.FC = () => {
     const [supervisor, setSupervisor] = useState<any>(null);
     const [members, setMembers] = useState<any[]>([]);
     const [leader, setLeader] = useState<any>(null);
+    const [supervisorHistory, setSupervisorHistory] = useState<any[]>([]);
 
     useEffect(() => {
         if (!isAuthenticated) {
@@ -80,6 +81,20 @@ export const StudentProjects: React.FC = () => {
             setLeader(myLeader);
             setMembers(myMembersGrid.filter(m => m && m.name));
             setSupervisor(mySupervisor);
+
+            if (myProject) {
+                const historyRes = await api.get(`/projects/${myProject.projectId}/supervisor-history`).catch(() => ({ data: [] }));
+                const enrichedHistory = (historyRes.data || []).map((h: any) => {
+                     const oldSup = allSupervisors.find((s:any) => s.supervisorId === h.oldSupervisorId);
+                     const newSup = allSupervisors.find((s:any) => s.supervisorId === h.newSupervisorId);
+                     return {
+                         ...h,
+                         oldSupervisorName: oldSup ? oldSup.name : (h.oldSupervisorId || 'None'),
+                         newSupervisorName: newSup ? newSup.name : h.newSupervisorId
+                     };
+                });
+                setSupervisorHistory(enrichedHistory);
+            }
 
         } catch (err) {
             console.error(err);
@@ -192,12 +207,39 @@ export const StudentProjects: React.FC = () => {
                         </div>
                     </Card>
 
-                    {/* Recent Activities Placeholder */}
+                    {/* Supervisor History Log */}
                     <Card elevation={1} style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                        <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 700 }}>Recent Activity</h3>
-                        <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-disabled)' }}>
-                            <p style={{ margin: 0 }}>No recent activities. Start submitting tasks to see progress here.</p>
-                        </div>
+                        <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <History size={20} color="var(--primary)" /> Supervisor History
+                        </h3>
+                        {supervisorHistory.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-disabled)' }}>
+                                <p style={{ margin: 0 }}>No past supervisor changes recorded.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '2px solid var(--border-color)', marginLeft: '8px', paddingLeft: '16px' }}>
+                                {supervisorHistory.map((history, idx) => (
+                                    <div key={history.id || idx} style={{ position: 'relative' }}>
+                                        <div style={{ position: 'absolute', left: '-22px', top: '0', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--primary)', border: '2px solid white' }}></div>
+                                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                                            {new Date(history.createdAt).toLocaleString()}
+                                        </div>
+                                        <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                            Assignment Changed
+                                        </div>
+                                        <div style={{ fontSize: '14px', marginTop: '6px', color: 'var(--text-secondary)' }}>
+                                            <span style={{ textDecoration: 'line-through', color: 'var(--danger)', marginRight: '8px' }}>{history.oldSupervisorName}</span>
+                                            ➔ <span style={{ color: 'var(--success)', marginLeft: '8px', fontWeight: 600 }}>{history.newSupervisorName}</span>
+                                        </div>
+                                        {history.reason && (
+                                            <div style={{ marginTop: '8px', fontSize: '13px', fontStyle: 'italic', backgroundColor: 'var(--surface-hover)', padding: '8px 12px', borderRadius: '4px', borderLeft: '2px solid var(--warning)' }}>
+                                                " {history.reason} "
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </Card>
 
                 </div>

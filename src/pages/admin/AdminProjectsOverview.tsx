@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Button, Loader } from '../../components';
+import { Card, Button, Loader, Input } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
+import { useAuthStore } from '../../utils/authStore';
 import { ChevronDown, ChevronUp, CheckCircle, Clock, Flag, AlertTriangle, ShieldAlert, Users, FileText } from 'lucide-react';
 
 export const AdminProjectsOverview: React.FC = () => {
@@ -9,8 +10,12 @@ export const AdminProjectsOverview: React.FC = () => {
     const [supervisors, setSupervisors] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
+    const [reasonModalOpen, setReasonModalOpen] = useState(false);
+    const [pendingAssignment, setPendingAssignment] = useState<{projectId: string, newSupervisorId: string} | null>(null);
+    const [reasonText, setReasonText] = useState('');
 
     const addToast = useToastStore(state => state.addToast);
+    const { user } = useAuthStore();
 
     useEffect(() => {
         fetchData();
@@ -58,18 +63,35 @@ export const AdminProjectsOverview: React.FC = () => {
         }
     };
 
-    const assignSupervisor = async (projectId: string, supervisorId: string) => {
+    const handleSupervisorSelect = (projectId: string, currentSupervisorId: string, newSupervisorId: string) => {
+        if (!newSupervisorId) return; // Prevent empty unassignment for now
+        if (currentSupervisorId && currentSupervisorId !== newSupervisorId) {
+            setPendingAssignment({ projectId, newSupervisorId });
+            setReasonText('');
+            setReasonModalOpen(true);
+        } else {
+            executeAssignSupervisor(projectId, newSupervisorId, '');
+        }
+    };
+
+    const executeAssignSupervisor = async (projectId: string, supervisorId: string, reason: string) => {
         try {
-            await api.put(`/projects/${projectId}`, { supervisorId });
+            await api.post(`/projects/${projectId}/assign-supervisor`, {
+                supervisorId,
+                adminId: user?.id,
+                reason
+            });
             setProjects(projects.map(p => p.projectId === projectId ? { ...p, supervisorId } : p));
             setSupervisors(supervisors.map(s => {
                 if (s.supervisorId === supervisorId) return { ...s, assignedCount: (s.assignedCount || 0) + 1 };
                 return s;
             }));
             addToast('Supervisor Assignment Updated successfully.', 'success');
-        } catch (err) {
-            console.error("Failed to assign supervisor");
-            addToast('Failed to assign supervisor.', 'error');
+            setReasonModalOpen(false);
+            setPendingAssignment(null);
+        } catch (err: any) {
+            console.error("Failed to assign supervisor", err);
+            addToast(err.response?.data?.message || 'Failed to assign supervisor.', 'error');
         }
     };
 
@@ -210,7 +232,7 @@ export const AdminProjectsOverview: React.FC = () => {
                                                         <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Assign Supervisor:</div>
                                                         <select 
                                                             value={proj.supervisorId || ''} 
-                                                            onChange={(e) => assignSupervisor(proj.projectId, e.target.value)}
+                                                            onChange={(e) => handleSupervisorSelect(proj.projectId, proj.supervisorId, e.target.value)}
                                                             style={{ flex: 1, maxWidth: '400px', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)' }}
                                                         >
                                                             <option value="">-- Unassigned --</option>
@@ -278,6 +300,37 @@ export const AdminProjectsOverview: React.FC = () => {
                     </tbody>
                 </table>
             </Card>
+
+            {/* REASON MODAL */}
+            {reasonModalOpen && pendingAssignment && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div style={{ background: 'white', padding: '24px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                        <h2 style={{ marginTop: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <AlertTriangle color="#f59e0b" size={20} /> Reassign Supervisor
+                        </h2>
+                        <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>You are replacing an existing supervisor. A reason is required for administrative tracking and notifications.</p>
+                        
+                        <div style={{ marginTop: '16px', marginBottom: '24px' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>Reason for Change <span style={{color: 'red'}}>*</span></label>
+                            <Input 
+                                value={reasonText} 
+                                onChange={(e) => setReasonText(e.target.value)} 
+                                placeholder="E.g., Requested by student, Availability issues..."
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                            <Button variant="outline" onClick={() => { setReasonModalOpen(false); setPendingAssignment(null); }}>Cancel</Button>
+                            <Button 
+                                onClick={() => executeAssignSupervisor(pendingAssignment.projectId, pendingAssignment.newSupervisorId, reasonText)}
+                                disabled={!reasonText.trim()}
+                            >
+                                Confirm Reassignment
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

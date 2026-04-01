@@ -5,3 +5,4 @@ export * from './Loader';
 export * from './Toast';
 export * from './Layout';
 export * from './Sidebar';
+export * from './NotificationBell';

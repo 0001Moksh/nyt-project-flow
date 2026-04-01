@@ -1,8 +1,7 @@
 import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../utils/authStore';
-import { Button, Sidebar } from './index';
-import { Bell } from 'lucide-react';
+import { Button, Sidebar, NotificationBell } from './index';
 import { ToastContainer } from './Toast';
 import { GlobalChatbot } from './GlobalChatbot';
 
@@ -82,15 +81,7 @@ export const Layout: React.FC = () => {
 
                     {/* Header Actions */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                        <button 
-                            onClick={() => {
-                                if (user.role === 'ADMIN') navigate('/admin/requests');
-                            }}
-                            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                            title="View Notifications/Requests"
-                        >
-                            <Bell size={20} />
-                        </button>
+                        <NotificationBell userId={user.id} />
                     </div>
                 </header>
 
