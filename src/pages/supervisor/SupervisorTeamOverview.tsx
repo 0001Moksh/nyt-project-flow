@@ -3,7 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Loader } from '../../components';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../utils/authStore';
-import { Calendar, Users, MessageSquare, FileText, Star, AlertTriangle, FileCheck } from 'lucide-react';
+import { Calendar, Users, MessageSquare, FileText, Star, AlertTriangle, FileCheck, MapPin, Video, CheckCircle, Clock } from 'lucide-react';
+import { ScheduleMeetingModal } from './ScheduleMeetingModal';
+import { ExecuteMeetingModal } from './ExecuteMeetingModal';
 
 export const SupervisorTeamOverview: React.FC = () => {
     const { teamId } = useParams();
@@ -14,6 +16,11 @@ export const SupervisorTeamOverview: React.FC = () => {
     const [project, setProject] = useState<any>(null);
     const [teamInfo, setTeamInfo] = useState<any>(null);
     const [members, setMembers] = useState<any[]>([]);
+    const [meetings, setMeetings] = useState<any[]>([]);
+
+    // Modal state
+    const [isScheduling, setIsScheduling] = useState(false);
+    const [executingMeetingId, setExecutingMeetingId] = useState<string | null>(null);
     
     useEffect(() => {
         fetchData();
@@ -28,10 +35,17 @@ export const SupervisorTeamOverview: React.FC = () => {
                api.get('/students')
            ]);
 
-           const thisProject = projRes.data.find((p:any) => p.teamId === teamId);
+           let thisProject = projRes.data.find((p:any) => p.teamId === teamId);
            const thisTeam = teamsRes.data.find((t:any) => t.teamId === teamId);
            setProject(thisProject);
            setTeamInfo(thisTeam);
+
+           // Fetch meetings if project exists
+           if (thisProject) {
+               api.get(`/supervisor/meetings/project/${thisProject.projectId}`)
+                  .then(mRes => setMeetings(mRes.data || []))
+                  .catch(console.error);
+           }
 
            if (thisTeam && thisTeam.joinMemberArray) {
                const ids = JSON.parse(thisTeam.joinMemberArray);
@@ -83,7 +97,7 @@ export const SupervisorTeamOverview: React.FC = () => {
                 
                 {/* Horizontal Button Strip */}
                 <div style={{ padding: '12px 24px', backgroundColor: '#eff6ff', borderTop: '1px solid #dbeafe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1e3a8a', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                    <div onClick={() => setIsScheduling(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1e3a8a', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
                         <Calendar size={16} /> Schedule Meeting
                     </div>
                     <div style={{ display: 'flex', gap: '12px' }}>
@@ -209,6 +223,50 @@ export const SupervisorTeamOverview: React.FC = () => {
                         </div>
                     </Card>
 
+                    {/* Meetings Tracker */}
+                    <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px' }}>Active Meetings</h3>
+                            <Button variant="outline" size="sm" onClick={() => setIsScheduling(true)}>+ New Meeting</Button>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {meetings.length === 0 && (
+                                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-disabled)', fontSize: '14px' }}>
+                                    No meetings scheduled yet.
+                                </div>
+                            )}
+                            {meetings.map((meeting) => (
+                                <div key={meeting.meetingId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)' }}>
+                                    <div style={{ display: 'flex', gap: '16px' }}>
+                                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: meeting.status === 'COMPLETED' ? '#dcfce7' : 'var(--primary-glow)', color: meeting.status === 'COMPLETED' ? '#16a34a' : 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {meeting.mode === 'ONLINE' ? <Video size={20} /> : <MapPin size={20} />}
+                                        </div>
+                                        <div>
+                                            <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                                                Stage: {meeting.stage}
+                                                {meeting.status === 'COMPLETED' && <span style={{ marginLeft: '12px', fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }}/>COMPLETED</span>}
+                                            </div>
+                                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={14} /> {meeting.meetingDate}</span>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} /> {meeting.meetingTime}</span>
+                                            </div>
+                                            {meeting.status === 'COMPLETED' && (
+                                                <div style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px', fontStyle: 'italic' }}>
+                                                    " {meeting.conclusionNotes} "
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {meeting.status === 'SCHEDULED' && (
+                                        <Button size="sm" onClick={() => setExecutingMeetingId(meeting.meetingId)}>Evaluate Now</Button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
+
                 </div>
 
                 {/* Right Panel Layout */}
@@ -275,6 +333,23 @@ export const SupervisorTeamOverview: React.FC = () => {
 
                 </div>
             </div>
+
+            {isScheduling && (
+                <ScheduleMeetingModal 
+                    projectId={project.projectId} 
+                    onClose={() => setIsScheduling(false)} 
+                    onSuccess={() => { setIsScheduling(false); fetchData(); }} 
+                />
+            )}
+
+            {executingMeetingId && (
+                <ExecuteMeetingModal 
+                    meetingId={executingMeetingId} 
+                    teamMembers={members}
+                    onClose={() => setExecutingMeetingId(null)} 
+                    onSuccess={() => { setExecutingMeetingId(null); fetchData(); }} 
+                />
+            )}
         </div>
     );
 };

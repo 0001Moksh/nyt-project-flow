@@ -103,6 +103,7 @@ export const AdminSupervisors: React.FC = () => {
                                 <th style={{ padding: '16px 24px', fontWeight: 600 }}>Supervisor</th>
                                 <th style={{ padding: '16px', fontWeight: 600 }}>Expertise Tags</th>
                                 <th style={{ padding: '16px', fontWeight: 600 }}>Current Workload</th>
+                                <th style={{ padding: '16px', fontWeight: 600 }}>Performance</th>
                                 <th style={{ padding: '16px', fontWeight: 600 }}>Status</th>
                             </tr>
                         </thead>
@@ -113,6 +114,8 @@ export const AdminSupervisors: React.FC = () => {
                             {supervisors.map((sup, idx) => {
                                 const workload = getWorkload(sup.supervisorId);
                                 const isOverloaded = workload.percentage >= 100;
+                                const perfScore = sup.performanceScore ?? 100;
+                                const isPoorPerf = perfScore < 50;
 
                                 return (
                                     <tr key={sup.supervisorId} style={{ borderTop: '1px solid var(--border-color)', fontSize: '14px' }}>
@@ -140,6 +143,11 @@ export const AdminSupervisors: React.FC = () => {
                                             </div>
                                             <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--surface-hover)', borderRadius: '2px', marginTop: '6px' }}>
                                                 <div style={{ width: `${workload.percentage}%`, height: '100%', backgroundColor: isOverloaded ? '#ef4444' : '#3b82f6', borderRadius: '2px' }}></div>
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '16px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span style={{ fontSize: '13px', fontWeight: 600, color: isPoorPerf ? '#ef4444' : '#16a34a' }}>{perfScore}%</span>
                                             </div>
                                         </td>
                                         <td style={{ padding: '16px' }}>

@@ -3,7 +3,8 @@ import { Card, Button, Loader, Input } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { useAuthStore } from '../../utils/authStore';
-import { ChevronDown, ChevronUp, CheckCircle, Clock, Flag, AlertTriangle, ShieldAlert, Users, FileText } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle, Clock, Flag, AlertTriangle, ShieldAlert, Users, FileText, Calendar } from 'lucide-react';
+import { TimelineConfigModal } from './TimelineConfigModal';
 
 export const AdminProjectsOverview: React.FC = () => {
     const [projects, setProjects] = useState<any[]>([]);
@@ -11,8 +12,10 @@ export const AdminProjectsOverview: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
     const [reasonModalOpen, setReasonModalOpen] = useState(false);
+    const [timelineModalOpen, setTimelineModalOpen] = useState(false);
     const [pendingAssignment, setPendingAssignment] = useState<{projectId: string, newSupervisorId: string} | null>(null);
     const [reasonText, setReasonText] = useState('');
+    const [forms, setForms] = useState<any[]>([]);
 
     const addToast = useToastStore(state => state.addToast);
     const { user } = useAuthStore();
@@ -24,11 +27,12 @@ export const AdminProjectsOverview: React.FC = () => {
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            const [projRes, supRes, teamsRes, studentsRes] = await Promise.all([
+            const [projRes, supRes, teamsRes, studentsRes, formsRes] = await Promise.all([
                 api.get('/projects').catch(() => ({ data: [] })),
                 api.get('/supervisors').catch(() => ({ data: [] })),
                 api.get('/teams').catch(() => ({ data: [] })),
-                api.get('/students').catch(() => ({ data: [] }))
+                api.get('/students').catch(() => ({ data: [] })),
+                api.get('/forms').catch(() => ({ data: [] }))
             ]);
             
             const allProjects = projRes.data || [];
@@ -56,6 +60,7 @@ export const AdminProjectsOverview: React.FC = () => {
 
             setProjects(enriched);
             setSupervisors(sups);
+            setForms(formsRes.data || []);
         } catch (err) {
             console.error(err);
         } finally {
@@ -134,6 +139,9 @@ export const AdminProjectsOverview: React.FC = () => {
                    <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: '0 0 8px', fontWeight: 700 }}>Project Portfolio</h1>
                    <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '15px' }}>Global oversight of all active projects, AI health insights, and execution lifecycles.</p>
                 </div>
+                <Button onClick={() => setTimelineModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                     <Calendar size={18} /> Manage Stage Timelines
+                </Button>
             </div>
 
             <Card elevation={1} style={{ padding: '0', borderRadius: '12px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
@@ -330,6 +338,10 @@ export const AdminProjectsOverview: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {timelineModalOpen && (
+                 <TimelineConfigModal onClose={() => setTimelineModalOpen(false)} forms={forms} />
             )}
         </div>
     );

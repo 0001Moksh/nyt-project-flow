@@ -3,7 +3,7 @@ import { useAuthStore } from '../utils/authStore';
 import { Card, Button, Loader } from '../components';
 import { useToastStore } from '../utils/toastStore';
 import { useNavigate } from 'react-router-dom';
-import { Check, X, Bell, Users, CheckCircle, Info } from 'lucide-react';
+import { Check, X, Bell, Users, CheckCircle, Info, Calendar, Video, MapPin, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
 import { api } from '../services/api';
 import { DeliverableUploader } from '../components/DeliverableUploader';
 
@@ -19,6 +19,8 @@ export const Dashboard: React.FC = () => {
   // Extended Data Tracking
   const [teamMembersList, setTeamMembersList] = useState<any[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [performanceScore, setPerformanceScore] = useState(100);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -111,6 +113,18 @@ export const Dashboard: React.FC = () => {
       setActiveProjects(myProjects);
       setIncomingRequests(myIncomingReqs);
       
+      const myScore = allStudents.find((s:any) => s.studentId === user.id)?.performanceScore ?? 100;
+      setPerformanceScore(myScore);
+
+      if (myProjects.length > 0) {
+          try {
+              const mRes = await api.get(`/supervisor/meetings/project/${myProjects[0].projectId}`);
+              setMeetings(mRes.data || []);
+          } catch (e) {
+              console.error(e);
+          }
+      }
+
       // Deduplicate members list based on ID
       const uniqueMembers = Array.from(new Map(myMembersGrid.filter(m => m.studentId).map(m => [m.studentId, m])).values());
       setTeamMembersList(uniqueMembers);
@@ -277,6 +291,45 @@ export const Dashboard: React.FC = () => {
                       </div>
                   </Card>
 
+                  {/* Meetings Tracker */}
+                  <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                          <h3 style={{ margin: 0, fontSize: '18px' }}>Upcoming Meetings</h3>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          {meetings.length === 0 && (
+                              <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-disabled)', fontSize: '14px' }}>
+                                  No meetings scheduled yet.
+                              </div>
+                          )}
+                          {meetings.map((meeting) => (
+                              <div key={meeting.meetingId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)' }}>
+                                  <div style={{ display: 'flex', gap: '16px' }}>
+                                      <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: meeting.status === 'COMPLETED' ? '#dcfce7' : 'var(--primary-glow)', color: meeting.status === 'COMPLETED' ? '#16a34a' : 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                          {meeting.mode === 'ONLINE' ? <Video size={20} /> : <MapPin size={20} />}
+                                      </div>
+                                      <div>
+                                          <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                                              Stage: {meeting.stage}
+                                              {meeting.status === 'COMPLETED' && <span style={{ marginLeft: '12px', fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }}/>COMPLETED</span>}
+                                          </div>
+                                          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={14} /> {meeting.meetingDate}</span>
+                                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} /> {meeting.meetingTime}</span>
+                                          </div>
+                                          {meeting.status === 'COMPLETED' && (
+                                              <div style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px', fontStyle: 'italic' }}>
+                                                  " {meeting.conclusionNotes} "
+                                              </div>
+                                          )}
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </Card>
+
               </div>
 
               {/* RIGHT COLUMN: Sidebar Panels */}
@@ -323,6 +376,25 @@ export const Dashboard: React.FC = () => {
                           )}
                       </Card>
                   )}
+
+                  {/* Performance Panel */}
+                  <Card elevation={1} style={{ padding: '24px', border: `1px solid ${performanceScore < 50 ? '#fecaca' : 'var(--border-color)'}`, borderRadius: '12px', backgroundColor: performanceScore < 50 ? '#fef2f2' : 'var(--surface)' }}>
+                      <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', color: performanceScore < 50 ? '#dc2626' : 'var(--text-primary)' }}>
+                          <TrendingUp size={20} /> My Performance
+                      </h3>
+                      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', marginBottom: '16px' }}>
+                          <h2 style={{ fontSize: '48px', margin: 0, fontWeight: 800, color: performanceScore < 50 ? '#ef4444' : '#16a34a', lineHeight: '48px' }}>{performanceScore}</h2>
+                          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Points</span>
+                      </div>
+                      <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden', marginBottom: '16px' }}>
+                          <div style={{ width: `${Math.max(0, performanceScore)}%`, height: '100%', backgroundColor: performanceScore < 50 ? '#ef4444' : '#16a34a' }}></div>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+                          {performanceScore < 50 ? (
+                              <span style={{ display: 'flex', gap: '6px', color: '#b91c1c' }}><AlertTriangle size={16} /> Warning: Missing mandatory meetings incurs a 10pt penalty.</span>
+                          ) : 'Maintain your score above 50 by completing milestones and attending all scheduled meetings.'}
+                      </p>
+                  </Card>
 
                   {/* Formation Progress Panel */}
                   <Card elevation={2} style={{ padding: '24px', backgroundColor: '#0f172a', color: 'white', borderRadius: '12px' }}>

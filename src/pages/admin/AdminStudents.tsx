@@ -29,7 +29,7 @@ export const AdminStudents: React.FC = () => {
                 rollNo: s.rollNo,
                 branch: s.branch,
                 status: s.enrollStatus || 'ACTIVE',
-                performance: 0 // Mock baseline
+                performance: s.performanceScore ?? 100
             }));
             
             // If backend is empty, fall back to mock data for demonstration
