@@ -3,10 +3,20 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { Card, Button, Input, Loader } from '../components';
 import { studentService } from '../services/studentService';
-import type { FormResponse } from '../services/adminService';
+import type { FormAttachment, FormResponse } from '../services/adminService';
 import { useAuthStore } from '../utils/authStore';
 import { useToastStore } from '../utils/toastStore';
-import { CheckCircle, Check, Clock, User, X, Search, Info, ArrowLeft, Mail, ArrowRight } from 'lucide-react';
+import { CheckCircle, Check, Clock, User, X, Search, Info, ArrowLeft, Mail, ArrowRight, Paperclip } from 'lucide-react';
+
+const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 export const Enrollment: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -20,6 +30,7 @@ export const Enrollment: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
 
   // Form State
   const [teamSize, setTeamSize] = useState('3-4 Members');
@@ -234,6 +245,16 @@ export const Enrollment: React.FC = () => {
     console.warn("Could not parse jsonOfFields");
   }
 
+  const referenceFiles = parseReferenceFiles(formConfig?.referenceFilesJson);
+
+  const getPreviewUrl = (url: string) => {
+    if (url.includes('drive.google.com/file/d/')) {
+      const match = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+      if (match?.[1]) return `https://drive.google.com/file/d/${match[1]}/preview`;
+    }
+    return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+  };
+
   return (
     <div style={{ padding: '0', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
@@ -281,6 +302,84 @@ export const Enrollment: React.FC = () => {
                 </div>
              </div>
           </Card>
+
+          {referenceFiles.length > 0 && (
+            <Card elevation={1} style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Paperclip size={18} color="var(--primary)" /> Reference Files
+              </h3>
+              <p style={{ margin: '0 0 16px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                Download the form templates or sample files shared by the admin.
+              </p>
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {referenceFiles.map((file) => (
+                  <div
+                    key={file.attachmentId}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--surface-hover)'
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '14px' }}>{file.fileName}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                        {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'Recently uploaded'}
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>
+                      Preview
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {previewFile && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '24px',
+                zIndex: 50
+              }}
+              onClick={() => setPreviewFile(null)}
+            >
+              <div
+                style={{
+                  width: 'min(960px, 96vw)',
+                  height: 'min(80vh, 720px)',
+                  backgroundColor: 'var(--surface)',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  border: '1px solid var(--border-color)'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
+                  <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
+                  <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+                    Close
+                  </Button>
+                </div>
+                <iframe
+                  title={previewFile.fileName}
+                  src={getPreviewUrl(previewFile.fileUrl)}
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Step 1: Define Your Team */}
           <Card elevation={1} style={{ padding: '32px', border: '1px solid var(--border-color)', borderRadius: '12px' }}>

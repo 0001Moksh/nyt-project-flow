@@ -1,5 +1,14 @@
 import { api } from './api';
 
+export interface FormAttachment {
+  attachmentId: string;
+  fileName: string;
+  fileUrl: string;
+  uploadedBy?: string | null;
+  uploadedAt?: string;
+  source?: 'UPLOAD' | 'LINK' | string;
+}
+
 export interface FormCreateRequest {
   accessBranch: string;
   accessBatch: string;
@@ -12,9 +21,20 @@ export interface FormResponse {
   accessBranch: string;
   accessBatch: string;
   jsonOfFields: string;
+  referenceFilesJson?: string;
   createdBy: string;
   createAt: string;
 }
+
+export const parseFormAttachments = (json?: string | null): FormAttachment[] => {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 export const adminService = {
   createForm: async (data: FormCreateRequest): Promise<FormResponse> => {
@@ -29,6 +49,36 @@ export const adminService = {
 
   getForm: async (formId: string): Promise<FormResponse> => {
     const response = await api.get<FormResponse>(`/forms/${formId}`);
+    return response.data;
+  },
+
+  getFormAttachments: async (formId: string): Promise<FormAttachment[]> => {
+    const response = await api.get<FormAttachment[]>(`/forms/${formId}/attachments`);
+    return response.data;
+  },
+
+  uploadFormAttachment: async (formId: string, file: File, uploadedBy?: string): Promise<FormAttachment> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (uploadedBy) {
+      formData.append('uploadedBy', uploadedBy);
+    }
+
+    const response = await api.post<FormAttachment>(`/forms/${formId}/attachments`, formData);
+    return response.data;
+  },
+
+  addFormAttachmentLink: async (
+    formId: string,
+    fileName: string,
+    fileUrl: string,
+    uploadedBy?: string
+  ): Promise<FormAttachment> => {
+    const response = await api.post<FormAttachment>(`/forms/${formId}/attachments/link`, {
+      fileName,
+      fileUrl,
+      uploadedBy,
+    });
     return response.data;
   },
 

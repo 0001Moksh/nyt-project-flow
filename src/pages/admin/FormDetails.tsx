@@ -4,19 +4,35 @@ import { Card, Button, Loader, Input } from '../../components';
 import { adminService } from '../../services/adminService';
 import { useAuthStore } from '../../utils/authStore';
 import { useToastStore } from '../../utils/toastStore';
-import type { FormResponse } from '../../services/adminService';
+import type { FormAttachment, FormResponse } from '../../services/adminService';
 import type { ProjectResponse } from '../../services/studentService';
-import { ArrowLeft, Search, FileText, Users, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Search, FileText, Users, AlertTriangle, Upload, Paperclip, ExternalLink } from 'lucide-react';
 import { api } from '../../services/api';
+
+const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 export const FormDetails: React.FC = () => {
   const { formId } = useParams();
   const navigate = useNavigate();
 
   const [formConfig, setFormConfig] = useState<FormResponse | null>(null);
+  const [referenceFiles, setReferenceFiles] = useState<FormAttachment[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [linkName, setLinkName] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
   const [reasonModalOpen, setReasonModalOpen] = useState(false);
   const [pendingAssignment, setPendingAssignment] = useState<{projectId: string, newSupervisorId: string} | null>(null);
   const [reasonText, setReasonText] = useState('');
@@ -24,54 +40,108 @@ export const FormDetails: React.FC = () => {
   const { user } = useAuthStore();
   const addToast = useToastStore(state => state.addToast);
 
-  useEffect(() => {
+  const fetchDetails = async () => {
     if (!formId) return;
 
-    const fetchDetails = async () => {
-      try {
-        const [formRes, allProjectsRes] = await Promise.all([
-          adminService.getForm(formId),
-          adminService.getAllProjects()
-        ]);
-        
-        setFormConfig(formRes);
-        const targetedProjects = allProjectsRes.filter((p: any) => p.formId === formId);
-        
-        const [teamsRes, studentsRes, supervisorsRes] = await Promise.all([
-             api.get('/teams'),
-             api.get('/students'),
-             api.get('/supervisors')
-        ]);
+    try {
+      const [formRes, allProjectsRes] = await Promise.all([
+        adminService.getForm(formId),
+        adminService.getAllProjects()
+      ]);
 
-        const sups = supervisorsRes.data.map((sup: any) => ({
-            ...sup,
-            assignedCount: allProjectsRes.filter((p: any) => p.supervisorId === sup.supervisorId).length
-        }));
-        setSupervisors(sups);
+      setFormConfig(formRes);
+      setReferenceFiles(parseReferenceFiles(formRes.referenceFilesJson));
+      const targetedProjects = allProjectsRes.filter((p: any) => p.formId === formId);
 
-        const enriched = targetedProjects.map((p: any) => {
-             const team = teamsRes.data.find((t: any) => t.teamId === p.teamId);
-             let memberDetails: any[] = [];
-             if (team) {
-                  const arr = JSON.parse(team.teamMemberArray || '[]');
-                  memberDetails = arr.map((sid: string) => {
-                      const st = studentsRes.data.find((s:any) => s.studentId === sid);
-                      return st || { studentId: sid, name: 'Unknown', mail: 'N/A' };
-                  });
-             }
-             return { ...p, team, memberDetails };
-        });
+      const [teamsRes, studentsRes, supervisorsRes] = await Promise.all([
+           api.get('/teams'),
+           api.get('/students'),
+           api.get('/supervisors')
+      ]);
 
-        setProjects(enriched);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      const sups = supervisorsRes.data.map((sup: any) => ({
+          ...sup,
+          assignedCount: allProjectsRes.filter((p: any) => p.supervisorId === sup.supervisorId).length
+      }));
+      setSupervisors(sups);
 
+      const enriched = targetedProjects.map((p: any) => {
+           const team = teamsRes.data.find((t: any) => t.teamId === p.teamId);
+           let memberDetails: any[] = [];
+           if (team) {
+                const arr = JSON.parse(team.teamMemberArray || '[]');
+                memberDetails = arr.map((sid: string) => {
+                    const st = studentsRes.data.find((s:any) => s.studentId === sid);
+                    return st || { studentId: sid, name: 'Unknown', mail: 'N/A' };
+                });
+           }
+           return { ...p, team, memberDetails };
+      });
+
+      setProjects(enriched);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchDetails();
   }, [formId]);
+
+  const handleUploadAttachments = async () => {
+    if (!formId) return;
+    if (!selectedFiles.length) {
+      addToast('Select one or more files to upload.', 'error');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      for (const file of selectedFiles) {
+        await adminService.uploadFormAttachment(formId, file, user?.id);
+      }
+      addToast('Reference files uploaded successfully.', 'success');
+      setSelectedFiles([]);
+      await fetchDetails();
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to upload one or more files.', 'error');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleAddLink = async () => {
+    if (!formId) return;
+    if (!linkName.trim() || !linkUrl.trim()) {
+      addToast('Provide a file name and a direct file link.', 'error');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      await adminService.addFormAttachmentLink(formId, linkName.trim(), linkUrl.trim(), user?.id);
+      addToast('Reference link added successfully.', 'success');
+      setLinkName('');
+      setLinkUrl('');
+      await fetchDetails();
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to add reference link.', 'error');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const getPreviewUrl = (url: string) => {
+    if (url.includes('drive.google.com/file/d/')) {
+      const match = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+      if (match?.[1]) return `https://drive.google.com/file/d/${match[1]}/preview`;
+    }
+    return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+  };
 
   const handleSupervisorSelect = (projectId: string, currentSupervisorId: string, newSupervisorId: string) => {
       if (!newSupervisorId) return; // Prevent empty unassignment
@@ -123,6 +193,130 @@ export const FormDetails: React.FC = () => {
           Viewing all registered projects for <strong>{formConfig.accessBranch} Batch {formConfig.accessBatch}</strong>.
         </p>
       </div>
+
+      <Card elevation={2} style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '20px' }}>
+          <div>
+            <h3 style={{ margin: '0 0 6px', fontSize: '18px' }}>Reference Files</h3>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '14px' }}>
+              Upload templates, sample presentations, PDFs, or code references for this form.
+            </p>
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Paperclip size={16} /> {referenceFiles.length} file(s)
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'center' }}>
+          <input
+            type="file"
+            multiple
+            accept=".pdf,.ppt,.pptx,.doc,.docx,.zip,.rar,.java,.js,.ts,.tsx,.py,.c,.cpp,.txt,.md"
+            onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))}
+            style={{ padding: '12px', border: '1px dashed var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface)' }}
+          />
+          <Button onClick={handleUploadAttachments} isLoading={isUploading} leftIcon={<Upload size={16} />}>
+            Upload Files
+          </Button>
+        </div>
+
+        <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: '1fr 1.5fr auto', gap: '12px', alignItems: 'center' }}>
+          <Input
+            label="Reference name"
+            value={linkName}
+            onChange={(e) => setLinkName(e.target.value)}
+            placeholder="Project_Template.pdf"
+          />
+          <Input
+            label="Google Drive / OneDrive file link"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            placeholder="https://drive.google.com/file/d/.../view"
+          />
+          <Button onClick={handleAddLink} isLoading={isUploading} leftIcon={<ExternalLink size={16} />}>
+            Add Link
+          </Button>
+        </div>
+
+        {selectedFiles.length > 0 && (
+          <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Selected: {selectedFiles.map((file) => file.name).join(', ')}
+          </div>
+        )}
+
+        {referenceFiles.length > 0 && (
+          <div style={{ marginTop: '20px', display: 'grid', gap: '12px' }}>
+            {referenceFiles.map((file) => (
+              <div
+                key={file.attachmentId}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '14px 16px',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--surface-hover)'
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FileText size={16} color="var(--primary)" /> {file.fileName}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Uploaded {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'recently'}
+                    {file.uploadedBy ? ` • By ${file.uploadedBy}` : ''}
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>
+                  Preview
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {previewFile && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            zIndex: 50
+          }}
+          onClick={() => setPreviewFile(null)}
+        >
+          <div
+            style={{
+              width: 'min(960px, 96vw)',
+              height: 'min(80vh, 720px)',
+              backgroundColor: 'var(--surface)',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              border: '1px solid var(--border-color)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
+              <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
+              <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+                Close
+              </Button>
+            </div>
+            <iframe
+              title={previewFile.fileName}
+              src={getPreviewUrl(previewFile.fileUrl)}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+            />
+          </div>
+        </div>
+      )}
 
       {projects.length === 0 ? (
         <Card elevation={1} style={{ textAlign: 'center', padding: '64px' }}>

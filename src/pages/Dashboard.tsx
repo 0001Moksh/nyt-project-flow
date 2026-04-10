@@ -291,6 +291,16 @@ export const Dashboard: React.FC = () => {
                       </div>
                   </Card>
 
+                  {currentProject?.documentId && (
+                      <DeliverableUploader
+                          projectId={currentProject.projectId}
+                          documentId={currentProject.documentId}
+                          currentStage={currentProject.stageStatus}
+                          isLeader={currentProject.leaderId === user.id}
+                          onSuccess={fetchData}
+                      />
+                  )}
+
                   {/* Meetings Tracker */}
                   <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>

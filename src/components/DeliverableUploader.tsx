@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, Button, Input } from './index';
 import { api } from '../services/api';
 import { useToastStore } from '../utils/toastStore';
-import { UploadCloud, Link as LinkIcon, FileText } from 'lucide-react';
+import { useAuthStore } from '../utils/authStore';
+import { UploadCloud, Link as LinkIcon, FileText, CheckCircle, XCircle, Users } from 'lucide-react';
 
 interface DeliverableUploaderProps {
   projectId: string;
@@ -16,12 +17,16 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
   projectId, documentId, currentStage, isLeader, onSuccess 
 }) => {
   const [comment, setComment] = useState('');
+  const [reviewComment, setReviewComment] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [existingSubmissions, setExistingSubmissions] = useState<any[]>([]);
+  const [team, setTeam] = useState<any>(null);
+  const [project, setProject] = useState<any>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const addToast = useToastStore(state => state.addToast);
+  const user = useAuthStore(state => state.user);
 
   // Map Project 'stageStatus' enum to the correct Submission endpoint
   const getEndpoint = () => {
@@ -45,8 +50,48 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
          console.error("No submissions found yet.");
       }
     };
+
+    const fetchProjectContext = async () => {
+      try {
+        const [projectRes, teamRes] = await Promise.all([
+          api.get(`/projects/${projectId}`),
+          api.get(`/teams`).catch(() => ({ data: [] }))
+        ]);
+        setProject(projectRes.data || null);
+        const thisTeam = (teamRes.data || []).find((item: any) => item.teamId === projectRes.data?.teamId);
+        setTeam(thisTeam || null);
+      } catch {
+        setProject(null);
+        setTeam(null);
+      }
+    };
+
     fetchSubmissions();
+    fetchProjectContext();
   }, [documentId, currentStage]);
+
+  const latestSubmission = existingSubmissions[existingSubmissions.length - 1] || null;
+  const latestSubmissionId = latestSubmission ? latestSubmission[`${currentStage.toLowerCase()}Id`] : null;
+  const teamMemberIds = (() => {
+    try {
+      return team?.teamMemberArray ? JSON.parse(team.teamMemberArray) : [];
+    } catch {
+      return [];
+    }
+  })();
+  const isTeamMember = Boolean(user?.id) && (isLeader || teamMemberIds.includes(user?.id));
+  const alreadyVoted = latestSubmission?.teamReviewJson
+    ? (() => {
+        try {
+          const votes = JSON.parse(latestSubmission.teamReviewJson || '[]');
+          return votes.some((vote: any) => vote.reviewerId === user?.id);
+        } catch {
+          return false;
+        }
+      })()
+    : false;
+  const canUploadRevision = isLeader && (!latestSubmission || ['REJECTED', 'REVISION'].includes((latestSubmission.status || '').toUpperCase()));
+  const canTeamReview = Boolean(latestSubmission && isTeamMember && !isLeader && !alreadyVoted && latestSubmission.teamReviewStatus !== 'APPROVED');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,9 +119,7 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
         formData.append('stage', currentStage.toLowerCase());
 
         addToast('Uploading to OneDrive...', 'info');
-        const uploadRes = await api.post('/files/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
+         const uploadRes = await api.post('/files/upload', formData);
 
         fileUrl = uploadRes.data.fileUrl;
         fileName = uploadRes.data.fileName;
@@ -112,6 +155,30 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
      fileInputRef.current?.click();
   };
 
+  const submitTeamReview = async (approved: boolean) => {
+    if (!latestSubmissionId) return;
+    try {
+      setIsSubmitting(true);
+      await api.patch(`/submissions/${currentStage.toLowerCase()}/${latestSubmissionId}/team-review`, {
+        reviewerId: user?.id,
+        approved,
+        comment: reviewComment || ''
+      });
+      setReviewComment('');
+      addToast(approved ? 'Approval recorded.' : 'Rejection recorded.', 'success');
+      const endpoint = getEndpoint();
+      if (endpoint) {
+        const { data } = await api.get(`${endpoint}/document/${documentId}`);
+        setExistingSubmissions(data || []);
+      }
+      onSuccess();
+    } catch (err: any) {
+      addToast(err.response?.data?.message || 'Failed to submit review', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const hasSubmitted = existingSubmissions.length > 0;
 
   if (!isLeader && !hasSubmitted) {
@@ -124,6 +191,36 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
     );
   }
 
+  if (canTeamReview && latestSubmission) {
+    return (
+      <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
+        <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Users size={18} color="var(--primary)" /> {currentStage} Team Review
+        </h4>
+        <div style={{ padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', marginBottom: '12px' }}>
+          <div style={{ fontWeight: 600, marginBottom: '6px' }}>Latest version: {latestSubmission.fileName || 'document'}</div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Team review status: {latestSubmission.teamReviewStatus || 'PENDING'}
+          </div>
+        </div>
+        <Input
+          label="Review comment"
+          value={reviewComment}
+          onChange={(e) => setReviewComment(e.target.value)}
+          placeholder="Optional feedback for the leader"
+        />
+        <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+          <Button type="button" variant="outline" onClick={() => submitTeamReview(false)} isLoading={isSubmitting} leftIcon={<XCircle size={16} />}>
+            Reject
+          </Button>
+          <Button type="button" onClick={() => submitTeamReview(true)} isLoading={isSubmitting} leftIcon={<CheckCircle size={16} />}>
+            Approve
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
       <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -131,10 +228,10 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
          {currentStage} Deliverables
       </h4>
       
-      {hasSubmitted ? (
+      {hasSubmitted && !canUploadRevision ? (
         <div style={{ padding: '12px', backgroundColor: 'var(--success-20)', borderRadius: '6px', borderLeft: '4px solid var(--success)', color: 'var(--text-primary)' }}>
            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-               <strong>Document Successfully Submitted for Review!</strong>
+               <strong>{latestSubmission?.teamReviewStatus === 'APPROVED' ? 'Document Approved by Team' : 'Document Submitted for Review'}</strong>
                {existingSubmissions[0]?.fileUrl && (
                    <a href={existingSubmissions[0].fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
                        View Attached File <FileText size={14} />
@@ -143,7 +240,9 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
            </div>
            <br />
            <span style={{ fontSize: '13px', color: 'var(--text-secondary)'}}>
-             The Supervisor has been notified and is reviewing your submission.
+             {latestSubmission?.status === 'REVISION'
+               ? 'Supervisor requested changes. Upload a revised version when ready.'
+               : 'The submission is in the review pipeline.'}
            </span>
         </div>
       ) : (

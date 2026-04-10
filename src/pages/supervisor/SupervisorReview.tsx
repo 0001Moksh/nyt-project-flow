@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, Button, Input, Loader } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
-import { FileText, CheckCircle, Search, ExternalLink, Calendar, MessageSquare, AlertCircle } from 'lucide-react';
+import { FileText, CheckCircle, Search, ExternalLink, Calendar, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown } from 'lucide-react';
 
 export const SupervisorReview: React.FC = () => {
     const { projectId } = useParams();
@@ -20,6 +20,7 @@ export const SupervisorReview: React.FC = () => {
     // Grading Form State
     const [score, setScore] = useState('');
     const [feedback, setFeedback] = useState('');
+    const [decision, setDecision] = useState<'APPROVE' | 'REJECT'>('APPROVE');
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const addToast = useToastStore(state => state.addToast);
@@ -66,12 +67,10 @@ export const SupervisorReview: React.FC = () => {
             // Update the submission status if there's an active one
             if (activeSub) {
                 const ep = activeStage.toLowerCase();
-                // Pass comment and mock role
-                await api.patch(`/submissions/${ep}/${activeSub[`${ep}Id`] || activeSub.finalId || activeSub.synopsisId}/review`, {
-                    status: 'APPROVED',
+                await api.patch(`/submissions/${ep}/${activeSub[`${ep}Id`] || activeSub.finalId || activeSub.synopsisId}/supervisor-review`, {
+                    approved: decision === 'APPROVE',
                     comment: activeSub.comment + "\n\nSUPERVISOR FEEDBACK: " + feedback,
-                    commentByRole: 'SUPERVISOR',
-                    commentById: project.supervisorId
+                    supervisorId: project.supervisorId
                 });
             }
 
@@ -239,7 +238,15 @@ export const SupervisorReview: React.FC = () => {
                                 />
                             </div>
 
-                            <Button type="submit" isLoading={isSubmitting} size="lg" style={{ marginTop: '8px', width: '100%' }}>Issue Assessment</Button>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <Button type="button" variant={decision === 'APPROVE' ? 'primary' : 'outline'} onClick={() => setDecision('APPROVE')} leftIcon={<ThumbsUp size={16} />}>
+                                    Approve
+                                </Button>
+                                <Button type="button" variant={decision === 'REJECT' ? 'primary' : 'outline'} onClick={() => setDecision('REJECT')} leftIcon={<ThumbsDown size={16} />}>
+                                    Request Changes
+                                </Button>
+                            </div>
+                            <Button type="submit" isLoading={isSubmitting} size="lg" style={{ marginTop: '8px', width: '100%' }}>{decision === 'APPROVE' ? 'Confirm Approval' : 'Send Back for Revision'}</Button>
                         </form>
                     )}
 

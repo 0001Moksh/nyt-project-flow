@@ -3,9 +3,20 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Loader } from '../../components';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../utils/authStore';
-import { Calendar, Users, MessageSquare, FileText, Star, AlertTriangle, FileCheck, MapPin, Video, CheckCircle, Clock } from 'lucide-react';
+import { Calendar, Users, MessageSquare, FileText, Star, AlertTriangle, FileCheck, MapPin, Video, CheckCircle, Clock, Paperclip } from 'lucide-react';
 import { ScheduleMeetingModal } from './ScheduleMeetingModal';
 import { ExecuteMeetingModal } from './ExecuteMeetingModal';
+import type { FormAttachment, FormResponse } from '../../services/adminService';
+
+const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
+    if (!json) return [];
+    try {
+        const parsed = JSON.parse(json);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
 
 export const SupervisorTeamOverview: React.FC = () => {
     const { teamId } = useParams();
@@ -17,6 +28,8 @@ export const SupervisorTeamOverview: React.FC = () => {
     const [teamInfo, setTeamInfo] = useState<any>(null);
     const [members, setMembers] = useState<any[]>([]);
     const [meetings, setMeetings] = useState<any[]>([]);
+    const [formConfig, setFormConfig] = useState<FormResponse | null>(null);
+    const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
 
     // Modal state
     const [isScheduling, setIsScheduling] = useState(false);
@@ -45,6 +58,10 @@ export const SupervisorTeamOverview: React.FC = () => {
                api.get(`/supervisor/meetings/project/${thisProject.projectId}`)
                   .then(mRes => setMeetings(mRes.data || []))
                   .catch(console.error);
+
+                    api.get(`/forms/${thisProject.formId}`)
+                        .then(fRes => setFormConfig(fRes.data || null))
+                        .catch(console.error);
            }
 
            if (thisTeam && thisTeam.joinMemberArray) {
@@ -65,6 +82,16 @@ export const SupervisorTeamOverview: React.FC = () => {
     if (isLoading) return <div style={{ display:'flex', justifyContent:'center', padding:'100px'}}><Loader size="lg" /></div>;
     
     if (!project) return <div>Project not found.</div>;
+
+    const referenceFiles = parseReferenceFiles(formConfig?.referenceFilesJson);
+
+    const getPreviewUrl = (url: string) => {
+        if (url.includes('drive.google.com/file/d/')) {
+            const match = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+            if (match?.[1]) return `https://drive.google.com/file/d/${match[1]}/preview`;
+        }
+        return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+    };
 
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -222,6 +249,81 @@ export const SupervisorTeamOverview: React.FC = () => {
 
                         </div>
                     </Card>
+
+                    {referenceFiles.length > 0 && (
+                        <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '24px' }}>
+                            <h3 style={{ margin: '0 0 16px', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Paperclip size={18} color="var(--primary)" /> Form Reference Files
+                            </h3>
+                            <div style={{ display: 'grid', gap: '12px' }}>
+                                {referenceFiles.map((file) => (
+                                    <div
+                                        key={file.attachmentId}
+                                        style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            padding: '12px 14px',
+                                            borderRadius: '8px',
+                                            border: '1px solid var(--border-color)',
+                                            backgroundColor: 'var(--surface-hover)'
+                                        }}
+                                    >
+                                        <div>
+                                            <div style={{ fontWeight: 600, fontSize: '14px' }}>{file.fileName}</div>
+                                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                                {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'Recently uploaded'}
+                                            </div>
+                                        </div>
+                                        <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>
+                                            Preview
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+                    )}
+
+                    {previewFile && (
+                        <div
+                            style={{
+                                position: 'fixed',
+                                inset: 0,
+                                backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '24px',
+                                zIndex: 50
+                            }}
+                            onClick={() => setPreviewFile(null)}
+                        >
+                            <div
+                                style={{
+                                    width: 'min(960px, 96vw)',
+                                    height: 'min(80vh, 720px)',
+                                    backgroundColor: 'var(--surface)',
+                                    borderRadius: '12px',
+                                    overflow: 'hidden',
+                                    border: '1px solid var(--border-color)'
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
+                                    <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
+                                    <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+                                        Close
+                                    </Button>
+                                </div>
+                                <iframe
+                                    title={previewFile.fileName}
+                                    src={getPreviewUrl(previewFile.fileUrl)}
+                                    style={{ width: '100%', height: '100%', border: 'none' }}
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     {/* Meetings Tracker */}
                     <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
