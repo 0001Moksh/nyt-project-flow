@@ -3,7 +3,19 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, Button, Input, Loader } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
-import { FileText, CheckCircle, Search, ExternalLink, Calendar, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { FileText, CheckCircle, Search, ExternalLink, Calendar, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, Paperclip } from 'lucide-react';
+import type { FormAttachment } from '../../services/adminService';
+import { getPreviewUrl } from '../../utils/filePreview';
+
+const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
+    if (!json) return [];
+    try {
+        const parsed = JSON.parse(json);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
 
 export const SupervisorReview: React.FC = () => {
     const { projectId } = useParams();
@@ -16,6 +28,8 @@ export const SupervisorReview: React.FC = () => {
     const [submissions, setSubmissions] = useState<any[]>([]);
     const [activeStage, setActiveStage] = useState('SYNOPSIS');
     const [activeSub, setActiveSub] = useState<any>(null);
+    const [referenceFiles, setReferenceFiles] = useState<FormAttachment[]>([]);
+    const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
     
     // Grading Form State
     const [score, setScore] = useState('');
@@ -24,6 +38,12 @@ export const SupervisorReview: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const addToast = useToastStore(state => state.addToast);
+
+    const matchesStage = (file: FormAttachment, stage?: string) => {
+        const value = (file.stage || 'GENERAL').toUpperCase();
+        if (!stage) return value === 'ALL' || value === 'GENERAL';
+        return value === 'ALL' || value === 'GENERAL' || value === stage.toUpperCase();
+    };
 
     useEffect(() => {
         if (projectId) fetchData();
@@ -37,6 +57,9 @@ export const SupervisorReview: React.FC = () => {
            setProject(proj);
 
            if (proj && proj.documentId) {
+               const formRes = await api.get(`/forms/${proj.formId}`).catch(() => ({ data: null }));
+               setReferenceFiles(parseReferenceFiles(formRes.data?.referenceFilesJson));
+
                // Fetch submissions for active stage
                const ep = activeStage.toLowerCase(); // synopsis, progress1, progress2, final
                const subRes = await api.get(`/submissions/${ep}/document/${proj.documentId}`);
@@ -117,42 +140,61 @@ export const SupervisorReview: React.FC = () => {
 
             <div style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 200px)' }}>
                 
-                {/* Left Pane: Version History */}
-                <Card elevation={1} style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', border: '1px solid var(--border-color)' }}>
-                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>Upload History</h3>
-                    
-                    {submissions.length === 0 ? (
-                        <div style={{ color: 'var(--text-disabled)', fontSize: '13px', textAlign: 'center', marginTop: '32px' }}>
-                            <AlertCircle size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
-                            <br/>No submissions found for {activeStage}
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {submissions.map((sub, idx) => {
-                                const isCurrent = activeSub === sub;
-                                return (
-                                    <div 
-                                        key={idx} 
-                                        onClick={() => setActiveSub(sub)}
-                                        style={{ 
-                                            padding: '12px', borderRadius: '8px', border: `1px solid ${isCurrent ? 'var(--primary)' : 'var(--border-color)'}`, 
-                                            backgroundColor: isCurrent ? 'var(--surface-hover)' : 'transparent', cursor: 'pointer',
-                                            transition: '0.2s'
-                                        }}
-                                    >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                            <span style={{ fontSize: '13px', fontWeight: 600 }}>Version {idx + 1}</span>
-                                            <span style={{ fontSize: '11px', fontWeight: 600, ...getStatusBadge(sub.status) }}>{sub.status}</span>
-                                        </div>
-                                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <Calendar size={12} /> {new Date(sub.uploadedAt).toLocaleString()}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                {/* Left Pane: Reference + Version History */}
+                <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {referenceFiles.filter((file) => matchesStage(file, activeStage)).length > 0 && (
+                        <Card elevation={1} style={{ display: 'flex', flexDirection: 'column', gap: '12px', border: '1px solid var(--border-color)' }}>
+                            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                                <Paperclip size={14} /> Reference Files
+                            </h3>
+                            {referenceFiles.filter((file) => matchesStage(file, activeStage)).map((file) => (
+                                <div
+                                    key={file.attachmentId}
+                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-hover)' }}
+                                >
+                                    <div style={{ fontSize: '12px', fontWeight: 600 }}>{file.fileName}</div>
+                                    <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>Preview</Button>
+                                </div>
+                            ))}
+                        </Card>
                     )}
-                </Card>
+
+                    <Card elevation={1} style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', border: '1px solid var(--border-color)' }}>
+                        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>Upload History</h3>
+                        
+                        {submissions.length === 0 ? (
+                            <div style={{ color: 'var(--text-disabled)', fontSize: '13px', textAlign: 'center', marginTop: '32px' }}>
+                                <AlertCircle size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
+                                <br/>No submissions found for {activeStage}
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {submissions.map((sub, idx) => {
+                                    const isCurrent = activeSub === sub;
+                                    return (
+                                        <div 
+                                            key={idx} 
+                                            onClick={() => setActiveSub(sub)}
+                                            style={{ 
+                                                padding: '12px', borderRadius: '8px', border: `1px solid ${isCurrent ? 'var(--primary)' : 'var(--border-color)'}`, 
+                                                backgroundColor: isCurrent ? 'var(--surface-hover)' : 'transparent', cursor: 'pointer',
+                                                transition: '0.2s'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                <span style={{ fontSize: '13px', fontWeight: 600 }}>Version {idx + 1}</span>
+                                                <span style={{ fontSize: '11px', fontWeight: 600, ...getStatusBadge(sub.status) }}>{sub.status}</span>
+                                            </div>
+                                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <Calendar size={12} /> {new Date(sub.uploadedAt).toLocaleString()}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </Card>
+                </div>
 
                 {/* Middle Pane: Preview Mocker */}
                 <Card elevation={1} style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid var(--border-color)', overflow: 'hidden', padding: 0 }}>
@@ -253,6 +295,46 @@ export const SupervisorReview: React.FC = () => {
                 </Card>
 
             </div>
+
+            {previewFile && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '24px',
+                        zIndex: 50
+                    }}
+                    onClick={() => setPreviewFile(null)}
+                >
+                    <div
+                        style={{
+                            width: 'min(960px, 96vw)',
+                            height: 'min(80vh, 720px)',
+                            backgroundColor: 'var(--surface)',
+                            borderRadius: '12px',
+                            overflow: 'hidden',
+                            border: '1px solid var(--border-color)'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
+                            <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
+                            <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+                                Close
+                            </Button>
+                        </div>
+                        <iframe
+                            title={previewFile.fileName}
+                            src={getPreviewUrl(previewFile.fileUrl)}
+                            style={{ width: '100%', height: '100%', border: 'none' }}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

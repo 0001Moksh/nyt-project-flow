@@ -7,6 +7,7 @@ import type { FormAttachment, FormResponse } from '../services/adminService';
 import { useAuthStore } from '../utils/authStore';
 import { useToastStore } from '../utils/toastStore';
 import { CheckCircle, Check, Clock, User, X, Search, Info, ArrowLeft, Mail, ArrowRight, Paperclip } from 'lucide-react';
+import { getPreviewUrl } from '../utils/filePreview';
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
   if (!json) return [];
@@ -247,14 +248,6 @@ export const Enrollment: React.FC = () => {
 
   const referenceFiles = parseReferenceFiles(formConfig?.referenceFilesJson);
 
-  const getPreviewUrl = (url: string) => {
-    if (url.includes('drive.google.com/file/d/')) {
-      const match = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
-      if (match?.[1]) return `https://drive.google.com/file/d/${match[1]}/preview`;
-    }
-    return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
-  };
-
   return (
     <div style={{ padding: '0', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
@@ -327,7 +320,14 @@ export const Enrollment: React.FC = () => {
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: '14px' }}>{file.fileName}</div>
+                      <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {file.fileName}
+                        {file.stage && (
+                          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)' }}>
+                            {file.stage}
+                          </span>
+                        )}
+                      </div>
                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
                         {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'Recently uploaded'}
                       </div>

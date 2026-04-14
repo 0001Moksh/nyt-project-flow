@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Check, X, Bell, Users, CheckCircle, Info, Star, ChevronRight, User, Briefcase, Hash, FolderKanban, History, Paperclip } from 'lucide-react';
 import { api } from '../services/api';
 import type { FormAttachment, FormResponse } from '../services/adminService';
+import { getPreviewUrl } from '../utils/filePreview';
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
     if (!json) return [];
@@ -134,13 +135,13 @@ export const StudentProjects: React.FC = () => {
 
     const referenceFiles = parseReferenceFiles(formConfig?.referenceFilesJson);
 
-    const getPreviewUrl = (url: string) => {
-        if (url.includes('drive.google.com/file/d/')) {
-            const match = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
-            if (match?.[1]) return `https://drive.google.com/file/d/${match[1]}/preview`;
-        }
-        return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+    const matchesStage = (file: FormAttachment, stage?: string) => {
+        const value = (file.stage || 'GENERAL').toUpperCase();
+        if (!stage) return value === 'ALL' || value === 'GENERAL';
+        return value === 'ALL' || value === 'GENERAL' || value === stage.toUpperCase();
     };
+
+    const stageFiles = referenceFiles.filter((file) => matchesStage(file, project?.stageStatus));
 
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -268,13 +269,13 @@ export const StudentProjects: React.FC = () => {
                         )}
                     </Card>
 
-                    {referenceFiles.length > 0 && (
+                    {stageFiles.length > 0 && (
                         <Card elevation={1} style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                             <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <Paperclip size={20} color="var(--primary)" /> Reference Files
                             </h3>
                             <div style={{ display: 'grid', gap: '12px' }}>
-                                {referenceFiles.map((file) => (
+                                {stageFiles.map((file) => (
                                     <div
                                         key={file.attachmentId}
                                         style={{
@@ -289,7 +290,14 @@ export const StudentProjects: React.FC = () => {
                                         }}
                                     >
                                         <div>
-                                            <div style={{ fontWeight: 600, fontSize: '14px' }}>{file.fileName}</div>
+                                            <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                {file.fileName}
+                                                {file.stage && (
+                                                    <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)' }}>
+                                                        {file.stage}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
                                                 {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'Recently uploaded'}
                                             </div>

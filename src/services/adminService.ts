@@ -7,6 +7,7 @@ export interface FormAttachment {
   uploadedBy?: string | null;
   uploadedAt?: string;
   source?: 'UPLOAD' | 'LINK' | string;
+  stage?: 'SYNOPSIS' | 'PROGRESS1' | 'PROGRESS2' | 'FINAL' | 'ALL' | 'GENERAL' | string;
 }
 
 export interface FormCreateRequest {
@@ -57,9 +58,10 @@ export const adminService = {
     return response.data;
   },
 
-  uploadFormAttachment: async (formId: string, file: File, uploadedBy?: string): Promise<FormAttachment> => {
+  uploadFormAttachment: async (formId: string, file: File, stage: string, uploadedBy?: string): Promise<FormAttachment> => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('stage', stage);
     if (uploadedBy) {
       formData.append('uploadedBy', uploadedBy);
     }
@@ -72,11 +74,13 @@ export const adminService = {
     formId: string,
     fileName: string,
     fileUrl: string,
+    stage: string,
     uploadedBy?: string
   ): Promise<FormAttachment> => {
     const response = await api.post<FormAttachment>(`/forms/${formId}/attachments/link`, {
       fileName,
       fileUrl,
+      stage,
       uploadedBy,
     });
     return response.data;

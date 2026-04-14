@@ -8,6 +8,7 @@ import type { FormAttachment, FormResponse } from '../../services/adminService';
 import type { ProjectResponse } from '../../services/studentService';
 import { ArrowLeft, Search, FileText, Users, AlertTriangle, Upload, Paperclip, ExternalLink } from 'lucide-react';
 import { api } from '../../services/api';
+import { getPreviewUrl } from '../../utils/filePreview';
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
   if (!json) return [];
@@ -32,6 +33,8 @@ export const FormDetails: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [linkName, setLinkName] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+  const [linkStage, setLinkStage] = useState('SYNOPSIS');
+  const [uploadStage, setUploadStage] = useState('SYNOPSIS');
   const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
   const [reasonModalOpen, setReasonModalOpen] = useState(false);
   const [pendingAssignment, setPendingAssignment] = useState<{projectId: string, newSupervisorId: string} | null>(null);
@@ -100,7 +103,7 @@ export const FormDetails: React.FC = () => {
     setIsUploading(true);
     try {
       for (const file of selectedFiles) {
-        await adminService.uploadFormAttachment(formId, file, user?.id);
+        await adminService.uploadFormAttachment(formId, file, uploadStage, user?.id);
       }
       addToast('Reference files uploaded successfully.', 'success');
       setSelectedFiles([]);
@@ -122,10 +125,11 @@ export const FormDetails: React.FC = () => {
 
     setIsUploading(true);
     try {
-      await adminService.addFormAttachmentLink(formId, linkName.trim(), linkUrl.trim(), user?.id);
+      await adminService.addFormAttachmentLink(formId, linkName.trim(), linkUrl.trim(), linkStage, user?.id);
       addToast('Reference link added successfully.', 'success');
       setLinkName('');
       setLinkUrl('');
+      setLinkStage('SYNOPSIS');
       await fetchDetails();
     } catch (err) {
       console.error(err);
@@ -135,13 +139,7 @@ export const FormDetails: React.FC = () => {
     }
   };
 
-  const getPreviewUrl = (url: string) => {
-    if (url.includes('drive.google.com/file/d/')) {
-      const match = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
-      if (match?.[1]) return `https://drive.google.com/file/d/${match[1]}/preview`;
-    }
-    return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
-  };
+  const stageOptions = ['SYNOPSIS', 'PROGRESS1', 'PROGRESS2', 'FINAL', 'ALL'];
 
   const handleSupervisorSelect = (projectId: string, currentSupervisorId: string, newSupervisorId: string) => {
       if (!newSupervisorId) return; // Prevent empty unassignment
@@ -207,7 +205,7 @@ export const FormDetails: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px auto', gap: '12px', alignItems: 'center' }}>
           <input
             type="file"
             multiple
@@ -215,12 +213,21 @@ export const FormDetails: React.FC = () => {
             onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))}
             style={{ padding: '12px', border: '1px dashed var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface)' }}
           />
+          <select
+            value={uploadStage}
+            onChange={(e) => setUploadStage(e.target.value)}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)' }}
+          >
+            {stageOptions.map((stage) => (
+              <option key={stage} value={stage}>{stage}</option>
+            ))}
+          </select>
           <Button onClick={handleUploadAttachments} isLoading={isUploading} leftIcon={<Upload size={16} />}>
             Upload Files
           </Button>
         </div>
 
-        <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: '1fr 1.5fr auto', gap: '12px', alignItems: 'center' }}>
+        <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: '1fr 1.6fr 180px auto', gap: '12px', alignItems: 'center' }}>
           <Input
             label="Reference name"
             value={linkName}
@@ -233,6 +240,15 @@ export const FormDetails: React.FC = () => {
             onChange={(e) => setLinkUrl(e.target.value)}
             placeholder="https://drive.google.com/file/d/.../view"
           />
+          <select
+            value={linkStage}
+            onChange={(e) => setLinkStage(e.target.value)}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)', alignSelf: 'end' }}
+          >
+            {stageOptions.map((stage) => (
+              <option key={stage} value={stage}>{stage}</option>
+            ))}
+          </select>
           <Button onClick={handleAddLink} isLoading={isUploading} leftIcon={<ExternalLink size={16} />}>
             Add Link
           </Button>
@@ -263,6 +279,11 @@ export const FormDetails: React.FC = () => {
                 <div>
                   <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <FileText size={16} color="var(--primary)" /> {file.fileName}
+                    {file.stage && (
+                      <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)' }}>
+                        {file.stage}
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
                     Uploaded {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'recently'}

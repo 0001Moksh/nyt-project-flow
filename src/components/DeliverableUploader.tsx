@@ -4,6 +4,18 @@ import { api } from '../services/api';
 import { useToastStore } from '../utils/toastStore';
 import { useAuthStore } from '../utils/authStore';
 import { UploadCloud, Link as LinkIcon, FileText, CheckCircle, XCircle, Users } from 'lucide-react';
+import type { FormAttachment } from '../services/adminService';
+import { getPreviewUrl } from '../utils/filePreview';
+
+const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 interface DeliverableUploaderProps {
   projectId: string;
@@ -23,6 +35,8 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
   const [existingSubmissions, setExistingSubmissions] = useState<any[]>([]);
   const [team, setTeam] = useState<any>(null);
   const [project, setProject] = useState<any>(null);
+  const [referenceFiles, setReferenceFiles] = useState<FormAttachment[]>([]);
+  const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const addToast = useToastStore(state => state.addToast);
@@ -60,6 +74,10 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
         setProject(projectRes.data || null);
         const thisTeam = (teamRes.data || []).find((item: any) => item.teamId === projectRes.data?.teamId);
         setTeam(thisTeam || null);
+        if (projectRes.data?.formId) {
+          const formRes = await api.get(`/forms/${projectRes.data.formId}`).catch(() => ({ data: null }));
+          setReferenceFiles(parseReferenceFiles(formRes.data?.referenceFilesJson));
+        }
       } catch {
         setProject(null);
         setTeam(null);
@@ -92,6 +110,52 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
     : false;
   const canUploadRevision = isLeader && (!latestSubmission || ['REJECTED', 'REVISION'].includes((latestSubmission.status || '').toUpperCase()));
   const canTeamReview = Boolean(latestSubmission && isTeamMember && !isLeader && !alreadyVoted && latestSubmission.teamReviewStatus !== 'APPROVED');
+
+  const matchesStage = (file: FormAttachment, stage?: string) => {
+    const value = (file.stage || 'GENERAL').toUpperCase();
+    if (!stage) return value === 'ALL' || value === 'GENERAL';
+    return value === 'ALL' || value === 'GENERAL' || value === stage.toUpperCase();
+  };
+
+  const stageFiles = referenceFiles.filter((file) => matchesStage(file, currentStage));
+
+  const renderStageReferences = () => {
+    if (stageFiles.length === 0) return null;
+    return (
+      <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
+        <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <FileText size={18} color="var(--primary)" /> {currentStage} Reference Files
+        </h4>
+        <div style={{ display: 'grid', gap: '12px' }}>
+          {stageFiles.map((file) => (
+            <div
+              key={file.attachmentId}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 14px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--surface-hover)'
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '14px' }}>{file.fileName}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'Recently uploaded'}
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>
+                Preview
+              </Button>
+            </div>
+          ))}
+        </div>
+      </Card>
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,17 +247,61 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
 
   if (!isLeader && !hasSubmitted) {
     return (
-      <Card elevation={1} style={{ marginTop: '16px', backgroundColor: 'var(--surface-hover)', border: '1px dashed var(--border-color)' }}>
-         <p style={{ color: 'var(--text-secondary)', margin: 0, textAlign: 'center' }}>
-            Awaiting Team Leader to upload the <strong>{currentStage}</strong> deliverables.
-         </p>
-      </Card>
+      <div>
+        {renderStageReferences()}
+        <Card elevation={1} style={{ marginTop: '16px', backgroundColor: 'var(--surface-hover)', border: '1px dashed var(--border-color)' }}>
+           <p style={{ color: 'var(--text-secondary)', margin: 0, textAlign: 'center' }}>
+              Awaiting Team Leader to upload the <strong>{currentStage}</strong> deliverables.
+           </p>
+        </Card>
+        {previewFile && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.65)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px',
+              zIndex: 50
+            }}
+            onClick={() => setPreviewFile(null)}
+          >
+            <div
+              style={{
+                width: 'min(960px, 96vw)',
+                height: 'min(80vh, 720px)',
+                backgroundColor: 'var(--surface)',
+                borderRadius: '12px',
+                overflow: 'hidden',
+                border: '1px solid var(--border-color)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
+                <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
+                <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+                  Close
+                </Button>
+              </div>
+              <iframe
+                title={previewFile.fileName}
+                src={getPreviewUrl(previewFile.fileUrl)}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
 
   if (canTeamReview && latestSubmission) {
     return (
-      <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
+      <div>
+        {renderStageReferences()}
+        <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
         <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Users size={18} color="var(--primary)" /> {currentStage} Team Review
         </h4>
@@ -218,10 +326,52 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
           </Button>
         </div>
       </Card>
+        {previewFile && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.65)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px',
+              zIndex: 50
+            }}
+            onClick={() => setPreviewFile(null)}
+          >
+            <div
+              style={{
+                width: 'min(960px, 96vw)',
+                height: 'min(80vh, 720px)',
+                backgroundColor: 'var(--surface)',
+                borderRadius: '12px',
+                overflow: 'hidden',
+                border: '1px solid var(--border-color)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
+                <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
+                <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+                  Close
+                </Button>
+              </div>
+              <iframe
+                title={previewFile.fileName}
+                src={getPreviewUrl(previewFile.fileUrl)}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
 
   return (
+    <div>
+    {renderStageReferences()}
     <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
       <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
          <UploadCloud size={18} color="var(--primary)" /> 
@@ -283,5 +433,45 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
         </form>
       )}
     </Card>
+    {previewFile && (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          zIndex: 50
+        }}
+        onClick={() => setPreviewFile(null)}
+      >
+        <div
+          style={{
+            width: 'min(960px, 96vw)',
+            height: 'min(80vh, 720px)',
+            backgroundColor: 'var(--surface)',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            border: '1px solid var(--border-color)'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
+            <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
+            <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+              Close
+            </Button>
+          </div>
+          <iframe
+            title={previewFile.fileName}
+            src={getPreviewUrl(previewFile.fileUrl)}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+          />
+        </div>
+      </div>
+    )}
+    </div>
   );
 };
