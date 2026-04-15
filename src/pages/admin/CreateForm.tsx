@@ -20,15 +20,19 @@ export const CreateForm: React.FC = () => {
   const [forms, setForms] = useState<FormResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [branch, setBranch] = useState('');
-  const [batch, setBatch] = useState('');
+  // Fallbacks if db is empty
+  const [uniqueBranches, setUniqueBranches] = useState<string[]>(['AIML', 'DS']);
+  const [uniqueBatches, setUniqueBatches] = useState<string[]>(['2024', '2025', '2026']);
+
+  const [branches, setBranches] = useState<string[]>([]);
+  const [batches, setBatches] = useState<string[]>([]);
   const [fields, setFields] = useState<FieldConfig[]>([
     { id: '1', label: 'Project Title', type: 'text', required: true },
     { id: '2', label: 'Project Description', type: 'textarea', required: true }
   ]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successLink, setSuccessLink] = useState<string | null>(null);
-  
+
   const { user } = useAuthStore();
   const addToast = useToastStore(state => state.addToast);
   const navigate = useNavigate();
@@ -42,8 +46,27 @@ export const CreateForm: React.FC = () => {
   const fetchForms = async () => {
     try {
       setIsLoading(true);
-      const data = await adminService.getAllForms();
-      setForms(data);
+
+      const [formsRes, studentsRes] = await Promise.all([
+        adminService.getAllForms().catch(() => []),
+        api.get('/students').catch(() => ({ data: [] }))
+      ]);
+
+      setForms(Array.isArray(formsRes) ? formsRes : []);
+
+      if (studentsRes.data && studentsRes.data.length > 0) {
+        const branchSet = new Set<string>();
+        const batchSet = new Set<string>();
+
+        studentsRes.data.forEach((s: any) => {
+          if (s.branch) branchSet.add(s.branch);
+          if (s.batch) batchSet.add(s.batch);
+        });
+
+        if (branchSet.size > 0) setUniqueBranches(Array.from(branchSet).sort());
+        if (batchSet.size > 0) setUniqueBatches(Array.from(batchSet).sort());
+      }
+
     } catch {
       // Error handled by interceptor
     } finally {
@@ -59,7 +82,7 @@ export const CreateForm: React.FC = () => {
 
   const handleAddField = () => {
     setFields([
-      ...fields, 
+      ...fields,
       { id: Date.now().toString(), label: '', type: 'text', required: true }
     ]);
   };
@@ -74,8 +97,8 @@ export const CreateForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!branch || !batch) {
-      addToast('Please enter required branch and batch.', 'error');
+    if (branches.length === 0 || batches.length === 0) {
+      addToast('Please select at least one branch and batch.', 'error');
       return;
     }
     if (fields.some(f => !f.label.trim())) {
@@ -87,17 +110,17 @@ export const CreateForm: React.FC = () => {
     try {
       let creatorId = user?.id;
       if (!creatorId || creatorId === 'admin_sys' || creatorId.length < 15) {
-         try {
-           const { data: admins } = await api.get('/admins');
-           if (admins && admins.length > 0) {
-             creatorId = admins[0].adminId;
-           }
-         } catch(e) { }
+        try {
+          const { data: admins } = await api.get('/admins');
+          if (admins && admins.length > 0) {
+            creatorId = admins[0].adminId;
+          }
+        } catch (e) { }
       }
 
       const payload = {
-        accessBranch: branch,
-        accessBatch: batch,
+        accessBranch: branches.join(', '),
+        accessBatch: batches.join(', '),
         jsonOfFields: JSON.stringify(fields),
         createdBy: creatorId || 'admin_sys'
       };
@@ -135,7 +158,6 @@ export const CreateForm: React.FC = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
           <div>
             <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0 }}>Enrollment Forms</h1>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>Manage and share generated project registration portals.</p>
           </div>
           <Button onClick={() => setIsCreating(true)} leftIcon={<PlusCircle size={18} />}>Create New Enroll Form</Button>
         </div>
@@ -153,12 +175,9 @@ export const CreateForm: React.FC = () => {
               <Card key={form.formId} elevation={2} style={{ display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <span style={{ backgroundColor: 'var(--surface-hover)', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>{form.accessBranch}</span>
-                    <span style={{ backgroundColor: 'var(--surface-hover)', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>Batch {form.accessBatch}</span>
+                    <span style={{ backgroundColor: 'var(--surface-hover)', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>Branch: {form.accessBranch}</span>
+                    <span style={{ backgroundColor: 'var(--surface-hover)', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>Batch: {form.accessBatch}</span>
                   </div>
-                </div>
-                <div style={{ flex: 1, marginBottom: '24px' }}>
-                  <p style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '8px' }}><Calendar size={16} /> Created: {new Date(form.createAt).toLocaleDateString()}</p>
                 </div>
                 <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', display: 'flex', gap: '12px' }}>
                   <Button variant="outline" fullWidth size="sm" onClick={() => copyLink(form.formId)} leftIcon={<LinkIcon size={14} />}>Copy Link</Button>
@@ -188,8 +207,33 @@ export const CreateForm: React.FC = () => {
         <Card elevation={2} style={{ marginBottom: '24px' }}>
           <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Target Audience</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <Input label="Branch Focus" placeholder="e.g. CSE, ECE" value={branch} onChange={(e) => setBranch(e.target.value)} required />
-            <Input label="Batch Year" placeholder="e.g. 2026, 2024-2028" value={batch} onChange={(e) => setBatch(e.target.value)} required />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Branch Focus</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                {uniqueBranches.map(b => (
+                  <label key={b} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={branches.includes(b)} onChange={(e) => {
+                      if (e.target.checked) setBranches([...branches, b]);
+                      else setBranches(branches.filter(br => br !== b));
+                    }} style={{ width: '16px', height: '16px' }} /> {b}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Batch Year</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                {uniqueBatches.map(b => (
+                  <label key={b} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={batches.includes(b)} onChange={(e) => {
+                      if (e.target.checked) setBatches([...batches, b]);
+                      else setBatches(batches.filter(bt => bt !== b));
+                    }} style={{ width: '16px', height: '16px' }} /> {b}
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
         </Card>
 
@@ -198,7 +242,7 @@ export const CreateForm: React.FC = () => {
             <h3 style={{ fontSize: '18px', margin: 0 }}>Schema Fields</h3>
             <Button type="button" size="sm" variant="outline" onClick={handleAddField} leftIcon={<PlusCircle size={16} />}>Add Field</Button>
           </div>
-          
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {fields.map((field, index) => (
               <div key={field.id} style={{ display: 'flex', gap: '12px', padding: '16px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>

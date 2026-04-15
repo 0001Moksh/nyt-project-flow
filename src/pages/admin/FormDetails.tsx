@@ -37,7 +37,7 @@ export const FormDetails: React.FC = () => {
   const [uploadStage, setUploadStage] = useState('SYNOPSIS');
   const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
   const [reasonModalOpen, setReasonModalOpen] = useState(false);
-  const [pendingAssignment, setPendingAssignment] = useState<{projectId: string, newSupervisorId: string} | null>(null);
+  const [pendingAssignment, setPendingAssignment] = useState<{ projectId: string, newSupervisorId: string } | null>(null);
   const [reasonText, setReasonText] = useState('');
 
   const { user } = useAuthStore();
@@ -57,28 +57,28 @@ export const FormDetails: React.FC = () => {
       const targetedProjects = allProjectsRes.filter((p: any) => p.formId === formId);
 
       const [teamsRes, studentsRes, supervisorsRes] = await Promise.all([
-           api.get('/teams'),
-           api.get('/students'),
-           api.get('/supervisors')
+        api.get('/teams'),
+        api.get('/students'),
+        api.get('/supervisors')
       ]);
 
       const sups = supervisorsRes.data.map((sup: any) => ({
-          ...sup,
-          assignedCount: allProjectsRes.filter((p: any) => p.supervisorId === sup.supervisorId).length
+        ...sup,
+        assignedCount: allProjectsRes.filter((p: any) => p.supervisorId === sup.supervisorId).length
       }));
       setSupervisors(sups);
 
       const enriched = targetedProjects.map((p: any) => {
-           const team = teamsRes.data.find((t: any) => t.teamId === p.teamId);
-           let memberDetails: any[] = [];
-           if (team) {
-                const arr = JSON.parse(team.teamMemberArray || '[]');
-                memberDetails = arr.map((sid: string) => {
-                    const st = studentsRes.data.find((s:any) => s.studentId === sid);
-                    return st || { studentId: sid, name: 'Unknown', mail: 'N/A' };
-                });
-           }
-           return { ...p, team, memberDetails };
+        const team = teamsRes.data.find((t: any) => t.teamId === p.teamId);
+        let memberDetails: any[] = [];
+        if (team) {
+          const arr = JSON.parse(team.teamMemberArray || '[]');
+          memberDetails = arr.map((sid: string) => {
+            const st = studentsRes.data.find((s: any) => s.studentId === sid);
+            return st || { studentId: sid, name: 'Unknown', mail: 'N/A' };
+          });
+        }
+        return { ...p, team, memberDetails };
       });
 
       setProjects(enriched);
@@ -142,35 +142,35 @@ export const FormDetails: React.FC = () => {
   const stageOptions = ['SYNOPSIS', 'PROGRESS1', 'PROGRESS2', 'FINAL', 'ALL'];
 
   const handleSupervisorSelect = (projectId: string, currentSupervisorId: string, newSupervisorId: string) => {
-      if (!newSupervisorId) return; // Prevent empty unassignment
-      if (currentSupervisorId && currentSupervisorId !== newSupervisorId) {
-          setPendingAssignment({ projectId, newSupervisorId });
-          setReasonText('');
-          setReasonModalOpen(true);
-      } else {
-          executeAssignSupervisor(projectId, newSupervisorId, '');
-      }
+    if (!newSupervisorId) return; // Prevent empty unassignment
+    if (currentSupervisorId && currentSupervisorId !== newSupervisorId) {
+      setPendingAssignment({ projectId, newSupervisorId });
+      setReasonText('');
+      setReasonModalOpen(true);
+    } else {
+      executeAssignSupervisor(projectId, newSupervisorId, '');
+    }
   };
 
   const executeAssignSupervisor = async (projectId: string, supervisorId: string, reason: string) => {
-      try {
-          await api.post(`/projects/${projectId}/assign-supervisor`, {
-              supervisorId,
-              adminId: user?.id,
-              reason
-          });
-          setProjects(projects.map(p => p.projectId === projectId ? { ...p, supervisorId } : p));
-          setSupervisors(supervisors.map(s => {
-              if (s.supervisorId === supervisorId) return { ...s, assignedCount: s.assignedCount + 1 };
-              return s;
-          }));
-          addToast('Supervisor Assignment Updated successfully.', 'success');
-          setReasonModalOpen(false);
-          setPendingAssignment(null);
-      } catch (err: any) {
-          console.error("Failed to assign supervisor", err);
-          addToast(err.response?.data?.message || 'Failed to assign supervisor.', 'error');
-      }
+    try {
+      await api.post(`/projects/${projectId}/assign-supervisor`, {
+        supervisorId,
+        adminId: user?.id,
+        reason
+      });
+      setProjects(projects.map(p => p.projectId === projectId ? { ...p, supervisorId } : p));
+      setSupervisors(supervisors.map(s => {
+        if (s.supervisorId === supervisorId) return { ...s, assignedCount: s.assignedCount + 1 };
+        return s;
+      }));
+      addToast('Supervisor Assignment Updated successfully.', 'success');
+      setReasonModalOpen(false);
+      setPendingAssignment(null);
+    } catch (err: any) {
+      console.error("Failed to assign supervisor", err);
+      addToast(err.response?.data?.message || 'Failed to assign supervisor.', 'error');
+    }
   };
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: '64px' }}><Loader size="lg" /></div>;
@@ -179,17 +179,8 @@ export const FormDetails: React.FC = () => {
   return (
     <div>
       <div style={{ marginBottom: '24px' }}>
-        <button 
-          onClick={() => navigate('/admin/dashboard')} 
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: '24px' }}
-        >
-          <ArrowLeft size={16} /> Back to Dashboard
-        </button>
-
-        <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0 }}>Form Submissions</h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
-          Viewing all registered projects for <strong>{formConfig.accessBranch} Batch {formConfig.accessBatch}</strong>.
-        </p>
+        <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0 }}> Viewing all registered projects for <strong>{formConfig.accessBranch} Batch {formConfig.accessBatch}</strong>.
+        </h1>
       </div>
 
       <Card elevation={2} style={{ marginBottom: '24px' }}>
@@ -370,94 +361,94 @@ export const FormDetails: React.FC = () => {
               </div>
 
               <div style={{ padding: '16px 24px', backgroundColor: 'var(--background)', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                   <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Assign Supervisor:</div>
-                   <select 
-                      value={project.supervisorId || ''} 
-                      onChange={(e) => handleSupervisorSelect(project.projectId, project.supervisorId, e.target.value)}
-                      style={{ flex: 1, maxWidth: '400px', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)' }}
-                   >
-                       <option value="">-- Unassigned --</option>
-                       {supervisors.map(sup => (
-                           <option key={sup.supervisorId} value={sup.supervisorId}>
-                               {sup.name} ({sup.assignedCount} Projects Assigned)
-                           </option>
-                       ))}
-                   </select>
-                   {project.supervisorId && <div style={{ fontSize: '12px', color: 'var(--success)' }}>Active Supervisor Notification Sent</div>}
+                <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Assign Supervisor:</div>
+                <select
+                  value={project.supervisorId || ''}
+                  onChange={(e) => handleSupervisorSelect(project.projectId, project.supervisorId, e.target.value)}
+                  style={{ flex: 1, maxWidth: '400px', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)' }}
+                >
+                  <option value="">-- Unassigned --</option>
+                  {supervisors.map(sup => (
+                    <option key={sup.supervisorId} value={sup.supervisorId}>
+                      {sup.name} ({sup.assignedCount} Projects Assigned)
+                    </option>
+                  ))}
+                </select>
+                {project.supervisorId && <div style={{ fontSize: '12px', color: 'var(--success)' }}>Active Supervisor Notification Sent</div>}
               </div>
 
               <div style={{ display: 'flex', gap: '24px', padding: '16px 0 0' }}>
-                 {/* TEAM MEMBERS PANEL */}
-                 <div style={{ flex: 1 }}>
-                     <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                         <Users size={16} color="var(--primary)" /> Enrolled Team Members
-                     </h4>
-                     
-                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                         {project.memberDetails?.map((m: any) => (
-                              <div key={m.studentId} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                                   <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', fontWeight: 'bold' }}>
-                                        {m.name.charAt(0)}
-                                   </div>
-                                   <div>
-                                       <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                          {m.name}
-                                          {m.studentId === project.team?.leaderId && (
-                                              <span style={{ fontSize: '10px', backgroundColor: 'var(--warning)', color: '#000', padding: '2px 6px', borderRadius: '8px' }}>LEADER</span>
-                                          )}
-                                       </div>
-                                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{m.mail}</div>
-                                   </div>
-                              </div>
-                         ))}
-                     </div>
-                 </div>
+                {/* TEAM MEMBERS PANEL */}
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Users size={16} color="var(--primary)" /> Enrolled Team Members
+                  </h4>
 
-                 {/* PROJECT DETAILS PANEL */}
-                 <div style={{ flex: 1 }}>
-                     <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                         <FileText size={16} color="var(--primary)" /> Proposal Context
-                     </h4>
-                     <div style={{ backgroundColor: 'var(--surface-hover)', padding: '16px', borderRadius: '8px', fontSize: '13px', whiteSpace: 'pre-wrap', border: '1px dashed var(--border-color)', height: '100%', maxHeight: '400px', overflowY: 'auto' }}>
-                         {project.projectDescription}
-                     </div>
-                 </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {project.memberDetails?.map((m: any) => (
+                      <div key={m.studentId} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', fontWeight: 'bold' }}>
+                          {m.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {m.name}
+                            {m.studentId === project.team?.leaderId && (
+                              <span style={{ fontSize: '10px', backgroundColor: 'var(--warning)', color: '#000', padding: '2px 6px', borderRadius: '8px' }}>LEADER</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{m.mail}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* PROJECT DETAILS PANEL */}
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FileText size={16} color="var(--primary)" /> Proposal Context
+                  </h4>
+                  <div style={{ backgroundColor: 'var(--surface-hover)', padding: '16px', borderRadius: '8px', fontSize: '13px', whiteSpace: 'pre-wrap', border: '1px dashed var(--border-color)', height: '100%', maxHeight: '400px', overflowY: 'auto' }}>
+                    {project.projectDescription}
+                  </div>
+                </div>
               </div>
 
-             </Card>
+            </Card>
           ))}
         </div>
       )}
 
       {/* REASON MODAL */}
       {reasonModalOpen && pendingAssignment && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-              <div style={{ background: 'white', padding: '24px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                  <h2 style={{ marginTop: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <AlertTriangle color="#f59e0b" size={20} /> Reassign Supervisor
-                  </h2>
-                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>You are replacing an existing supervisor. A reason is required for administrative tracking and notifications.</p>
-                  
-                  <div style={{ marginTop: '16px', marginBottom: '24px' }}>
-                      <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>Reason for Change <span style={{color: 'red'}}>*</span></label>
-                      <Input 
-                          value={reasonText} 
-                          onChange={(e) => setReasonText(e.target.value)} 
-                          placeholder="E.g., Requested by student, Availability issues..."
-                      />
-                  </div>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', padding: '24px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+            <h2 style={{ marginTop: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle color="#f59e0b" size={20} /> Reassign Supervisor
+            </h2>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>You are replacing an existing supervisor. A reason is required for administrative tracking and notifications.</p>
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                      <Button variant="outline" onClick={() => { setReasonModalOpen(false); setPendingAssignment(null); }}>Cancel</Button>
-                      <Button 
-                          onClick={() => executeAssignSupervisor(pendingAssignment.projectId, pendingAssignment.newSupervisorId, reasonText)}
-                          disabled={!reasonText.trim()}
-                      >
-                          Confirm Reassignment
-                      </Button>
-                  </div>
-              </div>
+            <div style={{ marginTop: '16px', marginBottom: '24px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>Reason for Change <span style={{ color: 'red' }}>*</span></label>
+              <Input
+                value={reasonText}
+                onChange={(e) => setReasonText(e.target.value)}
+                placeholder="E.g., Requested by student, Availability issues..."
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <Button variant="outline" onClick={() => { setReasonModalOpen(false); setPendingAssignment(null); }}>Cancel</Button>
+              <Button
+                onClick={() => executeAssignSupervisor(pendingAssignment.projectId, pendingAssignment.newSupervisorId, reasonText)}
+                disabled={!reasonText.trim()}
+              >
+                Confirm Reassignment
+              </Button>
+            </div>
           </div>
+        </div>
       )}
     </div>
   );

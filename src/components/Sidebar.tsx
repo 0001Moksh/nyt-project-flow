@@ -87,9 +87,6 @@ export const Sidebar: React.FC = () => {
 
       {/* NAVIGATION LINKS */}
       <nav style={{ flex: 1, padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-disabled)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '12px' }}>
-          MENU
-        </p>
         {links.map((link) => {
           const isActive = location.pathname.includes(link.path);
           return (

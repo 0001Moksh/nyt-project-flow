@@ -25,8 +25,8 @@ interface DeliverableUploaderProps {
   onSuccess: () => void;
 }
 
-export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({ 
-  projectId, documentId, currentStage, isLeader, onSuccess 
+export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
+  projectId, documentId, currentStage, isLeader, onSuccess
 }) => {
   const [comment, setComment] = useState('');
   const [reviewComment, setReviewComment] = useState('');
@@ -37,14 +37,14 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
   const [project, setProject] = useState<any>(null);
   const [referenceFiles, setReferenceFiles] = useState<FormAttachment[]>([]);
   const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const addToast = useToastStore(state => state.addToast);
   const user = useAuthStore(state => state.user);
 
   // Map Project 'stageStatus' enum to the correct Submission endpoint
   const getEndpoint = () => {
-    switch(currentStage) {
+    switch (currentStage) {
       case 'SYNOPSIS': return '/submissions/synopsis';
       case 'PROGRESS1': return '/submissions/progress1';
       case 'PROGRESS2': return '/submissions/progress2';
@@ -58,10 +58,10 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
       const endpoint = getEndpoint();
       if (!endpoint || !documentId) return;
       try {
-         const { data } = await api.get(`${endpoint}/document/${documentId}`);
-         setExistingSubmissions(data || []);
+        const { data } = await api.get(`${endpoint}/document/${documentId}`);
+        setExistingSubmissions(data || []);
       } catch (err) {
-         console.error("No submissions found yet.");
+        console.error("No submissions found yet.");
       }
     };
 
@@ -100,13 +100,13 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
   const isTeamMember = Boolean(user?.id) && (isLeader || teamMemberIds.includes(user?.id));
   const alreadyVoted = latestSubmission?.teamReviewJson
     ? (() => {
-        try {
-          const votes = JSON.parse(latestSubmission.teamReviewJson || '[]');
-          return votes.some((vote: any) => vote.reviewerId === user?.id);
-        } catch {
-          return false;
-        }
-      })()
+      try {
+        const votes = JSON.parse(latestSubmission.teamReviewJson || '[]');
+        return votes.some((vote: any) => vote.reviewerId === user?.id);
+      } catch {
+        return false;
+      }
+    })()
     : false;
   const canUploadRevision = isLeader && (!latestSubmission || ['REJECTED', 'REVISION'].includes((latestSubmission.status || '').toUpperCase()));
   const canTeamReview = Boolean(latestSubmission && isTeamMember && !isLeader && !alreadyVoted && latestSubmission.teamReviewStatus !== 'APPROVED');
@@ -183,7 +183,7 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
         formData.append('stage', currentStage.toLowerCase());
 
         addToast('Uploading to OneDrive...', 'info');
-         const uploadRes = await api.post('/files/upload', formData);
+        const uploadRes = await api.post('/files/upload', formData);
 
         fileUrl = uploadRes.data.fileUrl;
         fileName = uploadRes.data.fileName;
@@ -202,11 +202,11 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       onSuccess();
-      
+
       // Refresh local list
       const { data } = await api.get(`${endpoint}/document/${documentId}`);
       setExistingSubmissions(data || []);
-      
+
     } catch (err: any) {
       console.error(err);
       addToast(err.response?.data?.error || 'Failed to submit deliverable', 'error');
@@ -216,7 +216,7 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
   };
 
   const handleFileClick = () => {
-     fileInputRef.current?.click();
+    fileInputRef.current?.click();
   };
 
   const submitTeamReview = async (approved: boolean) => {
@@ -248,12 +248,6 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
   if (!isLeader && !hasSubmitted) {
     return (
       <div>
-        {renderStageReferences()}
-        <Card elevation={1} style={{ marginTop: '16px', backgroundColor: 'var(--surface-hover)', border: '1px dashed var(--border-color)' }}>
-           <p style={{ color: 'var(--text-secondary)', margin: 0, textAlign: 'center' }}>
-              Awaiting Team Leader to upload the <strong>{currentStage}</strong> deliverables.
-           </p>
-        </Card>
         {previewFile && (
           <div
             style={{
@@ -302,30 +296,30 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
       <div>
         {renderStageReferences()}
         <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
-        <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Users size={18} color="var(--primary)" /> {currentStage} Team Review
-        </h4>
-        <div style={{ padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', marginBottom: '12px' }}>
-          <div style={{ fontWeight: 600, marginBottom: '6px' }}>Latest version: {latestSubmission.fileName || 'document'}</div>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Team review status: {latestSubmission.teamReviewStatus || 'PENDING'}
+          <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Users size={18} color="var(--primary)" /> {currentStage} Team Review
+          </h4>
+          <div style={{ padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', marginBottom: '12px' }}>
+            <div style={{ fontWeight: 600, marginBottom: '6px' }}>Latest version: {latestSubmission.fileName || 'document'}</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              Team review status: {latestSubmission.teamReviewStatus || 'PENDING'}
+            </div>
           </div>
-        </div>
-        <Input
-          label="Review comment"
-          value={reviewComment}
-          onChange={(e) => setReviewComment(e.target.value)}
-          placeholder="Optional feedback for the leader"
-        />
-        <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-          <Button type="button" variant="outline" onClick={() => submitTeamReview(false)} isLoading={isSubmitting} leftIcon={<XCircle size={16} />}>
-            Reject
-          </Button>
-          <Button type="button" onClick={() => submitTeamReview(true)} isLoading={isSubmitting} leftIcon={<CheckCircle size={16} />}>
-            Approve
-          </Button>
-        </div>
-      </Card>
+          <Input
+            label="Review comment"
+            value={reviewComment}
+            onChange={(e) => setReviewComment(e.target.value)}
+            placeholder="Optional feedback for the leader"
+          />
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+            <Button type="button" variant="outline" onClick={() => submitTeamReview(false)} isLoading={isSubmitting} leftIcon={<XCircle size={16} />}>
+              Reject
+            </Button>
+            <Button type="button" onClick={() => submitTeamReview(true)} isLoading={isSubmitting} leftIcon={<CheckCircle size={16} />}>
+              Approve
+            </Button>
+          </div>
+        </Card>
         {previewFile && (
           <div
             style={{
@@ -371,107 +365,107 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
 
   return (
     <div>
-    {renderStageReferences()}
-    <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
-      <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-         <UploadCloud size={18} color="var(--primary)" /> 
-         {currentStage} Deliverables
-      </h4>
-      
-      {hasSubmitted && !canUploadRevision ? (
-        <div style={{ padding: '12px', backgroundColor: 'var(--success-20)', borderRadius: '6px', borderLeft: '4px solid var(--success)', color: 'var(--text-primary)' }}>
-           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-               <strong>{latestSubmission?.teamReviewStatus === 'APPROVED' ? 'Document Approved by Team' : 'Document Submitted for Review'}</strong>
-               {existingSubmissions[0]?.fileUrl && (
-                   <a href={existingSubmissions[0].fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                       View Attached File <FileText size={14} />
-                   </a>
-               )}
-           </div>
-           <br />
-           <span style={{ fontSize: '13px', color: 'var(--text-secondary)'}}>
-             {latestSubmission?.status === 'REVISION'
-               ? 'Supervisor requested changes. Upload a revised version when ready.'
-               : 'The submission is in the review pipeline.'}
-           </span>
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '16px', border: '1px dashed var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)', cursor: 'pointer' }} onClick={handleFileClick}>
-             <input 
-                 type="file" 
-                 ref={fileInputRef} 
-                 style={{ display: 'none' }} 
-                 onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
-             />
-             <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                 <FileText size={20} color={file ? 'var(--primary)' : 'var(--text-secondary)'} />
-             </div>
-             <div>
+      {renderStageReferences()}
+      <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
+        <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <UploadCloud size={18} color="var(--primary)" />
+          {currentStage} Deliverables
+        </h4>
+
+        {hasSubmitted && !canUploadRevision ? (
+          <div style={{ padding: '12px', backgroundColor: 'var(--success-20)', borderRadius: '6px', borderLeft: '4px solid var(--success)', color: 'var(--text-primary)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <strong>{latestSubmission?.teamReviewStatus === 'APPROVED' ? 'Document Approved by Team' : 'Document Submitted for Review'}</strong>
+              {existingSubmissions[0]?.fileUrl && (
+                <a href={existingSubmissions[0].fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  View Attached File <FileText size={14} />
+                </a>
+              )}
+            </div>
+            <br />
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              {latestSubmission?.status === 'REVISION'
+                ? 'Supervisor requested changes. Upload a revised version when ready.'
+                : 'The submission is in the review pipeline.'}
+            </span>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '16px', border: '1px dashed var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)', cursor: 'pointer' }} onClick={handleFileClick}>
+              <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
+              />
+              <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <FileText size={20} color={file ? 'var(--primary)' : 'var(--text-secondary)'} />
+              </div>
+              <div>
                 <h5 style={{ margin: '0 0 4px', fontSize: '14px', color: file ? 'var(--primary)' : 'var(--text-primary)' }}>
-                    {file ? file.name : 'Click to attach project file (PDF, DOCX, ZIP)'}
+                  {file ? file.name : 'Click to attach project file (PDF, DOCX, ZIP)'}
                 </h5>
                 <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-disabled)' }}>
-                    {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : 'Max size 50MB. Uploads securely to OneDrive.'}
+                  {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : 'Max size 50MB. Uploads securely to OneDrive.'}
                 </p>
-             </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-            <div style={{ flex: 1 }}>
-              <Input 
-                label="Additional Links or Comments (Optional)" 
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="https://github.com/... or specific notes for your supervisor."
-                leftIcon={<LinkIcon size={16} />}
-              />
+              </div>
             </div>
-            <Button type="submit" isLoading={isSubmitting}>Submit Deliverable</Button>
-          </div>
-        </form>
-      )}
-    </Card>
-    {previewFile && (
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '24px',
-          zIndex: 50
-        }}
-        onClick={() => setPreviewFile(null)}
-      >
+
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <Input
+                  label="Additional Links or Comments (Optional)"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="https://github.com/... or specific notes for your supervisor."
+                  leftIcon={<LinkIcon size={16} />}
+                />
+              </div>
+              <Button type="submit" isLoading={isSubmitting}>Submit Deliverable</Button>
+            </div>
+          </form>
+        )}
+      </Card>
+      {previewFile && (
         <div
           style={{
-            width: 'min(960px, 96vw)',
-            height: 'min(80vh, 720px)',
-            backgroundColor: 'var(--surface)',
-            borderRadius: '12px',
-            overflow: 'hidden',
-            border: '1px solid var(--border-color)'
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            zIndex: 50
           }}
-          onClick={(e) => e.stopPropagation()}
+          onClick={() => setPreviewFile(null)}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
-            <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
-            <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
-              Close
-            </Button>
+          <div
+            style={{
+              width: 'min(960px, 96vw)',
+              height: 'min(80vh, 720px)',
+              backgroundColor: 'var(--surface)',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              border: '1px solid var(--border-color)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
+              <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
+              <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+                Close
+              </Button>
+            </div>
+            <iframe
+              title={previewFile.fileName}
+              src={getPreviewUrl(previewFile.fileUrl)}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+            />
           </div>
-          <iframe
-            title={previewFile.fileName}
-            src={getPreviewUrl(previewFile.fileUrl)}
-            style={{ width: '100%', height: '100%', border: 'none' }}
-          />
         </div>
-      </div>
-    )}
+      )}
     </div>
   );
 };

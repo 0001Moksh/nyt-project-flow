@@ -63,12 +63,6 @@ export const AdminRequests: React.FC = () => {
 
     return (
         <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '32px' }}>
-
-            <div>
-                <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: '0 0 8px', fontWeight: 700 }}>Pending Registration Requests</h1>
-                <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '15px' }}>Review and approve new supervisors joining the Nyt Project Flow project management system.</p>
-            </div>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {pendingRequests.length === 0 ? (
                     <Card style={{ padding: '48px', textAlign: 'center', color: 'var(--text-disabled)' }}>
@@ -101,11 +95,11 @@ export const AdminRequests: React.FC = () => {
                 )}
             </div>
 
-            <h2 style={{ fontSize: '20px', margin: '16px 0 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>Audit Log: Past Actions</h2>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {pastRequests.map(req => (
                     <Card key={req.requestId} style={{ padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', opacity: 0.8 }}>
+                        <h2 style={{ fontSize: '20px', margin: '16px 0 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>Audit Log: Past Actions</h2>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                 <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: req.status === 'APPROVED' ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: req.status === 'APPROVED' ? '#16a34a' : '#dc2626' }}>
