@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Button, Loader } from '../../components';
+import { Card, Button, Loader, ProjectTimeline } from '../../components';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../utils/authStore';
 import { Calendar, Users, MessageSquare, FileText, Star, AlertTriangle, FileCheck, MapPin, Video, CheckCircle, Clock, Paperclip } from 'lucide-react';
@@ -135,121 +135,12 @@ export const SupervisorTeamOverview: React.FC = () => {
                 </div>
             </Card>
 
-            {/* 3 Metric Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
-                <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                        <h4 style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)' }}>Overall Completion</h4>
-                        <div style={{ width: '24px', height: '24px', backgroundColor: '#eff6ff', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <div style={{ width: '12px', height: '12px', backgroundColor: '#3b82f6' }}></div>
-                        </div>
-                    </div>
-                    <h2 style={{ margin: '0 0 16px', fontSize: '32px', fontWeight: 700 }}>65%</h2>
-                    <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--surface-hover)', borderRadius: '2px', overflow: 'hidden' }}>
-                        <div style={{ width: '65%', height: '100%', backgroundColor: '#ef4444' }}></div>
-                    </div>
-                </Card>
-
-                <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
-                     <h4 style={{ margin: '0 0 16px', fontSize: '14px', color: 'var(--text-secondary)' }}>Days Remaining</h4>
-                     <h2 style={{ margin: '0 0 8px', fontSize: '32px', fontWeight: 700 }}>3</h2>
-                     <p style={{ margin: 0, fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Deadline Dec 10, 2026</p>
-                </Card>
-
-                <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                         <h4 style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)' }}>Last Submission</h4>
-                         <span style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>5 mins ago</span>
-                     </div>
-                     <h2 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 600, wordBreak: 'break-all' }}>Architecture_v3.pdf</h2>
-                </Card>
-            </div>
-
             {/* Main Content Layout */}
             <div style={{ display: 'flex', gap: '32px' }}>
                 
                 {/* Visual Tracker Columns */}
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                    
-                    {/* Progress Phase Flow */}
-                    <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-                            <h3 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <div style={{ width: '16px', height: '16px', backgroundColor: '#3b82f6', borderRadius: '4px' }}></div>
-                                Project Progress
-                            </h3>
-                            <span style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: 600, cursor: 'pointer' }} onClick={() => navigate('/supervisor/tasks')}>View All Tasks</span>
-                        </div>
-
-                        {/* Status Pipeline mimicking wireframe */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '11px', fontWeight: 600, color: 'var(--text-disabled)', letterSpacing: '0.5px' }}>
-                            <span>TO DO (2)</span>
-                            <span>IN PROGRESS (1)</span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>COMPLETED (3) <div style={{width:'8px',height:'8px',borderRadius:'50%',backgroundColor:'#22c55e'}}></div></span>
-                        </div>
-
-                        {/* Continuous bar visual */}
-                        <div style={{ display: 'flex', width: '100%', height: '16px', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px' }}>
-                            <div style={{ flex: 1, backgroundColor: '#ef4444', position: 'relative' }}>
-                                <div style={{ position: 'absolute', top: '-24px', left: '50%', transform: 'translateX(-50%)', fontSize: '12px', fontWeight: 600, color: '#ef4444' }}>1 Testing</div>
-                            </div>
-                            <div style={{ flex: 1, backgroundColor: '#22c55e', position: 'relative' }}>
-                                <div style={{ position: 'absolute', top: '-24px', left: '50%', transform: 'translateX(-50%)', fontSize: '12px', fontWeight: 600, color: '#22c55e' }}>3 Testing</div>
-                            </div>
-                            <div style={{ flex: 1, backgroundColor: '#8b5cf6', position: 'relative' }}>
-                                <div style={{ position: 'absolute', top: '-24px', left: '50%', transform: 'translateX(-50%)', fontSize: '12px', fontWeight: 600, color: '#8b5cf6' }}>3 Testing</div>
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            <div style={{ filter: 'grayscale(100%)' }}>Phase 1: Research<br/><span style={{fontSize:'10px'}}>Jan 10 - Feb 20 2026</span></div>
-                            <div style={{ flex: 1, textAlign: 'center' }}>Phase 2: Development<br/><span style={{fontSize:'10px'}}>Jan 21 - Feb 15 2026</span></div>
-                            <div style={{ filter: 'grayscale(100%)', textAlign: 'right' }}>Phase 3: Testing<br/><span style={{fontSize:'10px'}}>Jan 16 - Feb 20 2026</span></div>
-                        </div>
-                    </Card>
-
-                    {/* Timeline Vertical */}
-                    <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
-                        <h3 style={{ margin: '0 0 24px', fontSize: '18px' }}>Project Timeline</h3>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column', position: 'relative', paddingLeft: '24px' }}>
-                            <div style={{ position: 'absolute', left: '6px', top: '8px', bottom: '24px', width: '2px', backgroundColor: '#fca5a5' }}></div>
-
-                            <div style={{ position: 'relative', marginBottom: '32px' }}>
-                                <div style={{ position: 'absolute', left: '-22px', top: '4px', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'white', border: '2px solid #ef4444' }}></div>
-                                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                                    <div style={{ width: '16px', height: '16px', backgroundColor: '#ef4444', borderRadius: '2px' }}></div>
-                                    <div>
-                                        <div style={{ fontWeight: 600, fontSize: '14px' }}>Phase 1: Research</div>
-                                        <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>Jan 21 - Feb 15, Feb 20 28 fg</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div style={{ position: 'relative', marginBottom: '32px' }}>
-                                <div style={{ position: 'absolute', left: '-22px', top: '4px', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'white', border: '2px solid #22c55e' }}></div>
-                                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                                    <div style={{ width: '16px', height: '16px', backgroundColor: '#22c55e', borderRadius: '2px' }}></div>
-                                    <div>
-                                        <div style={{ fontWeight: 600, fontSize: '14px' }}>Phase Development</div>
-                                        <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>Jan 21 - Feb 15, Feb 15 28 fg</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div style={{ position: 'relative' }}>
-                                <div style={{ position: 'absolute', left: '-22px', top: '4px', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'white', border: '2px solid #8b5cf6' }}></div>
-                                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                                    <div style={{ width: '16px', height: '16px', backgroundColor: '#8b5cf6', borderRadius: '2px' }}></div>
-                                    <div>
-                                        <div style={{ fontWeight: 600, fontSize: '14px' }}>Phase 3: Testing</div>
-                                        <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>Jan 16 - Feb 15, fb 28-28 fg</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
-                    </Card>
+                    <ProjectTimeline project={project} />
 
                     {stageFiles.length > 0 && (
                         <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '24px' }}>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../utils/authStore';
-import { Card, Button, Loader } from '../components';
+import { Card, Button, Loader, ProjectTimeline } from '../components';
 import { useNavigate } from 'react-router-dom';
 import { Check, X, Bell, Users, CheckCircle, Info, Star, ChevronRight, User, Briefcase, Hash, FolderKanban, History, Paperclip } from 'lucide-react';
 import { api } from '../services/api';
@@ -194,6 +194,8 @@ export const StudentProjects: React.FC = () => {
                             </div>
                         </div>
                     </Card>
+
+                    <ProjectTimeline project={project} />
 
                     {/* Team Members Breakdown */}
                     <Card elevation={1} style={{ padding: '0', borderRadius: '12px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>

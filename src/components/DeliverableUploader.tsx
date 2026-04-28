@@ -37,6 +37,7 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
   const [project, setProject] = useState<any>(null);
   const [referenceFiles, setReferenceFiles] = useState<FormAttachment[]>([]);
   const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
+  const [resolvedDocumentId, setResolvedDocumentId] = useState(documentId);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const addToast = useToastStore(state => state.addToast);
@@ -54,11 +55,43 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
   };
 
   useEffect(() => {
+    setResolvedDocumentId(documentId);
+  }, [documentId]);
+
+  useEffect(() => {
+    const ensureDocument = async () => {
+      if (!projectId) return;
+      try {
+        const { data } = await api.get(`/documents/by-project/${projectId}`);
+        if (data?.documentId) {
+          setResolvedDocumentId(data.documentId);
+          return;
+        }
+      } catch (err: any) {
+        if (err?.response?.status !== 404) {
+          return;
+        }
+      }
+
+      try {
+        const { data } = await api.post('/documents', { projectId });
+        if (data?.documentId) {
+          setResolvedDocumentId(data.documentId);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    ensureDocument();
+  }, [projectId]);
+
+  useEffect(() => {
     const fetchSubmissions = async () => {
       const endpoint = getEndpoint();
-      if (!endpoint || !documentId) return;
+      if (!endpoint || !resolvedDocumentId) return;
       try {
-        const { data } = await api.get(`${endpoint}/document/${documentId}`);
+        const { data } = await api.get(`${endpoint}/document/${resolvedDocumentId}`);
         setExistingSubmissions(data || []);
       } catch (err) {
         console.error("No submissions found yet.");
@@ -86,7 +119,7 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
 
     fetchSubmissions();
     fetchProjectContext();
-  }, [documentId, currentStage]);
+  }, [resolvedDocumentId, currentStage, projectId]);
 
   const latestSubmission = existingSubmissions[existingSubmissions.length - 1] || null;
   const latestSubmissionId = latestSubmission ? latestSubmission[`${currentStage.toLowerCase()}Id`] : null;
@@ -170,6 +203,11 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
       return;
     }
 
+    if (!resolvedDocumentId) {
+      addToast('Document is not ready yet. Please try again in a moment.', 'error');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       let fileUrl = '';
@@ -191,7 +229,7 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
 
       // Step 2: Lock submission into Database
       await api.post(endpoint, {
-        documentId: documentId,
+        documentId: resolvedDocumentId,
         comment: comment,
         fileUrl: fileUrl,
         fileName: fileName
@@ -204,12 +242,33 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
       onSuccess();
 
       // Refresh local list
-      const { data } = await api.get(`${endpoint}/document/${documentId}`);
+      const { data } = await api.get(`${endpoint}/document/${resolvedDocumentId}`);
       setExistingSubmissions(data || []);
 
     } catch (err: any) {
       console.error(err);
       addToast(err.response?.data?.error || 'Failed to submit deliverable', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteLatestSubmission = async () => {
+    if (!latestSubmissionId) return;
+    const endpoint = getEndpoint();
+    if (!endpoint) return;
+    const confirmed = window.confirm('Delete the latest submission? This cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      setIsSubmitting(true);
+      await api.delete(`${endpoint}/${latestSubmissionId}`);
+      addToast('Submission deleted successfully.', 'success');
+      const { data } = await api.get(`${endpoint}/document/${resolvedDocumentId}`);
+      setExistingSubmissions(data || []);
+      onSuccess();
+    } catch (err: any) {
+      addToast(err.response?.data?.message || 'Failed to delete submission', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -232,7 +291,7 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
       addToast(approved ? 'Approval recorded.' : 'Rejection recorded.', 'success');
       const endpoint = getEndpoint();
       if (endpoint) {
-        const { data } = await api.get(`${endpoint}/document/${documentId}`);
+        const { data } = await api.get(`${endpoint}/document/${resolvedDocumentId}`);
         setExistingSubmissions(data || []);
       }
       onSuccess();
@@ -244,6 +303,9 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
   };
 
   const hasSubmitted = existingSubmissions.length > 0;
+  const canDeleteSubmission = Boolean(
+    isLeader && latestSubmission && (latestSubmission.status || '').toUpperCase() !== 'APPROVED'
+  );
 
   if (!isLeader && !hasSubmitted) {
     return (
@@ -376,11 +438,18 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
           <div style={{ padding: '12px', backgroundColor: 'var(--success-20)', borderRadius: '6px', borderLeft: '4px solid var(--success)', color: 'var(--text-primary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <strong>{latestSubmission?.teamReviewStatus === 'APPROVED' ? 'Document Approved by Team' : 'Document Submitted for Review'}</strong>
-              {existingSubmissions[0]?.fileUrl && (
-                <a href={existingSubmissions[0].fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  View Attached File <FileText size={14} />
-                </a>
-              )}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                {existingSubmissions[0]?.fileUrl && (
+                  <a href={existingSubmissions[0].fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    View Attached File <FileText size={14} />
+                  </a>
+                )}
+                {canDeleteSubmission && (
+                  <Button size="sm" variant="outline" onClick={handleDeleteLatestSubmission} isLoading={isSubmitting}>
+                    Delete
+                  </Button>
+                )}
+              </div>
             </div>
             <br />
             <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
@@ -391,6 +460,16 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
           </div>
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {canDeleteSubmission && latestSubmission && (
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--surface-hover)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  Latest submission: {latestSubmission.fileName || 'document'}
+                </div>
+                <Button size="sm" variant="outline" onClick={handleDeleteLatestSubmission} isLoading={isSubmitting}>
+                  Delete
+                </Button>
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '16px', border: '1px dashed var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)', cursor: 'pointer' }} onClick={handleFileClick}>
               <input

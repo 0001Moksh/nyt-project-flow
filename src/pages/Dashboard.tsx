@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../utils/authStore';
-import { Card, Button, Loader } from '../components';
+import { Card, Button, Loader, ProjectTimeline } from '../components';
 import { useToastStore } from '../utils/toastStore';
 import { useNavigate } from 'react-router-dom';
 import { Check, X, Bell, Users, CheckCircle, Info, Calendar, Video, MapPin, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
@@ -256,6 +256,8 @@ export const Dashboard: React.FC = () => {
                                 <span>1 Spot Remaining</span>
                             </div>
                         </div>
+
+                        <ProjectTimeline project={currentProject} />
 
                         {/* Active Members List */}
                         <Card elevation={1} style={{ padding: '0', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>

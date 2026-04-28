@@ -86,6 +86,10 @@ export const adminService = {
     return response.data;
   },
 
+  deleteFormAttachment: async (formId: string, attachmentId: string): Promise<void> => {
+    await api.delete(`/forms/${formId}/attachments/${attachmentId}`);
+  },
+
   getAllProjects: async (): Promise<any[]> => {
     const response = await api.get<any[]>('/projects');
     return response.data;

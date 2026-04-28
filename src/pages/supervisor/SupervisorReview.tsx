@@ -5,7 +5,7 @@ import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { FileText, CheckCircle, Search, ExternalLink, Calendar, MessageSquare, AlertCircle, ThumbsUp, ThumbsDown, Paperclip } from 'lucide-react';
 import type { FormAttachment } from '../../services/adminService';
-import { getPreviewUrl } from '../../utils/filePreview';
+import { extractFirstUrl, getPreviewUrl } from '../../utils/filePreview';
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
     if (!json) return [];
@@ -39,6 +39,9 @@ export const SupervisorReview: React.FC = () => {
     
     const addToast = useToastStore(state => state.addToast);
 
+    const activeSubOriginalUrl = activeSub?.fileUrl || extractFirstUrl(activeSub?.comment);
+    const activeSubPreviewUrl = activeSubOriginalUrl ? getPreviewUrl(activeSubOriginalUrl) : '';
+
     const matchesStage = (file: FormAttachment, stage?: string) => {
         const value = (file.stage || 'GENERAL').toUpperCase();
         if (!stage) return value === 'ALL' || value === 'GENERAL';
@@ -65,7 +68,10 @@ export const SupervisorReview: React.FC = () => {
                const subRes = await api.get(`/submissions/${ep}/document/${proj.documentId}`);
                const subs = subRes.data || [];
                setSubmissions(subs);
-               if (subs.length > 0) setActiveSub(subs[subs.length - 1]); // Set latest as active preview
+               setActiveSub(subs.length > 0 ? subs[subs.length - 1] : null); // Set latest as active preview
+           } else {
+               setSubmissions([]);
+               setActiveSub(null);
            }
            
         } catch(err) {
@@ -90,9 +96,10 @@ export const SupervisorReview: React.FC = () => {
             // Update the submission status if there's an active one
             if (activeSub) {
                 const ep = activeStage.toLowerCase();
+                const existingComment = activeSub.comment ? `${activeSub.comment}\n\n` : '';
                 await api.patch(`/submissions/${ep}/${activeSub[`${ep}Id`] || activeSub.finalId || activeSub.synopsisId}/supervisor-review`, {
                     approved: decision === 'APPROVE',
-                    comment: activeSub.comment + "\n\nSUPERVISOR FEEDBACK: " + feedback,
+                    comment: `${existingComment}SUPERVISOR FEEDBACK: ${feedback}`,
                     supervisorId: project.supervisorId
                 });
             }
@@ -202,13 +209,23 @@ export const SupervisorReview: React.FC = () => {
                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '15px' }}>
                              <FileText size={18} color="var(--primary)" /> Document Preview
                          </div>
-                         {activeSub?.fileUrl && (
-                             <Button variant="outline" size="sm" onClick={() => window.open(activeSub.fileUrl, '_blank')} leftIcon={<ExternalLink size={14} />}>Open Original</Button>
+                         {activeSubOriginalUrl && (
+                             <Button variant="outline" size="sm" onClick={() => window.open(activeSubOriginalUrl, '_blank')} leftIcon={<ExternalLink size={14} />}>Open Original</Button>
                          )}
                     </div>
                     
-                    <div style={{ flex: 1, backgroundColor: '#e2e8f0', padding: '32px', overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
-                         {activeSub ? (
+                    <div style={{ flex: 1, backgroundColor: '#e2e8f0', padding: activeSubPreviewUrl ? '0' : '32px', overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
+                         {!activeSub ? (
+                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-disabled)' }}>
+                                 Select a submission from the history to preview.
+                             </div>
+                         ) : activeSubPreviewUrl ? (
+                             <iframe
+                                 title={activeSub.fileName || `${project?.projectTitle || 'Project'} ${activeStage} submission`}
+                                 src={activeSubPreviewUrl}
+                                 style={{ width: '100%', height: '100%', minHeight: '640px', border: 'none', backgroundColor: 'white' }}
+                             />
+                         ) : (
                              <div style={{ width: '100%', maxWidth: '800px', backgroundColor: 'white', minHeight: '600px', padding: '48px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', borderRadius: '4px' }}>
                                  <h2 style={{ fontSize: '24px', fontWeight: 700, borderBottom: '2px solid #000', paddingBottom: '16px', marginBottom: '24px' }}>
                                      {project.projectTitle} - {activeStage}
@@ -217,22 +234,9 @@ export const SupervisorReview: React.FC = () => {
                                  <p style={{ marginTop: '16px', whiteSpace: 'pre-wrap', color: '#475569', lineHeight: 1.6 }}>
                                      {activeSub.comment || "No explicit comment provided by the student."}
                                  </p>
-                                 
-                                 {activeSub.fileUrl ? (
-                                     <div style={{ marginTop: '32px', padding: '16px', backgroundColor: '#f1f5f9', borderLeft: '4px solid #3b82f6' }}>
-                                         <strong>Attached File:</strong> {activeSub.fileName || 'document.pdf'}
-                                         <br/><br/>
-                                         <a href={activeSub.fileUrl} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 500 }}>Click here to view full document in OneDrive</a>
-                                     </div>
-                                 ) : (
-                                     <div style={{ marginTop: '32px', padding: '16px', backgroundColor: '#fef2f2', borderLeft: '4px solid #ef4444', color: '#b91c1c' }}>
-                                         No physical file was uploaded with this submission. Only link/text provided.
-                                     </div>
-                                 )}
-                             </div>
-                         ) : (
-                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-disabled)' }}>
-                                 Select a submission from the history to preview.
+                                 <div style={{ marginTop: '32px', padding: '16px', backgroundColor: '#fef2f2', borderLeft: '4px solid #ef4444', color: '#b91c1c' }}>
+                                     No document link or uploaded file was found for this submission.
+                                 </div>
                              </div>
                          )}
                     </div>

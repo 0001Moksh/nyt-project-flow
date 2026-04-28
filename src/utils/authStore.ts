@@ -20,18 +20,26 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   
   initialize: () => {
-    // Check local storage for mock session on load
+    // Restore session from localStorage for page refreshes.
     const savedUserStr = localStorage.getItem('mockSessionUser');
-    if (savedUserStr) {
-      const savedUser = JSON.parse(savedUserStr);
-      // Self-healing: clear session if they have any old non-DB mock IDs (<15 chars usually)
-      if (['stu_123', 'admin_123', 'sup_123'].includes(savedUser.id) || savedUser.id.length < 15) {
-         localStorage.removeItem('mockSessionUser');
-         localStorage.removeItem('userId');
-         set({ user: null, isAuthenticated: false });
+    if (!savedUserStr) {
+      set({ user: null, isAuthenticated: false });
+      return;
+    }
+
+    try {
+      const savedUser = JSON.parse(savedUserStr) as User;
+      if (savedUser?.id && savedUser?.role) {
+        set({ user: savedUser, isAuthenticated: true });
       } else {
-         set({ user: savedUser, isAuthenticated: true });
+        localStorage.removeItem('mockSessionUser');
+        localStorage.removeItem('userId');
+        set({ user: null, isAuthenticated: false });
       }
+    } catch {
+      localStorage.removeItem('mockSessionUser');
+      localStorage.removeItem('userId');
+      set({ user: null, isAuthenticated: false });
     }
   },
 

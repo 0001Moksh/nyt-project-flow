@@ -1,10 +1,40 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Button, Loader, Input } from '../../components';
+import { Card, Button, Loader, Input, ProjectTimeline } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { useAuthStore } from '../../utils/authStore';
-import { ChevronDown, ChevronUp, CheckCircle, Clock, Flag, AlertTriangle, ShieldAlert, Users, FileText, Calendar } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle, Clock, Flag, AlertTriangle, ShieldAlert, Users, FileText, Calendar, ExternalLink, Paperclip } from 'lucide-react';
 import { TimelineConfigModal } from './TimelineConfigModal';
+import { extractFirstUrl, getPreviewUrl } from '../../utils/filePreview';
+
+const submissionStages = [
+    { key: 'SYNOPSIS', endpoint: 'synopsis' },
+    { key: 'PROGRESS1', endpoint: 'progress1' },
+    { key: 'PROGRESS2', endpoint: 'progress2' },
+    { key: 'FINAL', endpoint: 'final' }
+];
+
+const getSubmissionId = (submission: any, endpoint: string) =>
+    submission[`${endpoint}Id`] || submission.finalId || submission.synopsisId || submission.progress1Id || submission.progress2Id;
+
+const fetchProjectSubmissions = async (documentId?: string | null) => {
+    if (!documentId) return [];
+
+    const responses = await Promise.all(
+        submissionStages.map(async (stage) => {
+            const response = await api.get(`/submissions/${stage.endpoint}/document/${documentId}`).catch(() => ({ data: [] }));
+            return (response.data || []).map((submission: any) => ({
+                ...submission,
+                stage: stage.key,
+                submissionId: getSubmissionId(submission, stage.endpoint)
+            }));
+        })
+    );
+
+    return responses
+        .flat()
+        .sort((a: any, b: any) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime());
+};
 
 export const AdminProjectsOverview: React.FC = () => {
     const [projects, setProjects] = useState<any[]>([]);
@@ -45,7 +75,7 @@ export const AdminProjectsOverview: React.FC = () => {
                 assignedCount: allProjects.filter((p: any) => p.supervisorId === sup.supervisorId).length
             }));
 
-            const enriched = allProjects.map((p: any) => {
+            const enriched = await Promise.all(allProjects.map(async (p: any) => {
                  const team = allTeams.find((t: any) => t.teamId === p.teamId);
                  let memberDetails: any[] = [];
                  if (team) {
@@ -55,8 +85,9 @@ export const AdminProjectsOverview: React.FC = () => {
                           return st || { studentId: sid, name: 'Unknown', mail: 'N/A' };
                       });
                  }
-                 return { ...p, team, memberDetails };
-            });
+                 const studentSubmissions = await fetchProjectSubmissions(p.documentId);
+                 return { ...p, team, memberDetails, studentSubmissions };
+            }));
 
             setProjects(enriched);
             setSupervisors(sups);
@@ -132,7 +163,7 @@ export const AdminProjectsOverview: React.FC = () => {
     if (isLoading) return <div style={{ display:'flex', justifyContent:'center', padding:'100px'}}><Loader size="lg" /></div>;
 
     return (
-        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        <div className="admin-projects-overview">
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
@@ -236,7 +267,7 @@ export const AdminProjectsOverview: React.FC = () => {
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '4px solid #3b82f6', paddingLeft: '24px', marginLeft: '56px' }}>
                                                     
                                                     {/* Supervisor Assignment Bar (from FormDetails) */}
-                                                    <div style={{ padding: '16px 24px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                                    <div className="admin-projects-assign" style={{ padding: '16px 24px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                                                         <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Assign Supervisor:</div>
                                                         <select 
                                                             value={proj.supervisorId || ''} 
@@ -253,9 +284,11 @@ export const AdminProjectsOverview: React.FC = () => {
                                                         {proj.supervisorId && <div style={{ fontSize: '12px', color: '#16a34a', fontWeight: 600 }}>Active Supervisor Assigned</div>}
                                                     </div>
 
-                                                    <div style={{ display: 'flex', gap: '24px' }}>
+                                                    <ProjectTimeline project={proj} />
+
+                                                    <div className="admin-projects-grid">
                                                         {/* TEAM MEMBERS PANEL (from FormDetails) */}
-                                                        <div style={{ flex: 1, backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                        <div className="admin-projects-panel">
                                                              <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                                  <Users size={16} color="var(--primary)" /> Enrolled Team Members
                                                              </h4>
@@ -280,22 +313,63 @@ export const AdminProjectsOverview: React.FC = () => {
                                                         </div>
 
                                                         {/* PROJECT DETAILS PANEL (from FormDetails) */}
-                                                        <div style={{ flex: 1, backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                        <div className="admin-projects-panel">
                                                              <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                                  <FileText size={16} color="var(--primary)" /> Proposal Context
                                                              </h4>
-                                                             <div style={{ backgroundColor: 'var(--surface-hover)', padding: '16px', borderRadius: '8px', fontSize: '13px', whiteSpace: 'pre-wrap', border: '1px dashed var(--border-color)', height: '100%', maxHeight: '400px', overflowY: 'auto' }}>
+                                                             <div className="proposal-context-box">
                                                                  {proj.projectDescription || "No description provided."}
                                                              </div>
                                                         </div>
 
+                                                        <div className="admin-projects-panel">
+                                                            <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <Paperclip size={16} color="var(--primary)" /> Student Submissions
+                                                            </h4>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                {proj.studentSubmissions?.length ? proj.studentSubmissions.map((submission: any) => {
+                                                                    const submissionUrl = submission.fileUrl || extractFirstUrl(submission.comment);
+                                                                    return (
+                                                                    <div key={submission.submissionId} style={{ padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+                                                                            <div>
+                                                                                <div style={{ fontWeight: 600, fontSize: '14px' }}>
+                                                                                    {submission.stage} - {submission.fileName || 'Submitted link/comment'}
+                                                                                </div>
+                                                                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                                                                    {submission.uploadedAt ? new Date(submission.uploadedAt).toLocaleString() : 'Recently uploaded'} • {submission.status}
+                                                                                </div>
+                                                                            </div>
+                                                                            {submissionUrl && (
+                                                                                <Button size="sm" variant="outline" onClick={() => window.open(getPreviewUrl(submissionUrl), '_blank')} leftIcon={<ExternalLink size={14} />}>
+                                                                                    Open
+                                                                                </Button>
+                                                                            )}
+                                                                        </div>
+                                                                        {submission.comment && (
+                                                                            <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
+                                                                                {submission.comment}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    );
+                                                                }) : (
+                                                                    <div style={{ padding: '12px', color: 'var(--text-disabled)', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px' }}>
+                                                                        No student uploads yet.
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
                                                         {/* ADMIN ACTIONS (Original from AdminProjectsOverview) */}
-                                                        <div style={{ width: '280px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                                        <div className="admin-projects-panel admin-override-panel">
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 600, color: '#dc2626', marginBottom: '8px' }}>
                                                                 <ShieldAlert size={14} /> ADMIN OVERRIDE PANEL
                                                             </div>
-                                                            <Button style={{ width: '100%', backgroundColor: '#2563eb', color: 'white', border: 'none' }} onClick={() => handleAdminOverride(proj.projectId, 'APPROVE')}>APPROVE CURRENT STAGE</Button>
-                                                            <Button style={{ width: '100%', backgroundColor: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }} onClick={() => handleAdminOverride(proj.projectId, 'REVISION')}>REQUEST REVISION</Button>
+                                                            <div className="admin-override-actions">
+                                                                <Button style={{ width: '100%', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', padding: '8px 16px' }} onClick={() => handleAdminOverride(proj.projectId, 'APPROVE')}>APPROVE CURRENT STAGE</Button>
+                                                                <Button style={{ width: '100%', backgroundColor: '#fef3c7', color: '#d97706', border: '1px solid #fde68a', borderRadius: '4px', padding: '8px 16px' }} onClick={() => handleAdminOverride(proj.projectId, 'REVISION')}>REQUEST REVISION</Button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>

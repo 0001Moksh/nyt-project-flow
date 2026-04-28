@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Button, Loader, Input } from '../../components';
+import { Card, Button, Loader, Input, ProjectTimeline } from '../../components';
 import { adminService } from '../../services/adminService';
 import { useAuthStore } from '../../utils/authStore';
 import { useToastStore } from '../../utils/toastStore';
@@ -8,7 +8,7 @@ import type { FormAttachment, FormResponse } from '../../services/adminService';
 import type { ProjectResponse } from '../../services/studentService';
 import { ArrowLeft, Search, FileText, Users, AlertTriangle, Upload, Paperclip, ExternalLink } from 'lucide-react';
 import { api } from '../../services/api';
-import { getPreviewUrl } from '../../utils/filePreview';
+import { extractFirstUrl, getPreviewUrl } from '../../utils/filePreview';
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
   if (!json) return [];
@@ -18,6 +18,35 @@ const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
   } catch {
     return [];
   }
+};
+
+const submissionStages = [
+  { key: 'SYNOPSIS', endpoint: 'synopsis' },
+  { key: 'PROGRESS1', endpoint: 'progress1' },
+  { key: 'PROGRESS2', endpoint: 'progress2' },
+  { key: 'FINAL', endpoint: 'final' }
+];
+
+const getSubmissionId = (submission: any, endpoint: string) =>
+  submission[`${endpoint}Id`] || submission.finalId || submission.synopsisId || submission.progress1Id || submission.progress2Id;
+
+const fetchProjectSubmissions = async (documentId?: string | null) => {
+  if (!documentId) return [];
+
+  const responses = await Promise.all(
+    submissionStages.map(async (stage) => {
+      const response = await api.get(`/submissions/${stage.endpoint}/document/${documentId}`).catch(() => ({ data: [] }));
+      return (response.data || []).map((submission: any) => ({
+        ...submission,
+        stage: stage.key,
+        submissionId: getSubmissionId(submission, stage.endpoint)
+      }));
+    })
+  );
+
+  return responses
+    .flat()
+    .sort((a: any, b: any) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime());
 };
 
 export const FormDetails: React.FC = () => {
@@ -68,7 +97,7 @@ export const FormDetails: React.FC = () => {
       }));
       setSupervisors(sups);
 
-      const enriched = targetedProjects.map((p: any) => {
+      const enriched = await Promise.all(targetedProjects.map(async (p: any) => {
         const team = teamsRes.data.find((t: any) => t.teamId === p.teamId);
         let memberDetails: any[] = [];
         if (team) {
@@ -78,8 +107,9 @@ export const FormDetails: React.FC = () => {
             return st || { studentId: sid, name: 'Unknown', mail: 'N/A' };
           });
         }
-        return { ...p, team, memberDetails };
-      });
+        const studentSubmissions = await fetchProjectSubmissions(p.documentId);
+        return { ...p, team, memberDetails, studentSubmissions };
+      }));
 
       setProjects(enriched);
     } catch (err) {
@@ -136,6 +166,20 @@ export const FormDetails: React.FC = () => {
       addToast('Failed to add reference link.', 'error');
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    if (!formId) return;
+    const confirmed = window.confirm('Delete this reference file/link? This cannot be undone.');
+    if (!confirmed) return;
+    try {
+      await adminService.deleteFormAttachment(formId, attachmentId);
+      addToast('Reference removed successfully.', 'success');
+      await fetchDetails();
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to delete reference.', 'error');
     }
   };
 
@@ -281,9 +325,14 @@ export const FormDetails: React.FC = () => {
                     {file.uploadedBy ? ` • By ${file.uploadedBy}` : ''}
                   </div>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>
-                  Preview
-                </Button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>
+                    Preview
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleDeleteAttachment(file.attachmentId)}>
+                    Delete
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -377,7 +426,11 @@ export const FormDetails: React.FC = () => {
                 {project.supervisorId && <div style={{ fontSize: '12px', color: 'var(--success)' }}>Active Supervisor Notification Sent</div>}
               </div>
 
-              <div style={{ display: 'flex', gap: '24px', padding: '16px 0 0' }}>
+              <div style={{ marginTop: '16px' }}>
+                <ProjectTimeline project={project} />
+              </div>
+
+              <div className="form-details-grid" style={{ padding: '16px 0 0' }}>
                 {/* TEAM MEMBERS PANEL */}
                 <div style={{ flex: 1 }}>
                   <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -409,8 +462,47 @@ export const FormDetails: React.FC = () => {
                   <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <FileText size={16} color="var(--primary)" /> Proposal Context
                   </h4>
-                  <div style={{ backgroundColor: 'var(--surface-hover)', padding: '16px', borderRadius: '8px', fontSize: '13px', whiteSpace: 'pre-wrap', border: '1px dashed var(--border-color)', height: '100%', maxHeight: '400px', overflowY: 'auto' }}>
+                  <div className="proposal-context-box">
                     {project.projectDescription}
+                  </div>
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Paperclip size={16} color="var(--primary)" /> Student Submissions
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {project.studentSubmissions?.length ? project.studentSubmissions.map((submission: any) => {
+                      const submissionUrl = submission.fileUrl || extractFirstUrl(submission.comment);
+                      return (
+                      <div key={submission.submissionId} style={{ padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: '14px' }}>
+                              {submission.stage} - {submission.fileName || 'Submitted link/comment'}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                              {submission.uploadedAt ? new Date(submission.uploadedAt).toLocaleString() : 'Recently uploaded'} • {submission.status}
+                            </div>
+                          </div>
+                          {submissionUrl && (
+                            <Button size="sm" variant="outline" onClick={() => window.open(getPreviewUrl(submissionUrl), '_blank')} leftIcon={<ExternalLink size={14} />}>
+                              Open
+                            </Button>
+                          )}
+                        </div>
+                        {submission.comment && (
+                          <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
+                            {submission.comment}
+                          </div>
+                        )}
+                      </div>
+                    );
+                    }) : (
+                      <div style={{ padding: '12px', color: 'var(--text-disabled)', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px' }}>
+                        No student uploads yet.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
