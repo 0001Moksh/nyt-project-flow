@@ -1,5 +1,17 @@
 import { api } from './api';
 
+export interface Template {
+  id: string;
+  formId: string;
+  stageId: string;
+  name: string;
+  description?: string;
+  type: string;
+  sourceType: string;
+  fileUrl: string;
+  createdAt: string;
+}
+
 export interface FormAttachment {
   attachmentId: string;
   fileName: string;
@@ -93,5 +105,35 @@ export const adminService = {
   getAllProjects: async (): Promise<any[]> => {
     const response = await api.get<any[]>('/projects');
     return response.data;
+  },
+
+  getTemplates: async (formId: string): Promise<Template[]> => {
+    const response = await api.get<Template[]>(`/templates?form_id=${formId}`);
+    return response.data;
+  },
+
+  uploadTemplate: async (formId: string, stageId: string, name: string, description: string, file: File): Promise<Template> => {
+    const formData = new FormData();
+    formData.append('formId', formId);
+    formData.append('stageId', stageId);
+    formData.append('name', name);
+    if (description) formData.append('description', description);
+    formData.append('file', file);
+
+    const response = await api.post<Template>('/templates/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
+
+  addTemplateLink: async (formId: string, stageId: string, name: string, description: string, fileUrl: string): Promise<Template> => {
+    const response = await api.post<Template>('/templates/link', {
+      formId, stageId, name, description, fileUrl
+    });
+    return response.data;
+  },
+
+  deleteTemplate: async (id: string): Promise<void> => {
+    await api.delete(`/templates/${id}`);
   }
 };

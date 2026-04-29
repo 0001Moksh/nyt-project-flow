@@ -1,24 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Loader, Input, ProjectTimeline } from '../../components';
-import { adminService } from '../../services/adminService';
+import { adminService, type Template } from '../../services/adminService';
 import { useAuthStore } from '../../utils/authStore';
 import { useToastStore } from '../../utils/toastStore';
-import type { FormAttachment, FormResponse } from '../../services/adminService';
-import type { ProjectResponse } from '../../services/studentService';
-import { ArrowLeft, Search, FileText, Users, AlertTriangle, Upload, Paperclip, ExternalLink } from 'lucide-react';
+import type { FormResponse } from '../../services/adminService';
+import { Search, FileText, Users, AlertTriangle, Upload, Paperclip, ExternalLink, Plus, Link as LinkIcon, Trash2, X, File, Presentation, Eye } from 'lucide-react';
 import { api } from '../../services/api';
 import { extractFirstUrl, getPreviewUrl } from '../../utils/filePreview';
 
-const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
-  if (!json) return [];
-  try {
-    const parsed = JSON.parse(json);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
+const STAGES = [
+  { key: 'SYNOPSIS', label: 'Synopsis' },
+  { key: 'PROGRESS1', label: 'Progress 1' },
+  { key: 'PROGRESS2', label: 'Progress 2' },
+  { key: 'FINAL', label: 'Final Submission' },
+  { key: 'GENERAL', label: 'General / All' }
+];
 
 const submissionStages = [
   { key: 'SYNOPSIS', endpoint: 'synopsis' },
@@ -49,40 +46,89 @@ const fetchProjectSubmissions = async (documentId?: string | null) => {
     .sort((a: any, b: any) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime());
 };
 
+const getCompletionPercentage = (stageStatus: string) => {
+  switch (stageStatus) {
+    case 'SYNOPSIS': return 25;
+    case 'PROGRESS1': return 50;
+    case 'PROGRESS2': return 75;
+    case 'FINAL': return 100;
+    default: return 0;
+  }
+};
+
+const getStageLabel = (key: string) => {
+  const stage = STAGES.find(s => s.key === key);
+  return stage ? stage.label : key;
+};
+
 export const FormDetails: React.FC = () => {
   const { formId } = useParams();
   const navigate = useNavigate();
 
   const [formConfig, setFormConfig] = useState<FormResponse | null>(null);
-  const [referenceFiles, setReferenceFiles] = useState<FormAttachment[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Template State
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [activeStageTab, setActiveStageTab] = useState('SYNOPSIS');
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [templateInputMode, setTemplateInputMode] = useState<'upload' | 'link'>('upload');
+  const [tName, setTName] = useState('');
+  const [tDesc, setTDesc] = useState('');
+  const [tFile, setTFile] = useState<File | null>(null);
+  const [tLinkUrl, setTLinkUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [linkName, setLinkName] = useState('');
-  const [linkUrl, setLinkUrl] = useState('');
-  const [linkStage, setLinkStage] = useState('SYNOPSIS');
-  const [uploadStage, setUploadStage] = useState('SYNOPSIS');
-  const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
+
+  // Modals & Preview
+  const [previewFileUrl, setPreviewFileUrl] = useState<{ url: string, name: string } | null>(null);
+  const [viewCompleteProject, setViewCompleteProject] = useState<any | null>(null);
   const [reasonModalOpen, setReasonModalOpen] = useState(false);
   const [pendingAssignment, setPendingAssignment] = useState<{ projectId: string, newSupervisorId: string } | null>(null);
   const [reasonText, setReasonText] = useState('');
 
   const { user } = useAuthStore();
   const addToast = useToastStore(state => state.addToast);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDetails = async () => {
     if (!formId) return;
 
     try {
-      const [formRes, allProjectsRes] = await Promise.all([
+      const [formRes, allProjectsRes, templatesRes, oldAttachmentsRes] = await Promise.all([
         adminService.getForm(formId),
-        adminService.getAllProjects()
+        adminService.getAllProjects(),
+        adminService.getTemplates(formId).catch(() => []),
+        adminService.getFormAttachments(formId).catch(() => [])
       ]);
 
+      const mappedLegacyTemplates: Template[] = (oldAttachmentsRes || []).map((att: any) => {
+        let type = 'OTHER';
+        if (att.fileName && att.fileName.includes('.')) {
+          type = att.fileName.split('.').pop().toUpperCase();
+        } else if (att.source === 'LINK') {
+          type = 'DRIVE_LINK';
+        }
+
+        let stage = att.stage;
+        if (!stage || stage === 'ALL') stage = 'GENERAL';
+
+        return {
+          id: att.attachmentId,
+          formId: formId,
+          stageId: stage,
+          name: att.fileName,
+          description: '',
+          type: type,
+          sourceType: att.source || 'UPLOAD',
+          fileUrl: att.fileUrl,
+          createdAt: att.uploadedAt || new Date().toISOString()
+        } as Template;
+      });
+
       setFormConfig(formRes);
-      setReferenceFiles(parseReferenceFiles(formRes.referenceFilesJson));
+      setTemplates([...templatesRes, ...mappedLegacyTemplates]);
       const targetedProjects = allProjectsRes.filter((p: any) => p.formId === formId);
 
       const [teamsRes, studentsRes, supervisorsRes] = await Promise.all([
@@ -123,70 +169,72 @@ export const FormDetails: React.FC = () => {
     fetchDetails();
   }, [formId]);
 
-  const handleUploadAttachments = async () => {
+  const handleSaveTemplate = async () => {
     if (!formId) return;
-    if (!selectedFiles.length) {
-      addToast('Select one or more files to upload.', 'error');
+    if (!tName.trim()) {
+      addToast('Template name is required.', 'error');
       return;
     }
 
     setIsUploading(true);
     try {
-      for (const file of selectedFiles) {
-        await adminService.uploadFormAttachment(formId, file, uploadStage, user?.id);
+      if (templateInputMode === 'upload') {
+        if (!tFile) {
+          addToast('Please select a file to upload.', 'error');
+          setIsUploading(false);
+          return;
+        }
+        await adminService.uploadTemplate(formId, activeStageTab, tName, tDesc, tFile);
+      } else {
+        if (!tLinkUrl.trim()) {
+          addToast('Please provide a drive link.', 'error');
+          setIsUploading(false);
+          return;
+        }
+        // Basic drive link validation
+        if (!tLinkUrl.includes('drive.google.com') && !tLinkUrl.includes('onedrive.live.com') && !tLinkUrl.includes('sharepoint.com')) {
+          addToast('Link must be a Google Drive or OneDrive URL.', 'error');
+          setIsUploading(false);
+          return;
+        }
+        await adminService.addTemplateLink(formId, activeStageTab, tName, tDesc, tLinkUrl);
       }
-      addToast('Reference files uploaded successfully.', 'success');
-      setSelectedFiles([]);
+
+      addToast('Template added successfully.', 'success');
+      closeTemplateModal();
       await fetchDetails();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      addToast('Failed to upload one or more files.', 'error');
+      addToast(err.response?.data?.message || 'Failed to add template.', 'error');
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleAddLink = async () => {
-    if (!formId) return;
-    if (!linkName.trim() || !linkUrl.trim()) {
-      addToast('Provide a file name and a direct file link.', 'error');
-      return;
-    }
-
-    setIsUploading(true);
-    try {
-      await adminService.addFormAttachmentLink(formId, linkName.trim(), linkUrl.trim(), linkStage, user?.id);
-      addToast('Reference link added successfully.', 'success');
-      setLinkName('');
-      setLinkUrl('');
-      setLinkStage('SYNOPSIS');
-      await fetchDetails();
-    } catch (err) {
-      console.error(err);
-      addToast('Failed to add reference link.', 'error');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleDeleteAttachment = async (attachmentId: string) => {
-    if (!formId) return;
-    const confirmed = window.confirm('Delete this reference file/link? This cannot be undone.');
+  const handleDeleteTemplate = async (templateId: string) => {
+    const confirmed = window.confirm('Delete this template? This cannot be undone.');
     if (!confirmed) return;
     try {
-      await adminService.deleteFormAttachment(formId, attachmentId);
-      addToast('Reference removed successfully.', 'success');
+      await adminService.deleteTemplate(templateId);
+      addToast('Template deleted successfully.', 'success');
       await fetchDetails();
     } catch (err) {
       console.error(err);
-      addToast('Failed to delete reference.', 'error');
+      addToast('Failed to delete template.', 'error');
     }
   };
 
-  const stageOptions = ['SYNOPSIS', 'PROGRESS1', 'PROGRESS2', 'FINAL', 'ALL'];
+  const closeTemplateModal = () => {
+    setIsTemplateModalOpen(false);
+    setTName('');
+    setTDesc('');
+    setTFile(null);
+    setTLinkUrl('');
+    setTemplateInputMode('upload');
+  };
 
   const handleSupervisorSelect = (projectId: string, currentSupervisorId: string, newSupervisorId: string) => {
-    if (!newSupervisorId) return; // Prevent empty unassignment
+    if (!newSupervisorId) return;
     if (currentSupervisorId && currentSupervisorId !== newSupervisorId) {
       setPendingAssignment({ projectId, newSupervisorId });
       setReasonText('');
@@ -208,6 +256,9 @@ export const FormDetails: React.FC = () => {
         if (s.supervisorId === supervisorId) return { ...s, assignedCount: s.assignedCount + 1 };
         return s;
       }));
+      if (viewCompleteProject && viewCompleteProject.projectId === projectId) {
+        setViewCompleteProject({ ...viewCompleteProject, supervisorId });
+      }
       addToast('Supervisor Assignment Updated successfully.', 'success');
       setReasonModalOpen(false);
       setPendingAssignment(null);
@@ -220,200 +271,272 @@ export const FormDetails: React.FC = () => {
   if (isLoading) return <div style={{ textAlign: 'center', padding: '64px' }}><Loader size="lg" /></div>;
   if (!formConfig) return <div style={{ textAlign: 'center', padding: '64px', color: 'var(--danger)' }}><h1>Form Not Found</h1></div>;
 
+  const currentStageTemplates = templates.filter(t => t.stageId === activeStageTab);
+
   return (
     <div>
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0 }}> Viewing all registered projects for <strong>{formConfig.accessBranch} Batch {formConfig.accessBatch}</strong>.
-        </h1>
+        <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0 }}> Viewing config for <strong>{formConfig.accessBranch} Batch {formConfig.accessBatch}</strong>.</h1>
       </div>
 
-      <Card elevation={2} style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '20px' }}>
+      {/* STAGE REQUIREMENTS / TEMPLATES SECTION */}
+      <Card elevation={1} style={{ padding: '0', overflow: 'hidden', marginBottom: '32px' }}>
+        <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h3 style={{ margin: '0 0 6px', fontSize: '18px' }}>Reference Files</h3>
-            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '14px' }}>
-              Upload templates, sample presentations, PDFs, or code references for this form.
-            </p>
+            <h2 style={{ margin: 0, fontSize: '18px' }}>Stage Requirements / Templates</h2>
+            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>Upload reference templates that students should follow.</p>
           </div>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Paperclip size={16} /> {referenceFiles.length} file(s)
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px auto', gap: '12px', alignItems: 'center' }}>
-          <input
-            type="file"
-            multiple
-            accept=".pdf,.ppt,.pptx,.doc,.docx,.zip,.rar,.java,.js,.ts,.tsx,.py,.c,.cpp,.txt,.md"
-            onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))}
-            style={{ padding: '12px', border: '1px dashed var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface)' }}
-          />
-          <select
-            value={uploadStage}
-            onChange={(e) => setUploadStage(e.target.value)}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)' }}
-          >
-            {stageOptions.map((stage) => (
-              <option key={stage} value={stage}>{stage}</option>
-            ))}
-          </select>
-          <Button onClick={handleUploadAttachments} isLoading={isUploading} leftIcon={<Upload size={16} />}>
-            Upload Files
+          <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setIsTemplateModalOpen(true)}>
+            Add Template
           </Button>
         </div>
 
-        <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: '1fr 1.6fr 180px auto', gap: '12px', alignItems: 'center' }}>
-          <Input
-            label="Reference name"
-            value={linkName}
-            onChange={(e) => setLinkName(e.target.value)}
-            placeholder="Project_Template.pdf"
-          />
-          <Input
-            label="Google Drive / OneDrive file link"
-            value={linkUrl}
-            onChange={(e) => setLinkUrl(e.target.value)}
-            placeholder="https://drive.google.com/file/d/.../view"
-          />
-          <select
-            value={linkStage}
-            onChange={(e) => setLinkStage(e.target.value)}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)', alignSelf: 'end' }}
-          >
-            {stageOptions.map((stage) => (
-              <option key={stage} value={stage}>{stage}</option>
-            ))}
-          </select>
-          <Button onClick={handleAddLink} isLoading={isUploading} leftIcon={<ExternalLink size={16} />}>
-            Add Link
-          </Button>
-        </div>
-
-        {selectedFiles.length > 0 && (
-          <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Selected: {selectedFiles.map((file) => file.name).join(', ')}
-          </div>
-        )}
-
-        {referenceFiles.length > 0 && (
-          <div style={{ marginTop: '20px', display: 'grid', gap: '12px' }}>
-            {referenceFiles.map((file) => (
+        {/* Tabs */}
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--surface-hover)' }}>
+          {STAGES.map((stage, idx) => {
+            const count = templates.filter(t => t.stageId === stage.key).length;
+            if (stage.key === 'GENERAL' && count === 0) return null; // Only show GENERAL tab if there are legacy/general templates
+            const isActive = activeStageTab === stage.key;
+            return (
               <div
-                key={file.attachmentId}
+                key={stage.key}
+                onClick={() => setActiveStageTab(stage.key)}
                 style={{
+                  flex: 1,
+                  padding: '16px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  backgroundColor: isActive ? 'var(--surface)' : 'transparent',
+                  borderBottom: isActive ? '2px solid var(--primary)' : '2px solid transparent',
+                  fontWeight: isActive ? 600 : 400,
+                  color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
                   display: 'flex',
-                  justifyContent: 'space-between',
                   alignItems: 'center',
-                  gap: '16px',
-                  padding: '14px 16px',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '8px',
-                  backgroundColor: 'var(--surface-hover)'
+                  justifyContent: 'center',
+                  gap: '12px'
                 }}
               >
-                <div>
-                  <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FileText size={16} color="var(--primary)" /> {file.fileName}
-                    {file.stage && (
-                      <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)' }}>
-                        {file.stage}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                    Uploaded {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'recently'}
-                    {file.uploadedBy ? ` • By ${file.uploadedBy}` : ''}
-                  </div>
+                <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: isActive ? 'var(--primary)' : '#e5e7eb', color: isActive ? 'white' : '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>
+                  {idx + 1}
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>
-                    Preview
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => handleDeleteAttachment(file.attachmentId)}>
-                    Delete
-                  </Button>
+                <div>
+                  <div style={{ fontSize: '14px' }}>{stage.label}</div>
+                  <div style={{ fontSize: '12px', opacity: 0.7 }}>{count} templates</div>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
+
+        {/* Templates Grid */}
+        <div style={{ padding: '24px' }}>
+          <h3 style={{ fontSize: '15px', margin: '0 0 16px' }}>Templates for {getStageLabel(activeStageTab)}</h3>
+
+          {currentStageTemplates.length === 0 ? (
+            <div style={{ padding: '48px', textAlign: 'center', border: '2px dashed var(--border-color)', borderRadius: '12px', color: 'var(--text-secondary)' }}>
+              <FileText size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+              <div>No templates added for this stage yet.</div>
+              <Button variant="outline" size="sm" style={{ marginTop: '12px' }} onClick={() => setIsTemplateModalOpen(true)}>Add your first template</Button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+              {currentStageTemplates.map(template => (
+                <div key={template.id} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'var(--surface)' }}>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                    {template.type === 'PDF' ? <FileText color="#ef4444" size={32} /> :
+                      template.type === 'PPTX' || template.type === 'PPT' ? <Presentation color="#f97316" size={32} /> :
+                        template.type === 'DRIVE_LINK' ? <LinkIcon color="#10b981" size={32} /> :
+                          <File color="#3b82f6" size={32} />}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <h4 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 600 }}>{template.name}</h4>
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'var(--surface-hover)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>{template.type}</span>
+                      </div>
+                      {template.description && <p style={{ margin: '0 0 8px', fontSize: '12px', color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{template.description}</p>}
+                      <div style={{ fontSize: '11px', color: 'var(--text-disabled)' }}>
+                        {template.sourceType === 'LINK' ? 'Added via link' : `Uploaded ${new Date(template.createdAt).toLocaleDateString()}`}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                    <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={<Eye size={14} />} onClick={() => setPreviewFileUrl({ url: getPreviewUrl(template.fileUrl), name: template.name })}>Preview</Button>
+                    <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={template.sourceType === 'LINK' ? <ExternalLink size={14} /> : <Upload size={14} style={{ transform: 'rotate(180deg)' }} />} onClick={() => window.open(template.fileUrl, '_blank')}>
+                      {template.sourceType === 'LINK' ? 'Open' : 'Download'}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleDeleteTemplate(template.id)} style={{ color: '#ef4444', borderColor: '#fee2e2', backgroundColor: '#fef2f2' }}><Trash2 size={14} /></Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </Card>
 
-      {previewFile && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.65)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '24px',
-            zIndex: 50
-          }}
-          onClick={() => setPreviewFile(null)}
-        >
-          <div
-            style={{
-              width: 'min(960px, 96vw)',
-              height: 'min(80vh, 720px)',
-              backgroundColor: 'var(--surface)',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              border: '1px solid var(--border-color)'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
-              <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
-              <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
-                Close
-              </Button>
-            </div>
-            <iframe
-              title={previewFile.fileName}
-              src={getPreviewUrl(previewFile.fileUrl)}
-              style={{ width: '100%', height: '100%', border: 'none' }}
-            />
+      {/* PROJECT MANAGEMENT TABLE */}
+      <Card elevation={1} style={{ padding: '0', overflow: 'hidden' }}>
+        <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '18px' }}>All Projects ({projects.length})</h2>
+            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>View and manage all projects created from this form.</p>
           </div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead style={{ backgroundColor: 'var(--surface-hover)', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <tr>
+                <th style={{ padding: '16px 24px', fontWeight: 600 }}>#</th>
+                <th style={{ padding: '16px', fontWeight: 600 }}>Project Name</th>
+                <th style={{ padding: '16px', fontWeight: 600 }}>Current Stage</th>
+                <th style={{ padding: '16px', fontWeight: 600 }}>Assigned Supervisor</th>
+                <th style={{ padding: '16px', fontWeight: 600 }}>Completion</th>
+                <th style={{ padding: '16px', fontWeight: 600 }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projects.length === 0 && (
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-disabled)' }}>No projects found.</td></tr>
+              )}
+              {projects.map((project, idx) => {
+                const completion = getCompletionPercentage(project.stageStatus);
+                const sup = supervisors.find(s => s.supervisorId === project.supervisorId);
+                return (
+                  <tr key={project.projectId} style={{ borderTop: '1px solid var(--border-color)', fontSize: '14px' }}>
+                    <td style={{ padding: '16px 24px', color: 'var(--text-secondary)' }}>{(idx + 1).toString().padStart(2, '0')}</td>
+                    <td style={{ padding: '16px', fontWeight: 600 }}>{project.projectTitle}</td>
+                    <td style={{ padding: '16px' }}>
+                      <span style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '4px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 600 }}>
+                        {getStageLabel(project.stageStatus)}
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px' }}>
+                      {sup ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '24px', height: '24px', borderRadius: '12px', backgroundColor: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold' }}>{sup.name.charAt(0)}</div>
+                          {sup.name}
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--warning)', fontSize: '12px', fontWeight: 600 }}>Unassigned</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ fontSize: '13px', width: '35px' }}>{completion}%</div>
+                        <div style={{ width: '80px', height: '6px', backgroundColor: 'var(--surface-hover)', borderRadius: '3px' }}>
+                          <div style={{ width: `${completion}%`, height: '100%', backgroundColor: 'var(--primary)', borderRadius: '3px' }}></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '16px' }}>
+                      <Button variant="outline" size="sm" leftIcon={<Eye size={14} />} onClick={() => setViewCompleteProject(project)}>
+                        View Complete
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* ADD TEMPLATE MODAL */}
+      {isTemplateModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <Card elevation={2} style={{ width: '550px', backgroundColor: 'var(--surface)', borderRadius: '12px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700 }}>Add Template for {getStageLabel(activeStageTab)}</h2>
+              <button onClick={closeTemplateModal} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><X size={20} /></button>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <Input label="Template Name *" value={tName} onChange={e => setTName(e.target.value)} placeholder="e.g. Idea Submission Format" />
+            </div>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Description</label>
+              <textarea
+                value={tDesc}
+                onChange={e => setTDesc(e.target.value)}
+                placeholder="What should students follow in this template?"
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--background)', minHeight: '80px', resize: 'vertical' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '20px' }}>
+              <div
+                onClick={() => setTemplateInputMode('upload')}
+                style={{ padding: '12px 24px', cursor: 'pointer', borderBottom: templateInputMode === 'upload' ? '2px solid var(--primary)' : '2px solid transparent', color: templateInputMode === 'upload' ? 'var(--primary)' : 'var(--text-secondary)', fontWeight: templateInputMode === 'upload' ? 600 : 400, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Upload size={16} /> Upload File
+              </div>
+              <div
+                onClick={() => setTemplateInputMode('link')}
+                style={{ padding: '12px 24px', cursor: 'pointer', borderBottom: templateInputMode === 'link' ? '2px solid var(--primary)' : '2px solid transparent', color: templateInputMode === 'link' ? 'var(--primary)' : 'var(--text-secondary)', fontWeight: templateInputMode === 'link' ? 600 : 400, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <LinkIcon size={16} /> Add Drive Link
+              </div>
+            </div>
+
+            {templateInputMode === 'upload' ? (
+              <div
+                style={{ border: '2px dashed var(--border-color)', borderRadius: '8px', padding: '32px', textAlign: 'center', marginBottom: '24px', backgroundColor: 'var(--background)', cursor: 'pointer' }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  type="file"
+                  style={{ display: 'none' }}
+                  ref={fileInputRef}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) setTFile(e.target.files[0]);
+                  }}
+                />
+                <Upload size={32} style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  {tFile ? tFile.name : 'Drag & drop files here or click to browse'}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>Supported: PDF, PPTX, DOCX, ZIP • Max size: 25MB</div>
+              </div>
+            ) : (
+              <div style={{ marginBottom: '24px' }}>
+                <Input label="Google Drive or OneDrive Link *" value={tLinkUrl} onChange={e => setTLinkUrl(e.target.value)} placeholder="https://drive.google.com/..." />
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <AlertTriangle size={12} color="#f59e0b" /> Make sure link is accessible to "Anyone with the link".
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <Button variant="outline" onClick={closeTemplateModal}>Cancel</Button>
+              <Button variant="primary" onClick={handleSaveTemplate} isLoading={isUploading}>Save Template</Button>
+            </div>
+          </Card>
         </div>
       )}
 
-      {projects.length === 0 ? (
-        <Card elevation={1} style={{ textAlign: 'center', padding: '64px' }}>
-          <Search size={48} color="var(--border-color)" style={{ margin: '0 auto 16px' }} />
-          <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>No Submissions Yet</h3>
-          <p style={{ color: 'var(--text-secondary)' }}>
-            Students have not enrolled using this form link yet.
-          </p>
-        </Card>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {projects.map((project: any) => (
-            <Card key={project.projectId} elevation={2} style={{ borderLeft: '4px solid var(--primary)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
-                <div>
-                  <h3 style={{ fontSize: '22px', margin: '0 0 8px' }}>{project.projectTitle}</h3>
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <FileText size={14} /> ID: {project.projectId.slice(0, 8)}
-                    </span>
-                    <span style={{ fontSize: '11px', backgroundColor: 'var(--primary)', color: 'white', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
-                      {project.status.toUpperCase()}
-                    </span>
-                  </div>
+      {/* FULL PROJECT VIEW MODAL */}
+      {viewCompleteProject && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'flex-end', zIndex: 900 }}>
+          <div style={{ width: '800px', maxWidth: '90vw', height: '100%', backgroundColor: 'var(--surface)', overflowY: 'auto', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 10, padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                  <h2 style={{ margin: 0, fontSize: '24px' }}>{viewCompleteProject.projectTitle}</h2>
+                  <span style={{ fontSize: '11px', backgroundColor: 'var(--primary)', color: 'white', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>{viewCompleteProject.status.toUpperCase()}</span>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Evaluation Stage</div>
-                  <div style={{ fontWeight: 600 }}>{project.stageStatus}</div>
+                <div style={{ display: 'flex', gap: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><FileText size={14} /> ID: {viewCompleteProject.projectId}</span>
+                  <span>Stage: <strong>{getStageLabel(viewCompleteProject.stageStatus)}</strong></span>
                 </div>
               </div>
+              <button onClick={() => setViewCompleteProject(null)} style={{ background: 'var(--surface-hover)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                <X size={20} />
+              </button>
+            </div>
 
-              <div style={{ padding: '16px 24px', backgroundColor: 'var(--background)', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div style={{ padding: '16px 24px', backgroundColor: 'var(--background)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Assign Supervisor:</div>
                 <select
-                  value={project.supervisorId || ''}
-                  onChange={(e) => handleSupervisorSelect(project.projectId, project.supervisorId, e.target.value)}
+                  value={viewCompleteProject.supervisorId || ''}
+                  onChange={(e) => handleSupervisorSelect(viewCompleteProject.projectId, viewCompleteProject.supervisorId, e.target.value)}
                   style={{ flex: 1, maxWidth: '400px', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)' }}
                 >
                   <option value="">-- Unassigned --</option>
@@ -423,32 +546,23 @@ export const FormDetails: React.FC = () => {
                     </option>
                   ))}
                 </select>
-                {project.supervisorId && <div style={{ fontSize: '12px', color: 'var(--success)' }}>Active Supervisor Notification Sent</div>}
               </div>
 
-              <div style={{ marginTop: '16px' }}>
-                <ProjectTimeline project={project} />
+              <div>
+                <ProjectTimeline project={viewCompleteProject} />
               </div>
 
-              <div className="form-details-grid" style={{ padding: '16px 0 0' }}>
-                {/* TEAM MEMBERS PANEL */}
-                <div style={{ flex: 1 }}>
-                  <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Users size={16} color="var(--primary)" /> Enrolled Team Members
-                  </h4>
-
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                <div>
+                  <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}><Users size={16} color="var(--primary)" /> Team Members</h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {project.memberDetails?.map((m: any) => (
+                    {viewCompleteProject.memberDetails?.map((m: any) => (
                       <div key={m.studentId} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', fontWeight: 'bold' }}>
-                          {m.name.charAt(0)}
-                        </div>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', fontWeight: 'bold' }}>{m.name.charAt(0)}</div>
                         <div>
                           <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             {m.name}
-                            {m.studentId === project.team?.leaderId && (
-                              <span style={{ fontSize: '10px', backgroundColor: 'var(--warning)', color: '#000', padding: '2px 6px', borderRadius: '8px' }}>LEADER</span>
-                            )}
+                            {m.studentId === viewCompleteProject.team?.leaderId && <span style={{ fontSize: '10px', backgroundColor: 'var(--warning)', color: '#000', padding: '2px 6px', borderRadius: '8px' }}>LEADER</span>}
                           </div>
                           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{m.mail}</div>
                         </div>
@@ -457,58 +571,56 @@ export const FormDetails: React.FC = () => {
                   </div>
                 </div>
 
-                {/* PROJECT DETAILS PANEL */}
-                <div style={{ flex: 1 }}>
-                  <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FileText size={16} color="var(--primary)" /> Proposal Context
-                  </h4>
-                  <div className="proposal-context-box">
-                    {project.projectDescription}
-                  </div>
-                </div>
-
-                <div style={{ flex: 1 }}>
-                  <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Paperclip size={16} color="var(--primary)" /> Student Submissions
-                  </h4>
+                <div>
+                  <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}><Paperclip size={16} color="var(--primary)" /> Submissions</h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {project.studentSubmissions?.length ? project.studentSubmissions.map((submission: any) => {
+                    {viewCompleteProject.studentSubmissions?.length ? viewCompleteProject.studentSubmissions.map((submission: any) => {
                       const submissionUrl = submission.fileUrl || extractFirstUrl(submission.comment);
                       return (
-                      <div key={submission.submissionId} style={{ padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: '14px' }}>
-                              {submission.stage} - {submission.fileName || 'Submitted link/comment'}
+                        <div key={submission.submissionId} style={{ padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '14px' }}>{getStageLabel(submission.stage)}</div>
+                              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                {submission.uploadedAt ? new Date(submission.uploadedAt).toLocaleDateString() : 'Recent'} • {submission.status}
+                              </div>
                             </div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                              {submission.uploadedAt ? new Date(submission.uploadedAt).toLocaleString() : 'Recently uploaded'} • {submission.status}
-                            </div>
+                            {submissionUrl && (
+                              <Button size="sm" variant="outline" onClick={() => window.open(getPreviewUrl(submissionUrl), '_blank')} leftIcon={<ExternalLink size={14} />}>Open</Button>
+                            )}
                           </div>
-                          {submissionUrl && (
-                            <Button size="sm" variant="outline" onClick={() => window.open(getPreviewUrl(submissionUrl), '_blank')} leftIcon={<ExternalLink size={14} />}>
-                              Open
-                            </Button>
-                          )}
+                          {submission.comment && <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)', wordBreak: 'break-word', backgroundColor: 'var(--background)', padding: '8px', borderRadius: '4px' }}>{submission.comment}</div>}
                         </div>
-                        {submission.comment && (
-                          <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
-                            {submission.comment}
-                          </div>
-                        )}
-                      </div>
-                    );
+                      );
                     }) : (
-                      <div style={{ padding: '12px', color: 'var(--text-disabled)', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px' }}>
-                        No student uploads yet.
-                      </div>
+                      <div style={{ padding: '12px', color: 'var(--text-disabled)', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px' }}>No submissions yet.</div>
                     )}
                   </div>
                 </div>
               </div>
 
-            </Card>
-          ))}
+              <div>
+                <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}><FileText size={16} color="var(--primary)" /> Proposal Context</h4>
+                <div style={{ padding: '16px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '14px', lineHeight: 1.6, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
+                  {viewCompleteProject.projectDescription}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FILE PREVIEW OVERLAY */}
+      {previewFileUrl && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', zIndex: 1050 }} onClick={() => setPreviewFileUrl(null)}>
+          <div style={{ width: 'min(960px, 96vw)', height: 'min(80vh, 720px)', backgroundColor: 'var(--surface)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
+              <div style={{ fontWeight: 600 }}>{previewFileUrl.name}</div>
+              <Button size="sm" variant="outline" onClick={() => setPreviewFileUrl(null)}>Close</Button>
+            </div>
+            <iframe title={previewFileUrl.name} src={previewFileUrl.url} style={{ width: '100%', height: '100%', border: 'none' }} />
+          </div>
         </div>
       )}
 
@@ -516,28 +628,15 @@ export const FormDetails: React.FC = () => {
       {reasonModalOpen && pendingAssignment && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', padding: '24px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-            <h2 style={{ marginTop: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AlertTriangle color="#f59e0b" size={20} /> Reassign Supervisor
-            </h2>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>You are replacing an existing supervisor. A reason is required for administrative tracking and notifications.</p>
-
+            <h2 style={{ marginTop: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}><AlertTriangle color="#f59e0b" size={20} /> Reassign Supervisor</h2>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>You are replacing an existing supervisor. A reason is required for administrative tracking.</p>
             <div style={{ marginTop: '16px', marginBottom: '24px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>Reason for Change <span style={{ color: 'red' }}>*</span></label>
-              <Input
-                value={reasonText}
-                onChange={(e) => setReasonText(e.target.value)}
-                placeholder="E.g., Requested by student, Availability issues..."
-              />
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>Reason <span style={{ color: 'red' }}>*</span></label>
+              <Input value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="Requested by student..." />
             </div>
-
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <Button variant="outline" onClick={() => { setReasonModalOpen(false); setPendingAssignment(null); }}>Cancel</Button>
-              <Button
-                onClick={() => executeAssignSupervisor(pendingAssignment.projectId, pendingAssignment.newSupervisorId, reasonText)}
-                disabled={!reasonText.trim()}
-              >
-                Confirm Reassignment
-              </Button>
+              <Button onClick={() => executeAssignSupervisor(pendingAssignment.projectId, pendingAssignment.newSupervisorId, reasonText)} disabled={!reasonText.trim()}>Confirm Reassignment</Button>
             </div>
           </div>
         </div>
