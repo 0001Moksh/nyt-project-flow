@@ -336,7 +336,7 @@ export const FormDetails: React.FC = () => {
             <div style={{ padding: '48px', textAlign: 'center', border: '2px dashed var(--border-color)', borderRadius: '12px', color: 'var(--text-secondary)' }}>
               <FileText size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
               <div>No templates added for this stage yet.</div>
-              <Button variant="outline" size="sm" style={{ marginTop: '12px' }} onClick={() => setIsTemplateModalOpen(true)}>Add your first template</Button>
+              {/* <Button variant="outline" size="sm" style={{ marginTop: '12px' }} onClick={() => setIsTemplateModalOpen(true)}>Add your first template</Button> */}
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>

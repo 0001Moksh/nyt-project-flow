@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../utils/authStore';
 import { Button, Sidebar, NotificationBell } from './index';
@@ -6,13 +6,35 @@ import { ToastContainer } from './Toast';
 import { GlobalChatbot } from './GlobalChatbot';
 
 export const Layout: React.FC = () => {
-    const { user } = useAuthStore();
+    const { user, logout } = useAuthStore();
     const navigate = useNavigate();
     const location = useLocation();
 
-    // The new layout uses a Sidebar when authenticated.
-    // When unauthenticated (Landing Page), it will render a simple top bar or nothing.
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [darkMode, setDarkMode] = useState(false);
+    const [commandOpen, setCommandOpen] = useState(false);
 
+    // 🔥 Keyboard Shortcut (Ctrl + K)
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                setCommandOpen(prev => !prev);
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, []);
+
+    const pathSegments = location.pathname.split('/').filter(Boolean);
+
+    const breadcrumbs = pathSegments.map((seg, i) => (
+        <span key={i} style={{ color: 'var(--text-secondary)' }}>
+            {seg} {i < pathSegments.length - 1 && ' / '}
+        </span>
+    ));
+
+    // 🌐 PUBLIC LAYOUT
     if (!user) {
         return (
             <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -22,46 +44,52 @@ export const Layout: React.FC = () => {
                     padding: '16px 32px',
                     display: 'flex',
                     justifyContent: 'space-between',
-                    alignItems: 'center',
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 50
+                    alignItems: 'center'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => navigate('/')}>
-                        <div style={{
-                            width: '32px', height: '32px',
-                            backgroundColor: 'var(--primary)',
-                            borderRadius: '8px',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: 'white', fontWeight: 'bold'
-                        }}>N</div>
-                        <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>NYT Project Flow</h1>
+                    <div
+                        onClick={() => navigate('/')}
+                        style={{ cursor: 'pointer', fontWeight: 700 }}
+                    >
+                        NYT Project Flow
                     </div>
-                    <Button onClick={() => navigate('/login')}>Login</Button>
+
+                    <Button onClick={() => navigate('/login')}>
+                        Login
+                    </Button>
                 </header>
-                <main style={{ flex: 1, padding: '32px', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
+
+                <main style={{ flex: 1, padding: '32px' }}>
                     <Outlet />
                 </main>
+
                 <ToastContainer />
             </div>
         );
     }
 
-    // AUTHENTICATED LAYOUT WITH SIDEBAR (MATCHING FLOWCHART)
+    // 🔐 AUTHENTICATED LAYOUT
     return (
-        <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--background)' }}>
-            {/* 1. LEFT SIDEBAR */}
-            <Sidebar />
+        <div style={{
+            display: 'flex',
+            minHeight: '100vh',
+            backgroundColor: darkMode ? '#0f172a' : 'var(--background)',
+            color: darkMode ? '#fff' : 'inherit',
+            transition: 'all 0.2s ease'
+        }}>
 
-            {/* 2. RIGHT CONTENT AREA */}
+            {/* SIDEBAR */}
+            {sidebarOpen && <Sidebar />}
+
+            {/* MAIN CONTENT */}
             <div style={{
                 flex: 1,
-                marginLeft: '260px', // Leaves room for the fixed 260px sidebar
+                marginLeft: sidebarOpen ? '260px' : '0px',
+                transition: 'all 0.25s ease',
                 display: 'flex',
-                flexDirection: 'column',
-                width: 'calc(100% - 260px)'
+                flexDirection: 'column'
             }}>
-                {/* Top Navbar / Header for contextual info */}
+
+                {/* HEADER */}
                 <header style={{
                     height: '64px',
                     backgroundColor: 'var(--surface)',
@@ -69,27 +97,95 @@ export const Layout: React.FC = () => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '0 32px',
+                    padding: '0 24px',
                     position: 'sticky',
                     top: 0,
                     zIndex: 40
                 }}>
-                    {/* Contextual Title based on route can go here, leaving blank for clean look like wireframe */}
-                    <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize' }}>
-                        {location.pathname.split('/').filter(Boolean).pop() || 'Dashboard'}
+
+                    {/* LEFT SIDE */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <button
+                            onClick={() => setSidebarOpen(!sidebarOpen)}
+                            style={{
+                                border: 'none',
+                                background: 'transparent',
+                                fontSize: '18px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            ☰
+                        </button>
+
+                        <div style={{ fontWeight: 600 }}>
+                            {breadcrumbs.length ? breadcrumbs : 'Dashboard'}
+                        </div>
                     </div>
 
-                    {/* Header Actions */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                        <NotificationBell userId={user.id} />
+                    {/* RIGHT SIDE */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+
+                        {/* 🔔 Notification Bell */}
+                        <NotificationBell
+                            userId={user?.id}
+                            onNotificationClick={(notif) => {
+                                if (notif.link) navigate(notif.link);
+                            }}
+                        />
                     </div>
                 </header>
 
-                {/* Dynamic Page Content */}
-                <main style={{ flex: 1, padding: '32px 40px', overflowY: 'auto' }}>
+                {/* PAGE CONTENT */}
+                <main style={{
+                    flex: 1,
+                    padding: '32px',
+                    overflowY: 'auto'
+                }}>
                     <Outlet />
                 </main>
             </div>
+
+            {/* COMMAND PALETTE */}
+            {commandOpen && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    background: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 100
+                }}
+                    onClick={() => setCommandOpen(false)}
+                >
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            width: '500px',
+                            background: 'white',
+                            borderRadius: '10px',
+                            padding: '20px'
+                        }}
+                    >
+                        <input
+                            placeholder="Search anything..."
+                            style={{
+                                width: '100%',
+                                padding: '10px',
+                                borderRadius: '8px',
+                                border: '1px solid #ddd'
+                            }}
+                        />
+
+                        <div style={{ marginTop: '10px', fontSize: '14px' }}>
+                            Quick Actions coming soon...
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <GlobalChatbot />
             <ToastContainer />

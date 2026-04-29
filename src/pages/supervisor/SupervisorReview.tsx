@@ -28,8 +28,8 @@ export const SupervisorReview: React.FC = () => {
     const [submissions, setSubmissions] = useState<any[]>([]);
     const [activeStage, setActiveStage] = useState('SYNOPSIS');
     const [activeSub, setActiveSub] = useState<any>(null);
-    const [referenceFiles, setReferenceFiles] = useState<FormAttachment[]>([]);
-    const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
+    const [templates, setTemplates] = useState<any[]>([]);
+    const [previewFile, setPreviewFile] = useState<{fileName: string, fileUrl: string} | null>(null);
     
     // Grading Form State
     const [score, setScore] = useState('');
@@ -42,12 +42,6 @@ export const SupervisorReview: React.FC = () => {
     const activeSubOriginalUrl = activeSub?.fileUrl || extractFirstUrl(activeSub?.comment);
     const activeSubPreviewUrl = activeSubOriginalUrl ? getPreviewUrl(activeSubOriginalUrl) : '';
 
-    const matchesStage = (file: FormAttachment, stage?: string) => {
-        const value = (file.stage || 'GENERAL').toUpperCase();
-        if (!stage) return value === 'ALL' || value === 'GENERAL';
-        return value === 'ALL' || value === 'GENERAL' || value === stage.toUpperCase();
-    };
-
     useEffect(() => {
         if (projectId) fetchData();
     }, [projectId, activeStage]);
@@ -59,10 +53,13 @@ export const SupervisorReview: React.FC = () => {
            const proj = pRes.data.find((p:any) => p.projectId === projectId);
            setProject(proj);
 
-           if (proj && proj.documentId) {
-               const formRes = await api.get(`/forms/${proj.formId}`).catch(() => ({ data: null }));
-               setReferenceFiles(parseReferenceFiles(formRes.data?.referenceFilesJson));
+           if (proj) {
+               // Fetch templates using the new endpoint
+               const tRes = await api.get(`/templates?form_id=${proj.formId}`).catch(() => ({ data: [] }));
+               setTemplates(tRes.data || []);
+           }
 
+           if (proj && proj.documentId) {
                // Fetch submissions for active stage
                const ep = activeStage.toLowerCase(); // synopsis, progress1, progress2, final
                const subRes = await api.get(`/submissions/${ep}/document/${proj.documentId}`);
@@ -149,18 +146,18 @@ export const SupervisorReview: React.FC = () => {
                 
                 {/* Left Pane: Reference + Version History */}
                 <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {referenceFiles.filter((file) => matchesStage(file, activeStage)).length > 0 && (
+                    {templates.filter((t) => t.stageId === activeStage || t.stageId === 'GENERAL' || t.stageId === 'ALL').length > 0 && (
                         <Card elevation={1} style={{ display: 'flex', flexDirection: 'column', gap: '12px', border: '1px solid var(--border-color)' }}>
                             <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-                                <Paperclip size={14} /> Reference Files
+                                <Paperclip size={14} /> Reference Templates
                             </h3>
-                            {referenceFiles.filter((file) => matchesStage(file, activeStage)).map((file) => (
+                            {templates.filter((t) => t.stageId === activeStage || t.stageId === 'GENERAL' || t.stageId === 'ALL').map((template) => (
                                 <div
-                                    key={file.attachmentId}
+                                    key={template.id}
                                     style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-hover)' }}
                                 >
-                                    <div style={{ fontSize: '12px', fontWeight: 600 }}>{file.fileName}</div>
-                                    <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>Preview</Button>
+                                    <div style={{ fontSize: '12px', fontWeight: 600 }}>{template.name}</div>
+                                    <Button size="sm" variant="outline" onClick={() => setPreviewFile({ fileName: template.name, fileUrl: template.fileUrl })}>Preview</Button>
                                 </div>
                             ))}
                         </Card>

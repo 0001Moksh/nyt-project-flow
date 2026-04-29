@@ -37,10 +37,10 @@ const App: React.FC = () => {
       <Suspense fallback={<Loader fullScreen size="lg" />}>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/" element={<LandingPage />} />
           
-          <Route path="/" element={<Layout />}>
-            <Route index element={<LandingPage />} />
-            <Route path="dashboard" element={<Dashboard />} />
+          <Route element={<Layout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="enroll" element={<Enrollment />} />
             
             {/* Student/Shared Routes */}
@@ -59,7 +59,7 @@ const App: React.FC = () => {
             <Route path="admin/form-details/:formId" element={<FormDetails />} />
             
             {/* Supervisor Routes */}
-            <Route path="supervisor">
+            <Route path="/supervisor">
               <Route path="dashboard" element={<SupervisorDashboard />} />
               <Route path="teams/:teamId" element={<SupervisorTeamOverview />} />
               <Route path="tasks" element={<SupervisorTasks />} />

@@ -1,15 +1,24 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Card, Button, Loader } from '../../components';
 import { api } from '../../services/api';
-import { Download, Upload, UserPlus, GraduationCap, AlertTriangle, X, CheckCircle, XCircle } from 'lucide-react';
+import { Download, Upload, UserPlus, GraduationCap, AlertTriangle, X, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToastStore } from '../../utils/toastStore';
 
 export const AdminStudents: React.FC = () => {
     const [students, setStudents] = useState<any[]>([]);
-    const [projects, setProjects] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    
+    // Pagination & Filters
+    const [page, setPage] = useState(0);
+    const [size, setSize] = useState(10);
+    const [totalPages, setTotalPages] = useState(0);
+    const [totalElements, setTotalElements] = useState(0);
+    
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState('ALL');
+    const [filterBranch, setFilterBranch] = useState('ALL');
+    const [filterBatch, setFilterBatch] = useState('ALL');
+    const [metadata, setMetadata] = useState<{ branches: string[], batches: string[] }>({ branches: [], batches: [] });
 
     // Import Modal State
     const [isImportOpen, setIsImportOpen] = useState(false);
@@ -24,19 +33,39 @@ export const AdminStudents: React.FC = () => {
     const [inviting, setInviting] = useState(false);
 
     useEffect(() => {
-        fetchData();
+        const fetchMeta = async () => {
+            try {
+                const res = await api.get('/students/metadata');
+                setMetadata(res.data);
+            } catch (err) {
+                console.error("Failed to load metadata", err);
+            }
+        };
+        fetchMeta();
     }, []);
+
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            fetchData();
+        }, 300);
+        return () => clearTimeout(timeout);
+    }, [page, size, searchQuery, filterStatus, filterBranch, filterBatch]);
 
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            const [projRes, stdRes] = await Promise.all([
-                api.get('/projects').catch(() => ({ data: [] })),
-                api.get('/students').catch(() => ({ data: [] }))
-            ]);
-            setProjects(projRes.data || []);
+            const params = new URLSearchParams({
+                page: page.toString(),
+                size: size.toString(),
+                ...(searchQuery && { search: searchQuery }),
+                ...(filterBranch !== 'ALL' && { branch: filterBranch }),
+                ...(filterBatch !== 'ALL' && { batch: filterBatch }),
+                ...(filterStatus !== 'ALL' && { status: filterStatus }),
+            });
 
-            const fetchedStudents = (stdRes.data || []).map((s: any) => ({
+            const stdRes = await api.get(`/students/paginated?${params.toString()}`);
+            
+            const fetchedStudents = (stdRes.data.content || []).map((s: any) => ({
                 id: s.studentId,
                 name: s.name,
                 rollNo: s.rollNo,
@@ -45,15 +74,9 @@ export const AdminStudents: React.FC = () => {
                 performance: s.performanceScore ?? 100
             }));
 
-            // If backend is empty, fall back to mock data for demonstration
-            if (fetchedStudents.length === 0) {
-                const mockStudents = [
-                    { id: 'S1', name: 'Sample', rollNo: 'YEAR-BRANCH-ID', branch: 'BRANCH', status: 'ACTIVE', performance: 0 },
-                ];
-                setStudents(mockStudents);
-            } else {
-                setStudents(fetchedStudents);
-            }
+            setStudents(fetchedStudents);
+            setTotalPages(stdRes.data.totalPages || 0);
+            setTotalElements(stdRes.data.totalElements || 0);
         } catch (err) {
             console.error(err);
         } finally {
@@ -72,11 +95,14 @@ export const AdminStudents: React.FC = () => {
         try {
             const res = await api.post('/admin/import-students', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
-                timeout: 120000 // 2 minutes for large file parsing
+                timeout: 120000 
             });
             setImportReport(res.data);
             useToastStore.getState().addToast(`Successfully imported ${res.data.inserted} students.`, 'success');
-            fetchData(); // refresh list
+            fetchData(); 
+            // Refresh metadata
+            const metaRes = await api.get('/students/metadata');
+            setMetadata(metaRes.data);
         } catch (err: any) {
             setImportReport(err.response?.data || { total: 0, inserted: 0, failed: 1, errors: [{ row: '-', message: err.message || 'Import failed due to network or server timeout.' }] });
         } finally {
@@ -111,25 +137,11 @@ export const AdminStudents: React.FC = () => {
         }
     };
 
-    if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}><Loader size="lg" /></div>;
-
-    const filteredStudents = students.filter(s => {
-        const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            s.rollNo.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesStatus = filterStatus === 'ALL' || s.status === filterStatus;
-        return matchesSearch && matchesStatus;
-    });
-
-    const activeCount = students.filter(s => s.status === 'ACTIVE' || s.status === 'ENROLLED').length;
-    const atRiskCount = students.filter(s => s.status === 'AT_RISK').length;
-    const avgPerf = students.length > 0 ? Math.round(students.reduce((acc, s) => acc + s.performance, 0) / students.length) : 0;
-
     return (
         <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-
                 <div style={{ display: 'flex', gap: '12px' }}>
                     <Button variant="outline" size="sm" leftIcon={<Upload size={16} />} onClick={() => setIsImportOpen(true)}>Import CSV</Button>
                     <Button variant="outline" size="sm" leftIcon={<Download size={16} />}>Export Data</Button>
@@ -141,79 +153,149 @@ export const AdminStudents: React.FC = () => {
 
                 {/* Students Table */}
                 <Card elevation={1} style={{ padding: '0', borderRadius: '12px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
-                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                         <h3 style={{ margin: 0, fontSize: '16px' }}>Directory</h3>
-                        <div style={{ display: 'flex', gap: '12px' }}>
+                        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                            <select
+                                value={filterBranch}
+                                onChange={(e) => { setFilterBranch(e.target.value); setPage(0); }}
+                                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', outline: 'none', fontSize: '13px', backgroundColor: 'var(--surface)' }}
+                            >
+                                <option value="ALL">All Branches</option>
+                                {metadata.branches.map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
+
+                            <select
+                                value={filterBatch}
+                                onChange={(e) => { setFilterBatch(e.target.value); setPage(0); }}
+                                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', outline: 'none', fontSize: '13px', backgroundColor: 'var(--surface)' }}
+                            >
+                                <option value="ALL">All Batches</option>
+                                {metadata.batches.map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
+
                             <select
                                 value={filterStatus}
-                                onChange={(e) => setFilterStatus(e.target.value)}
+                                onChange={(e) => { setFilterStatus(e.target.value); setPage(0); }}
                                 style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', outline: 'none', fontSize: '13px', backgroundColor: 'var(--surface)' }}
                             >
                                 <option value="ALL">All Statuses</option>
-                                <option value="ACTIVE">Active</option>
+                                <option value="ENROLLED">Enrolled</option>
                                 <option value="PENDING">Pending</option>
-                                <option value="AT_RISK">At Risk</option>
+                                <option value="REJECTED">Rejected</option>
                             </select>
+                            
                             <input
                                 type="text"
                                 placeholder="Search roll no, name..."
                                 value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
                                 style={{ width: '250px', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', outline: 'none', fontSize: '13px' }}
                             />
                         </div>
                     </div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                        <thead style={{ backgroundColor: 'var(--surface-hover)', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                            <tr>
-                                <th style={{ padding: '16px 24px', fontWeight: 600 }}>Student details</th>
-                                <th style={{ padding: '16px', fontWeight: 600 }}>Branch</th>
-                                <th style={{ padding: '16px', fontWeight: 600 }}>Progress Score</th>
-                                <th style={{ padding: '16px', fontWeight: 600 }}>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredStudents.length === 0 && (
-                                <tr><td colSpan={4} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-disabled)' }}>No students found matching your criteria.</td></tr>
-                            )}
-                            {filteredStudents.map((student) => {
-                                const isRisk = student.status === 'AT_RISK';
+                    
+                    <div style={{ position: 'relative', minHeight: '400px' }}>
+                        {isLoading && (
+                            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10 }}>
+                                <Loader />
+                            </div>
+                        )}
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                            <thead style={{ backgroundColor: 'var(--surface-hover)', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                <tr>
+                                    <th style={{ padding: '16px 24px', fontWeight: 600 }}>Student details</th>
+                                    <th style={{ padding: '16px', fontWeight: 600 }}>Branch</th>
+                                    <th style={{ padding: '16px', fontWeight: 600 }}>Progress Score</th>
+                                    <th style={{ padding: '16px', fontWeight: 600 }}>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {students.length === 0 && !isLoading && (
+                                    <tr><td colSpan={4} style={{ textAlign: 'center', padding: '64px', color: 'var(--text-disabled)' }}>No students found matching your criteria.</td></tr>
+                                )}
+                                {students.map((student) => {
+                                    const isRisk = student.status === 'AT_RISK';
 
-                                return (
-                                    <tr key={student.id} style={{ borderTop: '1px solid var(--border-color)', fontSize: '14px' }}>
-                                        <td style={{ padding: '16px 24px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                <div style={{ width: '36px', height: '36px', borderRadius: '18px', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', fontWeight: 'bold' }}>
-                                                    {student.name ? student.name.charAt(0) : '?'}
+                                    return (
+                                        <tr key={student.id} style={{ borderTop: '1px solid var(--border-color)', fontSize: '14px' }}>
+                                            <td style={{ padding: '16px 24px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                    <div style={{ width: '36px', height: '36px', borderRadius: '18px', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', fontWeight: 'bold' }}>
+                                                        {student.name ? student.name.charAt(0) : '?'}
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontWeight: 600, color: 'var(--primary)' }}>{student.name}</div>
+                                                        <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>{student.rollNo}</div>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <div style={{ fontWeight: 600, color: 'var(--primary)' }}>{student.name}</div>
-                                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>{student.rollNo}</div>
+                                            </td>
+                                            <td style={{ padding: '16px', color: 'var(--text-secondary)' }}>
+                                                {student.branch}
+                                            </td>
+                                            <td style={{ padding: '16px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                    <div style={{ fontWeight: 600, fontSize: '13px' }}>{student.performance}%</div>
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: '16px', color: 'var(--text-secondary)' }}>
-                                            {student.branch}
-                                        </td>
-                                        <td style={{ padding: '16px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                <div style={{ fontWeight: 600, fontSize: '13px' }}>{student.performance}%</div>
-                                            </div>
-                                            <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--surface-hover)', borderRadius: '2px', marginTop: '6px' }}>
-                                                <div style={{ width: `${student.performance}%`, height: '100%', backgroundColor: isRisk ? '#ef4444' : '#3b82f6', borderRadius: '2px' }}></div>
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: '16px' }}>
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: student.status === 'ACTIVE' || student.status === 'ENROLLED' ? '#16a34a' : student.status === 'AT_RISK' ? '#ef4444' : '#f59e0b' }}>
-                                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: student.status === 'ACTIVE' || student.status === 'ENROLLED' ? '#16a34a' : student.status === 'AT_RISK' ? '#ef4444' : '#f59e0b' }}></div>
-                                                {student.status.replace('_', ' ')}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                                <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--surface-hover)', borderRadius: '2px', marginTop: '6px' }}>
+                                                    <div style={{ width: `${student.performance}%`, height: '100%', backgroundColor: isRisk ? '#ef4444' : '#3b82f6', borderRadius: '2px' }}></div>
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: '16px' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: student.status === 'ACTIVE' || student.status === 'ENROLLED' ? '#16a34a' : student.status === 'AT_RISK' ? '#ef4444' : '#f59e0b' }}>
+                                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: student.status === 'ACTIVE' || student.status === 'ENROLLED' ? '#16a34a' : student.status === 'AT_RISK' ? '#ef4444' : '#f59e0b' }}></div>
+                                                    {student.status.replace('_', ' ')}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Pagination Footer */}
+                    <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface)' }}>
+                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                            Showing {totalElements === 0 ? 0 : (page * size) + 1} to {Math.min((page + 1) * size, totalElements)} of {totalElements} results
+                        </div>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                <span>Rows per page:</span>
+                                <select 
+                                    value={size} 
+                                    onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }}
+                                    style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none', fontSize: '13px' }}
+                                >
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                </select>
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => setPage(Math.max(0, page - 1))} 
+                                    disabled={page === 0}
+                                    style={{ padding: '6px' }}
+                                >
+                                    <ChevronLeft size={16} />
+                                </Button>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => setPage(Math.min(totalPages - 1, page + 1))} 
+                                    disabled={page >= totalPages - 1 || totalPages === 0}
+                                    style={{ padding: '6px' }}
+                                >
+                                    <ChevronRight size={16} />
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
                 </Card>
             </div>
 
