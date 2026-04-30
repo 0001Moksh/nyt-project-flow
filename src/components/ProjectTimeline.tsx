@@ -171,44 +171,7 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
         </Card>
       </div>
 
-      <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
-          <h3 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Square size={16} fill="#3b82f6" color="#3b82f6" /> Project Progress
-          </h3>
-          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{meetings.length} meeting(s)</span>
-        </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '11px', fontWeight: 700, color: 'var(--text-disabled)', letterSpacing: '0.5px' }}>
-          <span>TO DO ({taskCounts.todo})</span>
-          <span>IN PROGRESS ({taskCounts.progress})</span>
-          <span>COMPLETED ({taskCounts.done})</span>
-        </div>
-        <div style={{ display: 'flex', width: '100%', height: '16px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--surface-hover)', marginBottom: '14px' }}>
-          {progressSegments.map((segment, index) => (
-            <div
-              key={`${segment.title}-${index}`}
-              title={segment.title}
-              style={{
-                width: segment.width,
-                backgroundColor: segment.color,
-                opacity: segment.opacity ?? 1,
-                transition: 'width 0.2s ease, background-color 0.2s ease'
-              }}
-            />
-          ))}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${STAGES.length}, 1fr)`, gap: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-          {stageRows.map((stage) => (
-            <div key={stage.key} style={{ textAlign: 'left' }}>
-              <div style={{ color: stage.current ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: stage.current ? 700 : 600 }}>{stage.label}</div>
-              <div>{stage.doneTasks}/{stage.stageTasks.length || 0} tasks done</div>
-              <div>{stage.latestSubmission ? `Submitted ${timeAgo(stage.latestSubmission.uploadedAt)}` : 'No submission'}</div>
-            </div>
-          ))}
-        </div>
-      </Card>
 
       <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '8px' }}>
         <h3 style={{ margin: '0 0 24px', fontSize: '18px' }}>Project Timeline</h3>
@@ -218,7 +181,6 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
             <div key={stage.key} style={{ position: 'relative', marginBottom: index === stageRows.length - 1 ? 0 : '28px' }}>
               <div style={{ position: 'absolute', left: '-22px', top: '4px', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'white', border: `2px solid ${stage.color}` }} />
               <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                <div style={{ width: '16px', height: '16px', backgroundColor: stage.color, borderRadius: '2px', marginTop: '2px' }} />
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {stage.label}
@@ -227,7 +189,7 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                     <span><Calendar size={12} style={{ verticalAlign: 'middle' }} /> Deadline {formatDate(stage.deadline)}</span>
-                    <span><FileText size={12} style={{ verticalAlign: 'middle' }} /> {stage.stageTasks.length} task(s)</span>
+                    <span><FileText size={12} style={{ verticalAlign: 'middle' }} />{stage.doneTasks}/{stage.stageTasks.length || 0} tasks done</span>
                     <span><UploadCloud size={12} style={{ verticalAlign: 'middle' }} /> {stage.latestSubmission ? stage.latestSubmission.status : 'No submission'}</span>
                   </div>
                 </div>

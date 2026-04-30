@@ -37,8 +37,8 @@ export const Sidebar: React.FC = () => {
         ];
       case 'SUPERVISOR':
         return [
-          { path: '/supervisor/dashboard', label: 'Projects', icon: <FolderKanban size={20} /> },
-          { path: '/supervisor/chat', label: 'Chat', icon: <MessageSquare size={20} /> },
+          { path: '/supervisor/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+          { path: '/supervisor/projects', label: 'Projects', icon: <FolderKanban size={20} /> },
           { path: '/supervisor/settings', label: 'Settings', icon: <Settings size={20} /> }
         ];
       default: // STUDENT

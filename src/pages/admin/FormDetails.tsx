@@ -5,7 +5,9 @@ import { adminService, type Template } from '../../services/adminService';
 import { useAuthStore } from '../../utils/authStore';
 import { useToastStore } from '../../utils/toastStore';
 import type { FormResponse } from '../../services/adminService';
-import { Search, FileText, Users, AlertTriangle, Upload, Paperclip, ExternalLink, Plus, Link as LinkIcon, Trash2, X, File, Presentation, Eye } from 'lucide-react';
+import { Search, FileText, Users, AlertTriangle, Upload, Paperclip, ExternalLink, Plus, Link as LinkIcon, Trash2, X, File, Presentation, Eye, MoreVertical, Calendar, Video } from 'lucide-react';
+import { TimelineConfigModal } from './TimelineConfigModal';
+import { MeetingManagementPanel } from './MeetingManagementPanel';
 import { api } from '../../services/api';
 import { extractFirstUrl, getPreviewUrl } from '../../utils/filePreview';
 
@@ -87,6 +89,11 @@ export const FormDetails: React.FC = () => {
   const [reasonModalOpen, setReasonModalOpen] = useState(false);
   const [pendingAssignment, setPendingAssignment] = useState<{ projectId: string, newSupervisorId: string } | null>(null);
   const [reasonText, setReasonText] = useState('');
+
+  // Dropdown & Modal State
+  const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false);
+  const [isStageTemplatesOpen, setIsStageTemplatesOpen] = useState(false);
+  const [isMeetingPanelOpen, setIsMeetingPanelOpen] = useState(false);
 
   const { user } = useAuthStore();
   const addToast = useToastStore(state => state.addToast);
@@ -215,7 +222,11 @@ export const FormDetails: React.FC = () => {
     const confirmed = window.confirm('Delete this template? This cannot be undone.');
     if (!confirmed) return;
     try {
-      await adminService.deleteTemplate(templateId);
+      if (templateId.startsWith('att_')) {
+        await adminService.deleteFormAttachment(formId!, templateId);
+      } else {
+        await adminService.deleteTemplate(templateId);
+      }
       addToast('Template deleted successfully.', 'success');
       await fetchDetails();
     } catch (err) {
@@ -275,102 +286,122 @@ export const FormDetails: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '24px' }}>
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0 }}> Viewing config for <strong>{formConfig.accessBranch} Batch {formConfig.accessBatch}</strong>.</h1>
+        
+        <div style={{ display: 'flex', gap: '12px' }}>
+            <Button variant="outline" onClick={() => setIsTimelineModalOpen(true)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Calendar size={16} /> Stage Calendar
+            </Button>
+            <Button variant="outline" onClick={() => setIsMeetingPanelOpen(true)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Video size={16} /> Meeting Sessions
+            </Button>
+            <Button variant="primary" onClick={() => setIsStageTemplatesOpen(true)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileText size={16} /> Stage Templates
+            </Button>
+        </div>
       </div>
 
-      {/* STAGE REQUIREMENTS / TEMPLATES SECTION */}
-      <Card elevation={1} style={{ padding: '0', overflow: 'hidden', marginBottom: '32px' }}>
-        <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '18px' }}>Stage Requirements / Templates</h2>
-            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>Upload reference templates that students should follow.</p>
-          </div>
-          <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setIsTemplateModalOpen(true)}>
-            Add Template
-          </Button>
-        </div>
-
-        {/* Tabs */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--surface-hover)' }}>
-          {STAGES.map((stage, idx) => {
-            const count = templates.filter(t => t.stageId === stage.key).length;
-            if (stage.key === 'GENERAL' && count === 0) return null; // Only show GENERAL tab if there are legacy/general templates
-            const isActive = activeStageTab === stage.key;
-            return (
-              <div
-                key={stage.key}
-                onClick={() => setActiveStageTab(stage.key)}
-                style={{
-                  flex: 1,
-                  padding: '16px',
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  backgroundColor: isActive ? 'var(--surface)' : 'transparent',
-                  borderBottom: isActive ? '2px solid var(--primary)' : '2px solid transparent',
-                  fontWeight: isActive ? 600 : 400,
-                  color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '12px'
-                }}
-              >
-                <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: isActive ? 'var(--primary)' : '#e5e7eb', color: isActive ? 'white' : '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>
-                  {idx + 1}
-                </div>
+      {/* STAGE TEMPLATES PANEL */}
+      {isStageTemplatesOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'flex-end', zIndex: 900 }} onClick={() => setIsStageTemplatesOpen(false)}>
+          <div style={{ width: '800px', maxWidth: '90vw', height: '100%', backgroundColor: 'var(--surface)', overflowY: 'auto', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+            <div style={{ position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 10, padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: '14px' }}>{stage.label}</div>
-                  <div style={{ fontSize: '12px', opacity: 0.7 }}>{count} templates</div>
+                  <h2 style={{ margin: 0, fontSize: '20px' }}>Stage Requirements / Templates</h2>
+                  <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>Upload reference templates that students should follow.</p>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Templates Grid */}
-        <div style={{ padding: '24px' }}>
-          <h3 style={{ fontSize: '15px', margin: '0 0 16px' }}>Templates for {getStageLabel(activeStageTab)}</h3>
-
-          {currentStageTemplates.length === 0 ? (
-            <div style={{ padding: '48px', textAlign: 'center', border: '2px dashed var(--border-color)', borderRadius: '12px', color: 'var(--text-secondary)' }}>
-              <FileText size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-              <div>No templates added for this stage yet.</div>
-              {/* <Button variant="outline" size="sm" style={{ marginTop: '12px' }} onClick={() => setIsTemplateModalOpen(true)}>Add your first template</Button> */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setIsTemplateModalOpen(true)}>
+                    Add Template
+                  </Button>
+                  <button onClick={() => setIsStageTemplatesOpen(false)} style={{ background: 'var(--surface-hover)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <X size={20} />
+                  </button>
+                </div>
             </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
-              {currentStageTemplates.map(template => (
-                <div key={template.id} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'var(--surface)' }}>
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                    {template.type === 'PDF' ? <FileText color="#ef4444" size={32} /> :
-                      template.type === 'PPTX' || template.type === 'PPT' ? <Presentation color="#f97316" size={32} /> :
-                        template.type === 'DRIVE_LINK' ? <LinkIcon color="#10b981" size={32} /> :
-                          <File color="#3b82f6" size={32} />}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <h4 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 600 }}>{template.name}</h4>
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'var(--surface-hover)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>{template.type}</span>
-                      </div>
-                      {template.description && <p style={{ margin: '0 0 8px', fontSize: '12px', color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{template.description}</p>}
-                      <div style={{ fontSize: '11px', color: 'var(--text-disabled)' }}>
-                        {template.sourceType === 'LINK' ? 'Added via link' : `Uploaded ${new Date(template.createdAt).toLocaleDateString()}`}
-                      </div>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--surface-hover)' }}>
+              {STAGES.map((stage, idx) => {
+                const count = templates.filter(t => t.stageId === stage.key).length;
+                if (stage.key === 'GENERAL' && count === 0) return null; // Only show GENERAL tab if there are legacy/general templates
+                const isActive = activeStageTab === stage.key;
+                return (
+                  <div
+                    key={stage.key}
+                    onClick={() => setActiveStageTab(stage.key)}
+                    style={{
+                      flex: 1,
+                      padding: '16px',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      backgroundColor: isActive ? 'var(--surface)' : 'transparent',
+                      borderBottom: isActive ? '2px solid var(--primary)' : '2px solid transparent',
+                      fontWeight: isActive ? 600 : 400,
+                      color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '12px'
+                    }}
+                  >
+                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: isActive ? 'var(--primary)' : '#e5e7eb', color: isActive ? 'white' : '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>
+                      {idx + 1}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '14px' }}>{stage.label}</div>
+                      <div style={{ fontSize: '12px', opacity: 0.7 }}>{count} templates</div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
-                    <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={<Eye size={14} />} onClick={() => setPreviewFileUrl({ url: getPreviewUrl(template.fileUrl), name: template.name })}>Preview</Button>
-                    <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={template.sourceType === 'LINK' ? <ExternalLink size={14} /> : <Upload size={14} style={{ transform: 'rotate(180deg)' }} />} onClick={() => window.open(template.fileUrl, '_blank')}>
-                      {template.sourceType === 'LINK' ? 'Open' : 'Download'}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleDeleteTemplate(template.id)} style={{ color: '#ef4444', borderColor: '#fee2e2', backgroundColor: '#fef2f2' }}><Trash2 size={14} /></Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          )}
+
+            {/* Templates Grid */}
+            <div style={{ padding: '24px', flex: 1, backgroundColor: 'var(--background)' }}>
+              <h3 style={{ fontSize: '15px', margin: '0 0 16px' }}>Templates for {getStageLabel(activeStageTab)}</h3>
+
+              {currentStageTemplates.length === 0 ? (
+                <div style={{ padding: '48px', textAlign: 'center', border: '2px dashed var(--border-color)', borderRadius: '12px', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)' }}>
+                  <FileText size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                  <div>No templates added for this stage yet.</div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                  {currentStageTemplates.map(template => (
+                    <div key={template.id} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'var(--surface)' }}>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                        {template.type === 'PDF' ? <FileText color="#ef4444" size={32} /> :
+                          template.type === 'PPTX' || template.type === 'PPT' ? <Presentation color="#f97316" size={32} /> :
+                            template.type === 'DRIVE_LINK' ? <LinkIcon color="#10b981" size={32} /> :
+                              <File color="#3b82f6" size={32} />}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <h4 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 600 }}>{template.name}</h4>
+                            <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'var(--surface-hover)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>{template.type}</span>
+                          </div>
+                          {template.description && <p style={{ margin: '0 0 8px', fontSize: '12px', color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{template.description}</p>}
+                          <div style={{ fontSize: '11px', color: 'var(--text-disabled)' }}>
+                            {template.sourceType === 'LINK' ? 'Added via link' : `Uploaded ${new Date(template.createdAt).toLocaleDateString()}`}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                        <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={<Eye size={14} />} onClick={() => setPreviewFileUrl({ url: getPreviewUrl(template.fileUrl), name: template.name })}>Preview</Button>
+                        <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={template.sourceType === 'LINK' ? <ExternalLink size={14} /> : <Upload size={14} style={{ transform: 'rotate(180deg)' }} />} onClick={() => window.open(template.fileUrl, '_blank')}>
+                          {template.sourceType === 'LINK' ? 'Open' : 'Download'}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleDeleteTemplate(template.id)} style={{ color: '#ef4444', borderColor: '#fee2e2', backgroundColor: '#fef2f2' }}><Trash2 size={14} /></Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </Card>
+      )}
 
       {/* PROJECT MANAGEMENT TABLE */}
       <Card elevation={1} style={{ padding: '0', overflow: 'hidden' }}>
@@ -637,6 +668,30 @@ export const FormDetails: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <Button variant="outline" onClick={() => { setReasonModalOpen(false); setPendingAssignment(null); }}>Cancel</Button>
               <Button onClick={() => executeAssignSupervisor(pendingAssignment.projectId, pendingAssignment.newSupervisorId, reasonText)} disabled={!reasonText.trim()}>Confirm Reassignment</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* TIMELINE CONFIG MODAL */}
+      {isTimelineModalOpen && formId && (
+        <TimelineConfigModal onClose={() => setIsTimelineModalOpen(false)} formId={formId} />
+      )}
+
+      {/* MEETING MANAGEMENT PANEL */}
+      {isMeetingPanelOpen && formId && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'flex-end', zIndex: 900 }} onClick={() => setIsMeetingPanelOpen(false)}>
+          <div style={{ width: '800px', maxWidth: '90vw', height: '100%', backgroundColor: 'var(--surface)', overflowY: 'auto', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+            <div style={{ position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 10, padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '20px' }}>Meeting Management</h2>
+                  <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>Overview of batch meeting sessions.</p>
+                </div>
+                <button onClick={() => setIsMeetingPanelOpen(false)} style={{ background: 'var(--surface-hover)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                  <X size={20} />
+                </button>
+            </div>
+            <div style={{ padding: '24px', flex: 1, backgroundColor: 'var(--background)' }}>
+                <MeetingManagementPanel formId={formId} />
             </div>
           </div>
         </div>

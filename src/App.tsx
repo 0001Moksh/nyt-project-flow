@@ -17,6 +17,7 @@ const AdminProjectsOverview = React.lazy(() => import('./pages/admin/AdminProjec
 const AdminTasks = React.lazy(() => import('./pages/admin/AdminTasks'));
 const Enrollment = React.lazy(() => import('./pages/Enrollment'));
 const SupervisorDashboard = React.lazy(() => import('./pages/supervisor/SupervisorDashboard'));
+const SupervisorProjects = React.lazy(() => import('./pages/supervisor/SupervisorProjects'));
 const SupervisorTeamOverview = React.lazy(() => import('./pages/supervisor/SupervisorTeamOverview'));
 const SupervisorTasks = React.lazy(() => import('./pages/supervisor/SupervisorTasks'));
 const SupervisorReview = React.lazy(() => import('./pages/supervisor/SupervisorReview'));
@@ -61,6 +62,7 @@ const App: React.FC = () => {
             {/* Supervisor Routes */}
             <Route path="/supervisor">
               <Route path="dashboard" element={<SupervisorDashboard />} />
+              <Route path="projects" element={<SupervisorProjects />} />
               <Route path="teams/:teamId" element={<SupervisorTeamOverview />} />
               <Route path="tasks" element={<SupervisorTasks />} />
               <Route path="submissions/:projectId" element={<SupervisorReview />} />

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { Card, Button, Input, Loader } from '../components';
@@ -36,8 +36,20 @@ export const Enrollment: React.FC = () => {
   // Form State
   const [teamSize, setTeamSize] = useState('3-4 Members');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [invitedMembers, setInvitedMembers] = useState<{ mail: string, name: string }[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Auth Quick State
   const [authEmail, setAuthEmail] = useState('');
@@ -450,38 +462,92 @@ export const Enrollment: React.FC = () => {
 
             <div style={{ marginBottom: '24px' }}>
               <span style={{ fontSize: '14px', fontWeight: 600, display: 'block', marginBottom: '12px' }}>Search Team Members</span>
-              <div style={{ position: 'relative' }}>
-                <select
-                  value={searchQuery}
-                  onChange={(e) => {
-                    const selectedId = e.target.value;
-                    if (!selectedId) return;
-                    const std = allStudents.find(s => s.studentId === selectedId);
-                    if (std && !invitedMembers.find(m => m.mail === std.mail)) {
-                      setInvitedMembers([...invitedMembers, { mail: std.mail, name: std.name }]);
-                    }
-                    setSearchQuery('');
-                  }}
-                  style={{ width: '100%', padding: '12px 12px 12px 16px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '14px', outline: 'none', backgroundColor: 'var(--surface)', cursor: 'pointer' }}
+              <div style={{ position: 'relative' }} ref={dropdownRef}>
+                <div 
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '12px 12px 12px 16px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '14px', backgroundColor: 'var(--surface)', cursor: 'pointer' }}
                 >
-                  <option value="">-- Select a Team Member --</option>
-                  {allStudents
-                    .filter(s => {
-                      const sBranch = (s.branch || '').toLowerCase();
-                      const sBatch = (s.batch || '').toLowerCase();
-                      return s.enrollStatus !== 'ENROLLED' &&
-                        validBranches.includes(sBranch) &&
-                        validBatches.includes(sBatch) &&
-                        s.studentId !== user?.id;
-                    })
-                    .map(s => (
-                      <option key={s.studentId} value={s.studentId}>{s.name} ({s.rollNo}) - {s.mail}</option>
-                    ))
-                  }
-                </select>
-                <div style={{ position: 'absolute', top: '8px', right: '28px', backgroundColor: 'var(--surface-hover)', padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', pointerEvents: 'none' }}>
-                  Valid Branches
+                  <span style={{ flex: 1, color: invitedMembers.length > 0 ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                    {invitedMembers.length > 0 ? `${invitedMembers.length} member(s) selected` : '-- Select Team Members --'}
+                  </span>
+                  <div style={{ padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', backgroundColor: 'var(--surface-hover)', marginRight: '8px' }}>
+                    Valid Branches
+                  </div>
                 </div>
+
+                {isDropdownOpen && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: '8px', zIndex: 10, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', maxHeight: '300px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 11 }}>
+                      <input 
+                        type="text" 
+                        placeholder="Search by name, roll no or email..." 
+                        value={searchQuery} 
+                        onChange={e => setSearchQuery(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none', fontSize: '13px' }}
+                        autoFocus
+                      />
+                    </div>
+                    <div style={{ padding: '4px', overflowY: 'auto', flex: 1 }}>
+                      {allStudents
+                        .filter(s => {
+                          const sBranch = (s.branch || '').toLowerCase();
+                          const sBatch = (s.batch || '').toLowerCase();
+                          return s.enrollStatus !== 'ENROLLED' &&
+                            validBranches.includes(sBranch) &&
+                            validBatches.includes(sBatch) &&
+                            s.studentId !== user?.id &&
+                            (searchQuery ? (s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.rollNo.toLowerCase().includes(searchQuery.toLowerCase()) || s.mail.toLowerCase().includes(searchQuery.toLowerCase())) : true);
+                        })
+                        .map(s => {
+                          const isSelected = invitedMembers.some(m => m.mail === s.mail);
+                          return (
+                            <div 
+                              key={s.studentId} 
+                              onClick={() => {
+                                if (isSelected) {
+                                  setInvitedMembers(invitedMembers.filter(m => m.mail !== s.mail));
+                                } else {
+                                  setInvitedMembers([...invitedMembers, { mail: s.mail, name: s.name }]);
+                                }
+                              }}
+                              style={{ 
+                                padding: '10px 12px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'space-between', 
+                                cursor: 'pointer', 
+                                borderRadius: '6px',
+                                backgroundColor: isSelected ? 'var(--primary-glow)' : 'transparent',
+                                marginBottom: '2px',
+                                transition: 'background-color 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--surface-hover)'; }}
+                              onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                            >
+                              <div>
+                                <div style={{ fontSize: '13px', fontWeight: isSelected ? 600 : 500, color: isSelected ? 'var(--primary)' : 'var(--text-primary)' }}>{s.name} <span style={{color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 500}}>({s.rollNo})</span></div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-disabled)', marginTop: '2px' }}>{s.mail}</div>
+                              </div>
+                              {isSelected && <Check size={18} color="var(--primary)" />}
+                            </div>
+                          );
+                        })}
+                        {allStudents.filter(s => {
+                          const sBranch = (s.branch || '').toLowerCase();
+                          const sBatch = (s.batch || '').toLowerCase();
+                          return s.enrollStatus !== 'ENROLLED' &&
+                            validBranches.includes(sBranch) &&
+                            validBatches.includes(sBatch) &&
+                            s.studentId !== user?.id &&
+                            (searchQuery ? (s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.rollNo.toLowerCase().includes(searchQuery.toLowerCase()) || s.mail.toLowerCase().includes(searchQuery.toLowerCase())) : true);
+                        }).length === 0 && (
+                          <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-disabled)', fontSize: '13px' }}>
+                            No matching students found
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                )}
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px' }}>
                 Showing only non-enrolled students from <strong style={{ color: 'var(--text-secondary)' }}>{formConfig.accessBranch}</strong> {formConfig.accessBatch} (Eligibility requirement)

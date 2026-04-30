@@ -303,19 +303,66 @@ export const Dashboard: React.FC = () => {
                             />
                         )}
 
-                        {/* Meetings Tracker */}
-                        <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+                        {/* Official Batch Evaluations */}
+                        <Card elevation={1} style={{ border: '1px solid #bae6fd', borderRadius: '12px', marginBottom: '24px', backgroundColor: '#f0f9ff', padding: '24px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                <h3 style={{ margin: 0, fontSize: '18px', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Calendar size={20} /> Official Batch Evaluations
+                                </h3>
+                            </div>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {meetings.filter(m => m.sessionId).length === 0 && (
+                                    <div style={{ textAlign: 'center', padding: '16px', color: '#0ea5e9', fontSize: '14px', fontStyle: 'italic' }}>
+                                        No official batch evaluations scheduled by Admin yet.
+                                    </div>
+                                )}
+                                {meetings.filter(m => m.sessionId).map((meeting) => (
+                                    <div key={meeting.meetingId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid #bae6fd', borderRadius: '8px', backgroundColor: '#ffffff' }}>
+                                        <div style={{ display: 'flex', gap: '16px' }}>
+                                            <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                {meeting.mode === 'ONLINE' ? <Video size={20} /> : <MapPin size={20} />}
+                                            </div>
+                                            <div>
+                                                <div style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a', marginBottom: '4px' }}>
+                                                    {meeting.stage} Review
+                                                    {meeting.status === 'COMPLETED' && <span style={{ marginLeft: '12px', fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }}/>COMPLETED</span>}
+                                                </div>
+                                                <div style={{ fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#0369a1' }}><Calendar size={14} /> {meeting.meetingDate}</span>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#0369a1' }}><Clock size={14} /> {meeting.meetingTime}</span>
+                                                </div>
+                                                {meeting.status === 'COMPLETED' && meeting.conclusionNotes && (
+                                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px', fontStyle: 'italic' }}>
+                                                        " {meeting.conclusionNotes} "
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && meeting.locationOrLink && (
+                                            <Button size="sm" variant="outline" onClick={() => window.open(meeting.locationOrLink, '_blank')} style={{ borderColor: '#0284c7', color: '#0284c7' }}>Join GMeet</Button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+
+                        {/* Internal / Casual Meetings Tracker */}
+                        <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '24px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                                <h3 style={{ margin: 0, fontSize: '18px' }}>Upcoming Meetings</h3>
+                                <h3 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Video size={18} color="var(--primary)" /> Internal / Casual Meetings
+                                </h3>
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                {meetings.length === 0 && (
+                                {meetings.filter(m => !m.sessionId).length === 0 && (
                                     <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-disabled)', fontSize: '14px' }}>
-                                        No meetings scheduled yet.
+                                        No internal meetings scheduled yet.
                                     </div>
                                 )}
-                                {meetings.map((meeting) => (
+                                {meetings.filter(m => !m.sessionId).map((meeting) => (
                                     <div key={meeting.meetingId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)' }}>
                                         <div style={{ display: 'flex', gap: '16px' }}>
                                             <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: meeting.status === 'COMPLETED' ? '#dcfce7' : 'var(--primary-glow)', color: meeting.status === 'COMPLETED' ? '#16a34a' : 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -323,20 +370,24 @@ export const Dashboard: React.FC = () => {
                                             </div>
                                             <div>
                                                 <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                                                    Stage: {meeting.stage}
-                                                    {meeting.status === 'COMPLETED' && <span style={{ marginLeft: '12px', fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }} />COMPLETED</span>}
+                                                    {meeting.stage} Review
+                                                    {meeting.status === 'COMPLETED' && <span style={{ marginLeft: '12px', fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }}/>COMPLETED</span>}
                                                 </div>
                                                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '16px' }}>
                                                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={14} /> {meeting.meetingDate}</span>
                                                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} /> {meeting.meetingTime}</span>
                                                 </div>
-                                                {meeting.status === 'COMPLETED' && (
+                                                {meeting.status === 'COMPLETED' && meeting.conclusionNotes && (
                                                     <div style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px', fontStyle: 'italic' }}>
                                                         " {meeting.conclusionNotes} "
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
+
+                                        {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && meeting.locationOrLink && (
+                                            <Button size="sm" variant="outline" onClick={() => window.open(meeting.locationOrLink, '_blank')}>Join GMeet</Button>
+                                        )}
                                     </div>
                                 ))}
                             </div>

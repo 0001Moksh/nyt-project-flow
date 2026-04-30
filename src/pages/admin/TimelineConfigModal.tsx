@@ -2,41 +2,49 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button, Input } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
-import { Clock, Users, X, AlertTriangle } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Circle, ChevronRight } from 'lucide-react';
 
 interface TimelineConfigModalProps {
     onClose: () => void;
-    forms: any[];
+    formId: string;
 }
 
-export const TimelineConfigModal: React.FC<TimelineConfigModalProps> = ({ onClose, forms }) => {
-    const [selectedFormId, setSelectedFormId] = useState('');
+const STAGES = [
+    { key: 'SYNOPSIS', label: 'Synopsis', dateKey: 'synopsisDate', reqKey: 'synopsisRequired', modeKey: 'synopsisMode' },
+    { key: 'PROGRESS1', label: 'Progress 1', dateKey: 'progress1Date', reqKey: 'progress1Required', modeKey: 'progress1Mode' },
+    { key: 'PROGRESS2', label: 'Progress 2', dateKey: 'progress2Date', reqKey: 'progress2Required', modeKey: 'progress2Mode' },
+    { key: 'FINAL', label: 'Final Submission', dateKey: 'finalSubmissionDate', reqKey: 'finalRequired', modeKey: 'finalMode' }
+];
+
+export const TimelineConfigModal: React.FC<TimelineConfigModalProps> = ({ onClose, formId }) => {
     const [isLoading, setIsLoading] = useState(false);
+    const [selectedStageKey, setSelectedStageKey] = useState('SYNOPSIS');
     
-    const [dates, setDates] = useState({
+    const [dates, setDates] = useState<any>({
         synopsisDate: '',
         progress1Date: '',
         progress2Date: '',
         finalSubmissionDate: ''
     });
 
-    const [configs, setConfigs] = useState({
+    const [configs, setConfigs] = useState<any>({
         synopsisRequired: 1,
         progress1Required: 1,
         progress2Required: 1,
-        finalRequired: 1
+        finalRequired: 1,
+        synopsisMode: '',
+        progress1Mode: '',
+        progress2Mode: '',
+        finalMode: ''
     });
 
     const addToast = useToastStore((state: any) => state.addToast);
 
     useEffect(() => {
-        if (selectedFormId) {
-            fetchConfig(selectedFormId);
-        } else {
-            setDates({ synopsisDate: '', progress1Date: '', progress2Date: '', finalSubmissionDate: '' });
-            setConfigs({ synopsisRequired: 1, progress1Required: 1, progress2Required: 1, finalRequired: 1 });
+        if (formId) {
+            fetchConfig(formId);
         }
-    }, [selectedFormId]);
+    }, [formId]);
 
     const fetchConfig = async (formId: string) => {
         try {
@@ -59,7 +67,11 @@ export const TimelineConfigModal: React.FC<TimelineConfigModalProps> = ({ onClos
                     synopsisRequired: confRes.data.synopsisRequired || 1,
                     progress1Required: confRes.data.progress1Required || 1,
                     progress2Required: confRes.data.progress2Required || 1,
-                    finalRequired: confRes.data.finalRequired || 1
+                    finalRequired: confRes.data.finalRequired || 1,
+                    synopsisMode: confRes.data.synopsisMode || '',
+                    progress1Mode: confRes.data.progress1Mode || '',
+                    progress2Mode: confRes.data.progress2Mode || '',
+                    finalMode: confRes.data.finalMode || ''
                 });
             }
         } catch (e) {
@@ -68,13 +80,12 @@ export const TimelineConfigModal: React.FC<TimelineConfigModalProps> = ({ onClos
     };
 
     const handleSave = async () => {
-        if (!selectedFormId) return addToast('Please select a batch/form first', 'error');
+        if (!formId) return addToast('Missing form context', 'error');
 
         setIsLoading(true);
         try {
-            // Convert local dates to ISODate strings
             const timelinePayload = {
-                formId: selectedFormId,
+                formId: formId,
                 synopsisDate: dates.synopsisDate ? new Date(dates.synopsisDate).toISOString() : null,
                 progress1Date: dates.progress1Date ? new Date(dates.progress1Date).toISOString() : null,
                 progress2Date: dates.progress2Date ? new Date(dates.progress2Date).toISOString() : null,
@@ -82,7 +93,7 @@ export const TimelineConfigModal: React.FC<TimelineConfigModalProps> = ({ onClos
             };
 
             const configPayload = {
-                formId: selectedFormId,
+                formId: formId,
                 ...configs
             };
 
@@ -92,7 +103,6 @@ export const TimelineConfigModal: React.FC<TimelineConfigModalProps> = ({ onClos
             ]);
 
             addToast('Timeline & Meeting Configuration Saved! Users have been notified.', 'success');
-            onClose();
         } catch (err: any) {
             addToast('Failed to save configuration', 'error');
             console.error(err);
@@ -101,79 +111,128 @@ export const TimelineConfigModal: React.FC<TimelineConfigModalProps> = ({ onClos
         }
     };
 
+    const selectedStage = STAGES.find(s => s.key === selectedStageKey)!;
+    const stageDate = dates[selectedStage.dateKey];
+    const stageMode = configs[selectedStage.modeKey];
+    const stageReq = configs[selectedStage.reqKey];
+
+    const isDatePassed = (dateStr: string) => {
+        if (!dateStr) return false;
+        return new Date(dateStr) < new Date();
+    };
+
+    const getStageStatus = (stage: typeof STAGES[0]) => {
+        const date = dates[stage.dateKey];
+        if (!date) return 'Pending';
+        return isDatePassed(date) ? 'Completed' : 'In Progress';
+    };
+
     return (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-            <div style={{ background: 'white', padding: '32px', borderRadius: '12px', width: '600px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                    <h2 style={{ margin: 0, fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Clock color="var(--primary)" size={24} /> Manage Deadlines & Meetings
-                    </h2>
-                    <X size={24} color="var(--text-disabled)" style={{ cursor: 'pointer' }} onClick={onClose} />
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+            <div style={{ background: '#F9FAFB', borderRadius: '16px', width: '1200px', maxWidth: '95vw', height: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', border: '1px solid #E5E7EB' }}>
+                
+                {/* Header */}
+                <div style={{ padding: '20px 24px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
+                    <div>
+                        <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: '#111827' }}>Stage Calendar</h2>
+                        <div style={{ fontSize: '13px', color: '#6B7280', marginTop: '4px' }}>Configure stage deadlines and batch-wide meeting parameters.</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Button variant="outline" onClick={onClose} style={{ color: '#4B5563' }}>Close</Button>
+                        <Button variant="primary" onClick={handleSave} isLoading={isLoading}>Save Changes</Button>
+                    </div>
                 </div>
 
-                <div style={{ marginBottom: '24px' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>Target Project Batch (Form) <span style={{color: 'red'}}>*</span></label>
-                    <select 
-                        value={selectedFormId} 
-                        onChange={(e) => setSelectedFormId(e.target.value)}
-                        style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)' }}
-                    >
-                        <option value="">-- Select a Form / Batch --</option>
-                        {forms.map(f => (
-                            <option key={f.formId} value={f.formId}>{f.accessBranch} ({f.accessBatch})</option>
-                        ))}
-                    </select>
-                </div>
+                {/* Main Content Area */}
+                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                    
+                    {/* Left Sidebar (Stages) */}
+                    <div style={{ width: '280px', borderRight: '1px solid #E5E7EB', backgroundColor: '#FFFFFF', padding: '24px 16px', overflowY: 'auto' }}>
+                        <h3 style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: 600, color: '#4B5563', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Project Stages</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {STAGES.map((stage) => {
+                                const status = getStageStatus(stage);
+                                const isSelected = stage.key === selectedStageKey;
+                                return (
+                                    <div 
+                                        key={stage.key}
+                                        onClick={() => setSelectedStageKey(stage.key)}
+                                        style={{ 
+                                            padding: '12px 16px', 
+                                            borderRadius: '12px', 
+                                            cursor: 'pointer',
+                                            backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
+                                            border: isSelected ? '1px solid #BFDBFE' : '1px solid transparent',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        onMouseEnter={(e) => { if(!isSelected) e.currentTarget.style.backgroundColor = '#F3F4F6'; }}
+                                        onMouseLeave={(e) => { if(!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                    >
+                                        <div style={{ 
+                                            width: '36px', height: '36px', borderRadius: '10px', 
+                                            backgroundColor: isSelected ? '#3B82F6' : '#F3F4F6',
+                                            color: isSelected ? 'white' : '#6B7280',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                        }}>
+                                            <CalendarDays size={18} />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontSize: '14px', fontWeight: isSelected ? 600 : 500, color: isSelected ? '#1E3A8A' : '#374151' }}>{stage.label}</div>
+                                            <div style={{ 
+                                                fontSize: '11px', marginTop: '4px', fontWeight: 500,
+                                                color: status === 'Completed' ? '#10B981' : status === 'In Progress' ? '#F59E0B' : '#9CA3AF' 
+                                            }}>
+                                                {status === 'Completed' && <CheckCircle2 size={10} style={{ display: 'inline', marginRight: '4px' }}/>}
+                                                {status === 'In Progress' && <Circle size={10} style={{ display: 'inline', marginRight: '4px' }}/>}
+                                                {status}
+                                            </div>
+                                        </div>
+                                        <ChevronRight size={16} color={isSelected ? '#3B82F6' : '#9CA3AF'} />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
 
-                {selectedFormId && (
-                    <>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
-                            {/* 1. SYNOPSIS */}
-                            <div style={{ padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)' }}>
-                                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px' }}>Synopsis Stage</h4>
-                                <Input label="Deadline Date" type="date" value={dates.synopsisDate} onChange={(e: any) => setDates({...dates, synopsisDate: e.target.value})} />
-                                <div style={{ marginTop: '12px' }}>
-                                    <label style={{ fontSize: '12px', fontWeight: 600 }}>Req. Meetings</label>
-                                    <input type="number" min="0" value={configs.synopsisRequired} onChange={e => setConfigs({...configs, synopsisRequired: parseInt(e.target.value) || 0})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }} />
-                                </div>
-                            </div>
+                    {/* Center Panel (Stage Details) */}
+                    <div style={{ flex: 1, padding: '32px', overflowY: 'auto', backgroundColor: '#F9FAFB' }}>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+                            <h1 style={{ fontSize: '28px', margin: 0, fontWeight: 700, color: '#111827' }}>{selectedStage.label}</h1>
+                            <span style={{ 
+                                padding: '4px 10px', borderRadius: '16px', fontSize: '12px', fontWeight: 600,
+                                backgroundColor: getStageStatus(selectedStage) === 'Completed' ? '#D1FAE5' : getStageStatus(selectedStage) === 'In Progress' ? '#FEF3C7' : '#F3F4F6',
+                                color: getStageStatus(selectedStage) === 'Completed' ? '#065F46' : getStageStatus(selectedStage) === 'In Progress' ? '#92400E' : '#4B5563',
+                            }}>
+                                {getStageStatus(selectedStage)}
+                            </span>
+                        </div>
 
-                            {/* 2. PROGRESS 1 */}
-                            <div style={{ padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)' }}>
-                                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px' }}>Progress 1 Stage</h4>
-                                <Input label="Deadline Date" type="date" value={dates.progress1Date} onChange={(e: any) => setDates({...dates, progress1Date: e.target.value})} />
-                                <div style={{ marginTop: '12px' }}>
-                                    <label style={{ fontSize: '12px', fontWeight: 600 }}>Req. Meetings</label>
-                                    <input type="number" min="0" value={configs.progress1Required} onChange={e => setConfigs({...configs, progress1Required: parseInt(e.target.value) || 0})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }} />
-                                </div>
-                            </div>
-
-                            {/* 3. PROGRESS 2 */}
-                            <div style={{ padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)' }}>
-                                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px' }}>Progress 2 Stage</h4>
-                                <Input label="Deadline Date" type="date" value={dates.progress2Date} onChange={(e: any) => setDates({...dates, progress2Date: e.target.value})} />
-                                <div style={{ marginTop: '12px' }}>
-                                    <label style={{ fontSize: '12px', fontWeight: 600 }}>Req. Meetings</label>
-                                    <input type="number" min="0" value={configs.progress2Required} onChange={e => setConfigs({...configs, progress2Required: parseInt(e.target.value) || 0})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }} />
-                                </div>
-                            </div>
-
-                            {/* 4. FINAL */}
-                            <div style={{ padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)' }}>
-                                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px' }}>Final Submission</h4>
-                                <Input label="Deadline Date" type="date" value={dates.finalSubmissionDate} onChange={(e: any) => setDates({...dates, finalSubmissionDate: e.target.value})} />
-                                <div style={{ marginTop: '12px' }}>
-                                    <label style={{ fontSize: '12px', fontWeight: 600 }}>Req. Meetings</label>
-                                    <input type="number" min="0" value={configs.finalRequired} onChange={e => setConfigs({...configs, finalRequired: parseInt(e.target.value) || 0})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }} />
+                        {/* Simplified Stage Controls */}
+                        <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '24px', border: '1px solid #E5E7EB', marginBottom: '32px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+                                <div>
+                                    <div style={{ fontSize: '13px', color: '#6B7280', fontWeight: 500, marginBottom: '8px' }}>End Date (Deadline)</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280' }}>
+                                            <CalendarDays size={20} />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <Input 
+                                                type="date" 
+                                                value={stageDate} 
+                                                onChange={(e: any) => setDates({...dates, [selectedStage.dateKey]: e.target.value})} 
+                                                style={{ width: '100%', maxWidth: '300px' }}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
-                    <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button onClick={handleSave} isLoading={isLoading} disabled={!selectedFormId}>Save Deadlines</Button>
+                    </div>
                 </div>
             </div>
         </div>

@@ -41,19 +41,24 @@ export const getPreviewUrl = (url: string) => {
       return url;
     }
 
-    // SharePoint Graph webUrl values often look like .../_layouts/15/Doc.aspx?...&action=default.
-    // For iframe usage, action=embedview is more reliable than wrapping Doc.aspx in Office embed.
-    if (host.endsWith('.sharepoint.com') && parsed.pathname.toLowerCase().includes('/_layouts/15/doc.aspx')) {
+    // SharePoint & OneDrive for Business
+    // We add action=embedview to all sharepoint links to force the iframe preview UI without menus
+    if (host.endsWith('.sharepoint.com')) {
       parsed.searchParams.set('action', 'embedview');
       parsed.searchParams.delete('mobileredirect');
       return parsed.toString();
     }
 
+    // Personal OneDrive
     if (host === 'onedrive.live.com') {
-      const resid = parsed.searchParams.get('resid');
-      if (resid) {
+      const id = parsed.searchParams.get('resid') || parsed.searchParams.get('id');
+      const cid = parsed.searchParams.get('cid');
+      
+      if (id) {
         const embed = new URL('https://onedrive.live.com/embed');
-        embed.searchParams.set('resid', resid);
+        embed.searchParams.set('resid', id);
+        
+        if (cid) embed.searchParams.set('cid', cid);
 
         const authkey = parsed.searchParams.get('authkey');
         if (authkey) {
