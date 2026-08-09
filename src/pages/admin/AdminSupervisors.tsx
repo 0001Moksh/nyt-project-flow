@@ -18,6 +18,11 @@ export const AdminSupervisors: React.FC = () => {
     const [importReport, setImportReport] = useState<any>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+    // Invite Modal State
+    const [isInviteOpen, setIsInviteOpen] = useState(false);
+    const [inviting, setInviting] = useState(false);
+    const [inviteForm, setInviteForm] = useState({ name: '', email: '', branch: '' });
+
     useEffect(() => {
         fetchData();
     }, []);
@@ -72,6 +77,22 @@ export const AdminSupervisors: React.FC = () => {
         document.body.removeChild(link);
     };
 
+    const handleInviteSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setInviting(true);
+        try {
+            await api.post('/admin/invite-supervisor', inviteForm);
+            useToastStore.getState().addToast('Invitation sent successfully', 'success');
+            setIsInviteOpen(false);
+            setInviteForm({ name: '', email: '', branch: '' });
+            fetchData();
+        } catch (err: any) {
+            useToastStore.getState().addToast(err.response?.data?.message || 'Failed to send invitation', 'error');
+        } finally {
+            setInviting(false);
+        }
+    };
+
     if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}><Loader size="lg" /></div>;
 
     const getWorkload = (supId: string) => {
@@ -96,7 +117,7 @@ export const AdminSupervisors: React.FC = () => {
                 <div style={{ display: 'flex', gap: '12px' }}>
                     <Button variant="outline" size="sm" leftIcon={<Upload size={16} />} onClick={() => setIsImportOpen(true)}>Import CSV</Button>
                     <Button variant="outline" size="sm" leftIcon={<Download size={16} />}>Export Report</Button>
-                    <Button variant="primary" size="sm" leftIcon={<UserPlus size={16} />}>Invite Supervisor</Button>
+                    <Button variant="primary" size="sm" leftIcon={<UserPlus size={16} />} onClick={() => setIsInviteOpen(true)}>Invite Supervisor</Button>
                 </div>
             </div>
 
@@ -254,6 +275,39 @@ export const AdminSupervisors: React.FC = () => {
                     </Card>
                 </div>
             )}
+
+            {/* Invite Supervisor Modal */}
+            {isInviteOpen && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <Card elevation={2} style={{ width: '400px', backgroundColor: 'var(--surface)', borderRadius: '12px', padding: '24px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700 }}>Invite Supervisor</h2>
+                            <button onClick={() => setIsInviteOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleInviteSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 600 }}>Full Name</label>
+                                <Input required value={inviteForm.name} onChange={e => setInviteForm({ ...inviteForm, name: e.target.value })} placeholder="Dr. Jane Smith" />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 600 }}>Email Address</label>
+                                <Input required type="email" value={inviteForm.email} onChange={e => setInviteForm({ ...inviteForm, email: e.target.value })} placeholder="jane.smith@college.edu" />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 600 }}>Department (Branch)</label>
+                                <Input required value={inviteForm.branch} onChange={e => setInviteForm({ ...inviteForm, branch: e.target.value })} placeholder="e.g. CSE, IT, ECE" />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                                <Button type="button" variant="outline" onClick={() => setIsInviteOpen(false)}>Cancel</Button>
+                                <Button type="submit" variant="primary" disabled={inviting}>{inviting ? 'Sending...' : 'Send Invite'}</Button>
+                            </div>
+                        </form>
+                    </Card>
+                </div>
+            )}
+
         </div>
     );
 };

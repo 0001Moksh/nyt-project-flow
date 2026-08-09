@@ -71,6 +71,7 @@ export const AdminStudents: React.FC = () => {
                 rollNo: s.rollNo,
                 branch: s.branch,
                 status: s.enrollStatus || 'ACTIVE',
+                mail: s.mail,
                 performance: s.performanceScore ?? 100
             }));
 
@@ -206,7 +207,7 @@ export const AdminStudents: React.FC = () => {
                                 <tr>
                                     <th style={{ padding: '16px 24px', fontWeight: 600 }}>Student details</th>
                                     <th style={{ padding: '16px', fontWeight: 600 }}>Branch</th>
-                                    <th style={{ padding: '16px', fontWeight: 600 }}>Progress Score</th>
+                                    <th style={{ padding: '16px', fontWeight: 600 }}>Email (Mail)</th>
                                     <th style={{ padding: '16px', fontWeight: 600 }}>Status</th>
                                 </tr>
                             </thead>
@@ -235,10 +236,7 @@ export const AdminStudents: React.FC = () => {
                                             </td>
                                             <td style={{ padding: '16px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                    <div style={{ fontWeight: 600, fontSize: '13px' }}>{student.performance}%</div>
-                                                </div>
-                                                <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--surface-hover)', borderRadius: '2px', marginTop: '6px' }}>
-                                                    <div style={{ width: `${student.performance}%`, height: '100%', backgroundColor: isRisk ? '#ef4444' : '#3b82f6', borderRadius: '2px' }}></div>
+                                                    <div style={{ fontWeight: 500, fontSize: '14px', color: 'var(--text-secondary)' }}>{student.mail}</div>
                                                 </div>
                                             </td>
                                             <td style={{ padding: '16px' }}>

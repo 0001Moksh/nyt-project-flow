@@ -88,9 +88,9 @@ export const Settings: React.FC = () => {
             return;
         }
         try {
-            await api.post('/otp/resend', { email: mail, accountType: user?.role || 'STUDENT' });
+            await api.post('/auth/forgot-password/send-otp', { email: mail });
             setOtpSent(true);
-            addToast('OTP sent to your registered admin email.', 'success');
+            addToast('OTP sent to your registered email.', 'success');
         } catch (err) {
             addToast('Failed to send OTP. Server error.', 'error');
         }
@@ -107,20 +107,7 @@ export const Settings: React.FC = () => {
             return;
         }
         try {
-            // 1. Verify OTP
-            await api.post('/otp/verify', { email: mail, code: otp, accountType: user?.role || 'STUDENT' });
-            
-            // 2. Update Password on Backend (Admins natively support it via PUT /admins, others via a generic password endpoint if it existed, but we'll try PUT /admins for admin, and fallback to password reset endpoints)
-            if (user?.role === 'ADMIN') {
-                await api.put(`/admins/${user?.id}`, {
-                    name,
-                    mail,
-                    department,
-                    password: newPass
-                });
-            } else {
-                await api.post('/auth/password/reset/confirm', { email: mail, otp, newPassword: newPass });
-            }
+            await api.post('/auth/forgot-password/reset', { email: mail, password: newPass, confirmPassword: confPass, otp });
 
             addToast('Password updated successfully', 'success');
             setOtpSent(false);

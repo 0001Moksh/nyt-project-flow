@@ -65,7 +65,10 @@ export const LandingPage: React.FC = () => {
                 const sups = res.data || [];
                 const uniqueDepts = Array.from(new Set(sups.map((s: any) => s.branch).filter(Boolean))) as string[];
                 setDepartments(uniqueDepts.length > 0 ? uniqueDepts : ['Computer Science', 'Information Technology', 'Electronics']);
-            }).catch(console.error);
+            }).catch(err => {
+                console.error(err);
+                setDepartments(['Computer Science', 'Information Technology', 'Electronics']);
+            });
         }
     }, [showRegisterModal]);
 
