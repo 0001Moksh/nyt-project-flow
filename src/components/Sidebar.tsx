@@ -10,6 +10,7 @@ import {
   FileText,
   LogOut
 } from 'lucide-react';
+import dpgitmLogo from '../assets/images/dpgitm-logo.png';
 
 export const Sidebar: React.FC = () => {
   const { user, logout } = useAuthStore();
@@ -37,8 +38,8 @@ export const Sidebar: React.FC = () => {
         ];
       case 'SUPERVISOR':
         return [
-          { path: '/supervisor/dashboard', label: 'Projects', icon: <FolderKanban size={20} /> },
-          { path: '/supervisor/chat', label: 'Chat', icon: <MessageSquare size={20} /> },
+          { path: '/supervisor/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+          { path: '/supervisor/projects', label: 'Projects', icon: <FolderKanban size={20} /> },
           { path: '/supervisor/settings', label: 'Settings', icon: <Settings size={20} /> }
         ];
       default: // STUDENT
@@ -57,7 +58,7 @@ export const Sidebar: React.FC = () => {
     <aside style={{
       width: '260px',
       height: '100vh',
-      backgroundColor: 'var(--surface)',
+      background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)',
       borderRight: '1px solid var(--border-color)',
       display: 'flex',
       flexDirection: 'column',
@@ -68,20 +69,12 @@ export const Sidebar: React.FC = () => {
     }}>
       {/* BRANDING HEADER */}
       <div
-        style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+        style={{ padding: '20px 18px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
         onClick={() => navigate('/')}
       >
-        <div style={{
-          width: '36px', height: '36px',
-          backgroundColor: 'var(--primary)',
-          borderRadius: '8px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'white', fontWeight: 700, fontSize: '18px'
-        }}>
-          N
-        </div>
-        <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
-          NYT Project Flow
+        <img src={dpgitmLogo} alt="DPGITM logo" style={{ width: '44px', height: '44px', objectFit: 'contain', flexShrink: 0 }} />
+        <h1 style={{ margin: 0, fontSize: '15px', lineHeight: 1.2, fontWeight: 800, color: 'var(--primary)', letterSpacing: 0 }}>
+          DPGITM Project Management System
         </h1>
       </div>
 

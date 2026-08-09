@@ -7,3 +7,4 @@ export * from './Layout';
 export * from './Sidebar';
 export * from './NotificationBell';
 export * from './ProjectTimeline';
+export * from './ReferenceTemplatesCard';

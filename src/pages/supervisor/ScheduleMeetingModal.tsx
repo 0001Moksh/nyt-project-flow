@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { useAuthStore } from '../../utils/authStore';
 import { X, Calendar, MapPin, Video } from 'lucide-react';
+import { isValidMeetingLink, normalizeMeetingLink } from '../../utils/meetingLinks';
 
 interface ScheduleMeetingModalProps {
     projectId: string;
@@ -28,13 +29,17 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({ proj
         if (!formData.meetingDate || !formData.meetingTime || !formData.locationOrLink) {
             return addToast('Please fill all fields', 'error');
         }
+        if (formData.mode === 'ONLINE' && !isValidMeetingLink(formData.locationOrLink)) {
+            return addToast('Please paste a valid meeting link. Google Meet links must look like https://meet.google.com/abc-defg-hij.', 'error');
+        }
 
         setIsLoading(true);
         try {
             await api.post('/supervisor/meetings', {
                 projectId,
                 supervisorId: user?.id,
-                ...formData
+                ...formData,
+                locationOrLink: formData.mode === 'ONLINE' ? normalizeMeetingLink(formData.locationOrLink) : formData.locationOrLink.trim()
             });
             addToast('Meeting Scheduled Successfully', 'success');
             onSuccess();

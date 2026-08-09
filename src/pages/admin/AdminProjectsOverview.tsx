@@ -4,7 +4,6 @@ import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { useAuthStore } from '../../utils/authStore';
 import { ChevronDown, ChevronUp, CheckCircle, Clock, Flag, AlertTriangle, ShieldAlert, Users, FileText, Calendar, ExternalLink, Paperclip } from 'lucide-react';
-import { TimelineConfigModal } from './TimelineConfigModal';
 import { extractFirstUrl, getPreviewUrl } from '../../utils/filePreview';
 
 const submissionStages = [
@@ -169,10 +168,7 @@ export const AdminProjectsOverview: React.FC = () => {
                 <div>
                    <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: '0 0 8px', fontWeight: 700 }}>Project Portfolio</h1>
                    <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '15px' }}>Global oversight of all active projects, AI health insights, and execution lifecycles.</p>
-                </div>
-                <Button onClick={() => setTimelineModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                     <Calendar size={18} /> Manage Stage Timelines
-                </Button>
+               </div>
             </div>
 
             <Card elevation={1} style={{ padding: '0', borderRadius: '12px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
@@ -412,10 +408,6 @@ export const AdminProjectsOverview: React.FC = () => {
                         </div>
                     </div>
                 </div>
-            )}
-
-            {timelineModalOpen && (
-                 <TimelineConfigModal onClose={() => setTimelineModalOpen(false)} forms={forms} />
             )}
         </div>
     );
