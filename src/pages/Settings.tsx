@@ -13,6 +13,7 @@ export const Settings: React.FC = () => {
     const [name, setName] = useState(user?.name || '');
     const [mail, setMail] = useState('');
     const [department, setDepartment] = useState('');
+    const [rollNo, setRollNo] = useState('');
     
     // Passwords & Security
     const [newPass, setNewPass] = useState('');
@@ -26,15 +27,40 @@ export const Settings: React.FC = () => {
     const [deadlineAlerts, setDeadlineAlerts] = useState(true);
 
     useEffect(() => {
-        if (user?.role === 'ADMIN' && user.id) {
-            api.get(`/admins/${user.id}`).then(res => {
-                if(res.data) {
-                    setName(res.data.name || '');
-                    setMail(res.data.mail || '');
-                    setDepartment(res.data.department || '');
+        if (!user?.id) return;
+        
+        const fetchProfile = async () => {
+            try {
+                if (user.role === 'ADMIN') {
+                    const res = await api.get(`/admins/${user.id}`);
+                    if (res.data) {
+                        setName(res.data.name || '');
+                        setMail(res.data.mail || '');
+                        setDepartment(res.data.department || '');
+                    }
+                } else if (user.role === 'SUPERVISOR') {
+                    const res = await api.get(`/supervisors`);
+                    const sup = res.data?.find((s: any) => s.supervisorId === user.id);
+                    if (sup) {
+                        setName(sup.name || '');
+                        setMail(sup.mail || '');
+                        setDepartment(sup.branch || '');
+                    }
+                } else if (user.role === 'STUDENT') {
+                    const res = await api.get(`/students`);
+                    const stu = res.data?.find((s: any) => s.studentId === user.id);
+                    if (stu) {
+                        setName(stu.name || '');
+                        setMail(stu.mail || '');
+                        setDepartment(stu.branch || '');
+                        setRollNo(stu.rollNo || '');
+                    }
                 }
-            }).catch(console.error);
-        }
+            } catch (err) {
+                console.error(err);
+            }
+        };
+        fetchProfile();
     }, [user]);
 
     const handleSave = async () => {
@@ -58,11 +84,11 @@ export const Settings: React.FC = () => {
 
     const handleSendOTP = async () => {
         if (!mail) {
-            addToast('Admin email not configured', 'error');
+            addToast('Email not configured', 'error');
             return;
         }
         try {
-            await api.post('/otp/resend', { email: mail, accountType: 'ADMIN' });
+            await api.post('/otp/resend', { email: mail, accountType: user?.role || 'STUDENT' });
             setOtpSent(true);
             addToast('OTP sent to your registered admin email.', 'success');
         } catch (err) {
@@ -82,15 +108,19 @@ export const Settings: React.FC = () => {
         }
         try {
             // 1. Verify OTP
-            await api.post('/otp/verify', { email: mail, code: otp, accountType: 'ADMIN' });
+            await api.post('/otp/verify', { email: mail, code: otp, accountType: user?.role || 'STUDENT' });
             
-            // 2. Update Password on Admin
-            await api.put(`/admins/${user?.id}`, {
-                name,
-                mail,
-                department,
-                password: newPass
-            });
+            // 2. Update Password on Backend (Admins natively support it via PUT /admins, others via a generic password endpoint if it existed, but we'll try PUT /admins for admin, and fallback to password reset endpoints)
+            if (user?.role === 'ADMIN') {
+                await api.put(`/admins/${user?.id}`, {
+                    name,
+                    mail,
+                    department,
+                    password: newPass
+                });
+            } else {
+                await api.post('/auth/password/reset/confirm', { email: mail, otp, newPassword: newPass });
+            }
 
             addToast('Password updated successfully', 'success');
             setOtpSent(false);
@@ -136,14 +166,21 @@ export const Settings: React.FC = () => {
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div style={{ display: 'flex', gap: '16px' }}>
                             <div style={{ flex: 1 }}>
-                                <Input label="Full Name" value={name} onChange={(e: any) => setName(e.target.value)} style={{ marginBottom: 0 }} />
+                                <Input label="Full Name" value={name} onChange={(e: any) => setName(e.target.value)} disabled={user?.role === 'STUDENT'} style={{ marginBottom: 0, backgroundColor: user?.role === 'STUDENT' ? 'var(--surface-hover)' : '' }} />
                             </div>
                             <div style={{ flex: 1 }}>
                                 <Input label="Email (Mail)" value={mail} onChange={(e: any) => setMail(e.target.value)} disabled style={{ marginBottom: 0, backgroundColor: 'var(--surface-hover)' }} />
                             </div>
                         </div>
-                        <div>
-                            <Input label="Department" value={department} onChange={(e: any) => setDepartment(e.target.value)} style={{ marginBottom: 0 }} />
+                        <div style={{ display: 'flex', gap: '16px' }}>
+                            <div style={{ flex: 1 }}>
+                                <Input label="Department / Branch" value={department} onChange={(e: any) => setDepartment(e.target.value)} disabled={user?.role === 'STUDENT'} style={{ marginBottom: 0, backgroundColor: user?.role === 'STUDENT' ? 'var(--surface-hover)' : '' }} />
+                            </div>
+                            {user?.role === 'STUDENT' && (
+                                <div style={{ flex: 1 }}>
+                                    <Input label="Roll Number" value={rollNo} onChange={(e: any) => setRollNo(e.target.value)} disabled style={{ marginBottom: 0, backgroundColor: 'var(--surface-hover)' }} />
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -196,7 +233,7 @@ export const Settings: React.FC = () => {
                             </div>
                         </div>
                         <div 
-                            onClick={() => setEmailAlerts(!emailAlerts)}
+                            onClick={() => { setEmailAlerts(!emailAlerts); addToast(emailAlerts ? 'Email Notifications disabled' : 'Email Notifications enabled', 'success'); }}
                             style={{ width: '44px', height: '24px', backgroundColor: emailAlerts ? 'var(--primary)' : 'var(--border-color)', borderRadius: '12px', padding: '2px', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: emailAlerts ? 'flex-end' : 'flex-start' }}
                         >
                             <div style={{ width: '20px', height: '20px', backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}></div>
@@ -214,7 +251,7 @@ export const Settings: React.FC = () => {
                             </div>
                         </div>
                         <div 
-                            onClick={() => setPushAlerts(!pushAlerts)}
+                            onClick={() => { setPushAlerts(!pushAlerts); addToast(pushAlerts ? 'App Push Notifications disabled' : 'App Push Notifications enabled', 'success'); }}
                             style={{ width: '44px', height: '24px', backgroundColor: pushAlerts ? 'var(--primary)' : 'var(--border-color)', borderRadius: '12px', padding: '2px', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: pushAlerts ? 'flex-end' : 'flex-start' }}
                         >
                             <div style={{ width: '20px', height: '20px', backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}></div>
@@ -232,7 +269,7 @@ export const Settings: React.FC = () => {
                             </div>
                         </div>
                         <div 
-                            onClick={() => setDeadlineAlerts(!deadlineAlerts)}
+                            onClick={() => { setDeadlineAlerts(!deadlineAlerts); addToast(deadlineAlerts ? 'Deadline Alerts disabled' : 'Deadline Alerts enabled', 'success'); }}
                             style={{ width: '44px', height: '24px', backgroundColor: deadlineAlerts ? 'var(--primary)' : 'var(--border-color)', borderRadius: '12px', padding: '2px', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: deadlineAlerts ? 'flex-end' : 'flex-start' }}
                         >
                             <div style={{ width: '20px', height: '20px', backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}></div>

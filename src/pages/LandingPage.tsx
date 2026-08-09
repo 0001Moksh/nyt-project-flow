@@ -46,7 +46,7 @@ export const LandingPage: React.FC = () => {
         fetchLeaderboard();
     }, []);
 
-    // Registration Modal States
+    const [departments, setDepartments] = useState<string[]>([]);
     const [showRegisterModal, setShowRegisterModal] = useState(false);
     const [regStep, setRegStep] = useState<1 | 2>(1);
     const [isRegistering, setIsRegistering] = useState(false);
@@ -55,9 +55,18 @@ export const LandingPage: React.FC = () => {
         department: '',
         mail: '',
         phoneNumber: '',
-        password: '',
         otp: ''
     });
+
+    useEffect(() => {
+        if (showRegisterModal) {
+            api.get('/supervisors').then(res => {
+                const sups = res.data || [];
+                const uniqueDepts = Array.from(new Set(sups.map((s: any) => s.branch).filter(Boolean))) as string[];
+                setDepartments(uniqueDepts.length > 0 ? uniqueDepts : ['Computer Science', 'Information Technology', 'Electronics']);
+            }).catch(console.error);
+        }
+    }, [showRegisterModal]);
 
     const handleRegChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setRegData({ ...regData, [e.target.name]: e.target.value });
@@ -85,19 +94,18 @@ export const LandingPage: React.FC = () => {
             // 1. Verify OTP
             await api.post('/otp/verify', { email: regData.mail, code: regData.otp, accountType: 'SUPERVISOR' });
             
-            // 2. Submit the registration request
+            // 2. Submit the registration request (no password)
             await api.post('/requests', {
                 supervisorName: regData.supervisorName,
                 department: regData.department,
                 mail: regData.mail,
-                phoneNumber: regData.phoneNumber,
-                password: regData.password
+                phoneNumber: regData.phoneNumber
             });
             
             alert("Registration successful! Your request has been sent to the Admin for approval.");
             setShowRegisterModal(false);
             setRegStep(1);
-            setRegData({ supervisorName: '', department: '', mail: '', phoneNumber: '', password: '', otp: '' });
+            setRegData({ supervisorName: '', department: '', mail: '', phoneNumber: '', otp: '' });
         } catch (err: any) {
              alert(err.response?.data?.message || err.message || "OTP Verification failed.");
         } finally {
@@ -408,7 +416,12 @@ export const LandingPage: React.FC = () => {
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Department</label>
-                                    <input required name="department" value={regData.department} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem' }} />
+                                    <select required name="department" value={regData.department} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem', backgroundColor: 'white' }}>
+                                        <option value="" disabled>Select a department</option>
+                                        {departments.map(dept => (
+                                            <option key={dept} value={dept}>{dept}</option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Email</label>
@@ -417,10 +430,6 @@ export const LandingPage: React.FC = () => {
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Phone Number</label>
                                     <input required name="phoneNumber" value={regData.phoneNumber} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem' }} />
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Password</label>
-                                    <input required type="password" name="password" value={regData.password} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem' }} />
                                 </div>
                                 <button type="submit" disabled={isRegistering} className="btn btn-primary" style={{ marginTop: '16px', padding: '14px', fontSize: '1.1rem', background: '#0A2B73', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
                                     {isRegistering ? 'Sending OTP...' : 'Send OTP'}

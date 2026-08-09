@@ -8,6 +8,7 @@ export const AdminSupervisors: React.FC = () => {
     const [supervisors, setSupervisors] = useState<any[]>([]);
     const [projects, setProjects] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
         fetchData();
@@ -40,7 +41,16 @@ export const AdminSupervisors: React.FC = () => {
     return (
         <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                    <input
+                        type="text"
+                        placeholder="Search supervisor name, ID..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        style={{ width: '300px', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', outline: 'none', fontSize: '13px' }}
+                    />
+                </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
                     <Button variant="outline" size="sm" leftIcon={<Download size={16} />}>Export Report</Button>
                     <Button variant="primary" size="sm" leftIcon={<UserPlus size={16} />}>Invite Supervisor</Button>
@@ -57,7 +67,7 @@ export const AdminSupervisors: React.FC = () => {
                                 <th style={{ padding: '16px 24px', fontWeight: 600 }}>Supervisor</th>
                                 <th style={{ padding: '16px', fontWeight: 600 }}>Department</th>
                                 <th style={{ padding: '16px', fontWeight: 600 }}>Current Workload</th>
-                                <th style={{ padding: '16px', fontWeight: 600 }}>Performance</th>
+                                <th style={{ padding: '16px', fontWeight: 600 }}>Email (Mail)</th>
                                 <th style={{ padding: '16px', fontWeight: 600 }}>Status</th>
                             </tr>
                         </thead>
@@ -65,11 +75,11 @@ export const AdminSupervisors: React.FC = () => {
                             {supervisors.length === 0 && (
                                 <tr><td colSpan={4} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-disabled)' }}>No active supervisors in database.</td></tr>
                             )}
-                            {supervisors.map((sup, idx) => {
+                            {supervisors
+                                .filter(sup => sup.name.toLowerCase().includes(searchQuery.toLowerCase()) || (sup.supervisorId && sup.supervisorId.toLowerCase().includes(searchQuery.toLowerCase())))
+                                .map((sup, idx) => {
                                 const workload = getWorkload(sup.supervisorId);
                                 const isOverloaded = workload.percentage >= 100;
-                                const perfScore = sup.performanceScore ?? 100;
-                                const isPoorPerf = perfScore < 50;
 
                                 return (
                                     <tr key={sup.supervisorId} style={{ borderTop: '1px solid var(--border-color)', fontSize: '14px' }}>
@@ -100,7 +110,7 @@ export const AdminSupervisors: React.FC = () => {
                                         </td>
                                         <td style={{ padding: '16px' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <span style={{ fontSize: '13px', fontWeight: 600, color: isPoorPerf ? '#ef4444' : '#16a34a' }}>{perfScore}%</span>
+                                                <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>{sup.mail}</span>
                                             </div>
                                         </td>
                                         <td style={{ padding: '16px' }}>

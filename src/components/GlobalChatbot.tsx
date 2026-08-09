@@ -9,25 +9,38 @@ export const GlobalChatbot: React.FC = () => {
     ]);
     const [input, setInput] = useState('');
 
-    const handleSend = () => {
-        if (!input.trim()) return;
+    const [isLoading, setIsLoading] = useState(false);
+    
+    const handleSend = async () => {
+        if (!input.trim() || isLoading) return;
         const newMessages = [...messages, { role: 'user', text: input } as const];
         setMessages(newMessages);
         setInput('');
+        setIsLoading(true);
 
-        // Mock RAG logic
-        setTimeout(() => {
-            let response = "I don't have enough context in the knowledge base to answer that yet.";
-            const q = input.toLowerCase();
-            if (q.includes('synopsis')) {
-                response = "A Synopsis is your Stage 1 deliverable. According to the rubric, it is graded out of 10 points focusing on problem identification, literature survey, and proposed methodology.";
-            } else if (q.includes('progress 1') || q.includes('sprint')) {
-                response = "Progress 1 focuses on your initial milestone implementation and teamwork contribution. It is graded out of 10.";
-            } else if (q.includes('risk') || q.includes('delay')) {
-                response = "Based on aggregate timelines, teams that fail to submit their Synopsis within the first 14 days have a 40% higher chance of score penalization heavily affecting their Final Submission.";
+        try {
+            const CHATBOT_URL = import.meta.env.VITE_CHATBOT_URL || 'http://localhost:8000/chat';
+            // Use a mock user ID for the global chatbot if auth user is not available
+            const userId = 'global-user-' + Math.floor(Math.random() * 1000);
+            
+            const response = await fetch(CHATBOT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, message: input })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
             }
-            setMessages([...newMessages, { role: 'bot', text: response }]);
-        }, 1000);
+            
+            const data = await response.json();
+            setMessages([...newMessages, { role: 'bot', text: data.response || 'No response from Deva.' }]);
+        } catch (error) {
+            console.error('Chatbot API Error:', error);
+            setMessages([...newMessages, { role: 'bot', text: 'Sorry, I am currently unavailable. Please try again later.' }]);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     if (!isOpen) {
