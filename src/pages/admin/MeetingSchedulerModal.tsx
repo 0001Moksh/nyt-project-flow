@@ -3,6 +3,7 @@ import { Button, Input } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { Calendar, Video, MapPin, X, Clock, RefreshCw, GripVertical, Coffee } from 'lucide-react';
+import { isValidMeetingLink, normalizeMeetingLink } from '../../utils/meetingLinks';
 
 interface SequenceItem {
     id: string;
@@ -166,33 +167,25 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
         if (mode === 'OFFLINE' && !formData.locationOrLink) {
             return addToast('Room / Location is required for OFFLINE mode.', 'error');
         }
+        if (mode === 'ONLINE' && !isValidMeetingLink(formData.locationOrLink)) {
+            return addToast('Please paste a valid meeting link. Google Meet links must look like https://meet.google.com/abc-defg-hij.', 'error');
+        }
         if (slots.length === 0) {
             return addToast('No approved projects to schedule.', 'error');
         }
 
         setIsLoading(true);
         try {
-            const sessionStartTime = slots[0].startTime + ':00';
-            const sessionEndTime = slots[slots.length - 1].endTime + ':00';
-
-            const payload = {
-                formId,
+            const meetingSlots = slots.filter(s => s.type === 'PROJECT');
+            await Promise.all(meetingSlots.map((slot) => api.post('/supervisor/meetings', {
+                projectId: slot.project.projectId,
+                supervisorId: slot.project.supervisorId,
                 stage,
-                mode,
                 meetingDate: formData.meetingDate,
-                sessionStartTime,
-                sessionEndTime,
-                durationMinutes: formData.durationMinutes,
-                locationOrLink: mode === 'ONLINE' ? null : formData.locationOrLink,
-                slots: slots.filter(s => s.type === 'PROJECT').map(s => ({
-                    projectId: s.project.projectId,
-                    supervisorId: s.project.supervisorId,
-                    meetingTime: s.startTime + ':00',
-                    endTime: s.endTime + ':00'
-                }))
-            };
-
-            await api.post('/admin/meetings/custom-schedule', payload);
+                meetingTime: `${slot.startTime}:00`,
+                mode,
+                locationOrLink: mode === 'ONLINE' ? normalizeMeetingLink(formData.locationOrLink) : formData.locationOrLink.trim()
+            })));
             addToast(`Successfully scheduled meetings for ${stage}! Notifications sent to guests.`, 'success');
             onClose();
         } catch (err: any) {
@@ -219,10 +212,10 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
                     {/* Left Panel: Config */}
                     <div style={{ width: '300px', borderRight: '1px solid var(--border-color)', padding: '24px', overflowY: 'auto', backgroundColor: 'var(--surface)' }}>
                         <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
-                            <button onClick={() => setMode('ONLINE')} style={{ flex: 1, padding: '8px', borderRadius: '8px', border: mode === 'ONLINE' ? '2px solid var(--primary-color)' : '1px solid var(--border-color)', backgroundColor: mode === 'ONLINE' ? 'var(--primary-light)' : 'white', cursor: 'pointer' }}>
+                            <button type="button" onClick={() => setMode('ONLINE')} style={{ flex: 1, padding: '8px', borderRadius: '8px', border: mode === 'ONLINE' ? '2px solid #2563eb' : '1px solid var(--border-color)', backgroundColor: mode === 'ONLINE' ? '#eff6ff' : 'white', color: mode === 'ONLINE' ? '#1d4ed8' : 'var(--text-primary)', cursor: 'pointer' }}>
                                 <Video size={16} style={{ display: 'block', margin: '0 auto 4px' }} /> Online
                             </button>
-                            <button onClick={() => setMode('OFFLINE')} style={{ flex: 1, padding: '8px', borderRadius: '8px', border: mode === 'OFFLINE' ? '2px solid var(--primary-color)' : '1px solid var(--border-color)', backgroundColor: mode === 'OFFLINE' ? 'var(--primary-light)' : 'white', cursor: 'pointer' }}>
+                            <button type="button" onClick={() => setMode('OFFLINE')} style={{ flex: 1, padding: '8px', borderRadius: '8px', border: mode === 'OFFLINE' ? '2px solid #2563eb' : '1px solid var(--border-color)', backgroundColor: mode === 'OFFLINE' ? '#eff6ff' : 'white', color: mode === 'OFFLINE' ? '#1d4ed8' : 'var(--text-primary)', cursor: 'pointer' }}>
                                 <MapPin size={16} style={{ display: 'block', margin: '0 auto 4px' }} /> Offline
                             </button>
                         </div>
@@ -251,9 +244,12 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
                                 <input type="number" value={formData.gapMinutes} onChange={e => setFormData({...formData, gapMinutes: parseInt(e.target.value) || 0})} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
                             </div>
 
-                            {mode === 'OFFLINE' && (
-                                <Input label="Room / Location" value={formData.locationOrLink} onChange={(e: any) => setFormData({...formData, locationOrLink: e.target.value})} />
-                            )}
+                            <Input
+                                label={mode === 'ONLINE' ? 'Google Meet Link' : 'Room / Location'}
+                                placeholder={mode === 'ONLINE' ? 'https://meet.google.com/abc-defg-hij' : 'Room 402, CS Block'}
+                                value={formData.locationOrLink}
+                                onChange={(e: any) => setFormData({...formData, locationOrLink: e.target.value})}
+                            />
 
                             <div style={{ marginTop: '16px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>

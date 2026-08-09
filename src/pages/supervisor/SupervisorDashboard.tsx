@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Button, Loader } from '../../components';
+import { Card, Button, Loader, ProjectTimeline, ReferenceTemplatesCard } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { useAuthStore } from '../../utils/authStore';
-import { CheckCircle, Clock, Users, X, Download } from 'lucide-react';
+import { CheckCircle, Clock, Users, X, Download, FolderKanban } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const SupervisorDashboard: React.FC = () => {
@@ -111,9 +111,34 @@ export const SupervisorDashboard: React.FC = () => {
              </Card>
          </div>
 
-         {/* This area left empty or for future charts */}
-         <div style={{ marginTop: '24px', padding: '32px', backgroundColor: 'var(--surface-hover)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-disabled)', border: '1px dashed var(--border-color)' }}>
-            <p>Select "Projects" from the sidebar to view and manage your assigned teams.</p>
+         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {projects.length === 0 ? (
+               <div style={{ marginTop: '24px', padding: '32px', backgroundColor: 'var(--surface-hover)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-disabled)', border: '1px dashed var(--border-color)' }}>
+                  <p>No projects are assigned to you yet.</p>
+               </div>
+            ) : (
+               projects.map((project) => (
+                  <Card key={project.projectId} elevation={1} style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '20px' }}>
+                        <div>
+                           <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <FolderKanban size={20} color="var(--primary)" /> {project.projectTitle}
+                           </h2>
+                           <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                              Current stage: {project.stageStatus || 'SYNOPSIS'}
+                           </p>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => navigate(`/supervisor/teams/${project.teamId}`)}>
+                           Open Project
+                        </Button>
+                     </div>
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <ProjectTimeline project={project} />
+                        <ReferenceTemplatesCard formId={project.formId} currentStage={project.stageStatus} />
+                     </div>
+                  </Card>
+               ))
+            )}
          </div>
 
       </div>

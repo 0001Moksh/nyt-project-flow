@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Button, Loader, ProjectTimeline } from '../../components';
+import { Card, Button, Loader, ProjectTimeline, ReferenceTemplatesCard } from '../../components';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../utils/authStore';
 import { Calendar, Users, MessageSquare, FileText, Star, AlertTriangle, FileCheck, MapPin, Video, CheckCircle, Clock, Paperclip } from 'lucide-react';
@@ -8,6 +8,7 @@ import { ScheduleMeetingModal } from './ScheduleMeetingModal';
 import { ExecuteMeetingModal } from './ExecuteMeetingModal';
 import type { FormAttachment, FormResponse } from '../../services/adminService';
 import { getPreviewUrl } from '../../utils/filePreview';
+import { isValidMeetingLink, openMeetingLink } from '../../utils/meetingLinks';
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
     if (!json) return [];
@@ -132,47 +133,7 @@ export const SupervisorTeamOverview: React.FC = () => {
 
                     <ProjectTimeline project={project} />
 
-                    {/* Form Reference Files */}
-                    {stageFiles.length > 0 && (
-                        <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '16px', padding: '28px' }}>
-                            <h3 style={{ margin: '0 0 20px 0', fontSize: '19px', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600 }}>
-                                <Paperclip size={20} color="var(--primary)" /> Form Reference Files
-                            </h3>
-                            <div style={{ display: 'grid', gap: '14px' }}>
-                                {stageFiles.map((file) => (
-                                    <div
-                                        key={file.attachmentId}
-                                        style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            padding: '16px 18px',
-                                            borderRadius: '12px',
-                                            border: '1px solid var(--border-color)',
-                                            backgroundColor: 'var(--surface-hover)'
-                                        }}
-                                    >
-                                        <div>
-                                            <div style={{ fontWeight: 600, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                {file.fileName}
-                                                {file.stage && (
-                                                    <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '999px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)' }}>
-                                                        {file.stage}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                                {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'Recently uploaded'}
-                                            </div>
-                                        </div>
-                                        <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>
-                                            Preview
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
-                    )}
+                    <ReferenceTemplatesCard formId={project?.formId} currentStage={project?.stageStatus} title="Form Reference Templates" />
 
                     {/* Official Batch Evaluations */}
                     <Card elevation={1} style={{ border: '1px solid #bae6fd', borderRadius: '16px', backgroundColor: '#f0f9ff', padding: '28px' }}>
@@ -223,10 +184,14 @@ export const SupervisorTeamOverview: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && meeting.locationOrLink && (
-                                        <Button size="sm" variant="outline" onClick={() => window.open(meeting.locationOrLink, '_blank')}>
-                                            Join Meeting
-                                        </Button>
+                                    {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
+                                        isValidMeetingLink(meeting.locationOrLink) ? (
+                                            <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink)}>
+                                                Join Meeting
+                                            </Button>
+                                        ) : (
+                                            <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
+                                        )
                                     )}
                                 </div>
                             ))}
@@ -339,15 +304,19 @@ export const SupervisorTeamOverview: React.FC = () => {
                                             gap: '12px',
                                             flexShrink: 0
                                         }}>
-                                            {meeting.mode === 'ONLINE' && meeting.locationOrLink && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => window.open(meeting.locationOrLink, '_blank')}
-                                                >
-                                                    <Video size={16} style={{ marginRight: '6px' }} />
-                                                    Join
-                                                </Button>
+                                            {meeting.mode === 'ONLINE' && (
+                                                isValidMeetingLink(meeting.locationOrLink) ? (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => openMeetingLink(meeting.locationOrLink)}
+                                                    >
+                                                        <Video size={16} style={{ marginRight: '6px' }} />
+                                                        Join
+                                                    </Button>
+                                                ) : (
+                                                    <span style={{ alignSelf: 'center', fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
+                                                )
                                             )}
 
                                             <Button

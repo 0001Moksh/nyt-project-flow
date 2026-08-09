@@ -5,7 +5,7 @@ import { Card } from './index';
 export const GlobalChatbot: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<{ role: 'user' | 'bot', text: string }[]>([
-        { role: 'bot', text: 'Hi! I am the NYT Project Flow AI Assistant. I can help you understand grading rubrics, predict project risks, or navigate your dashboard based on the curriculum guidelines. How can I help?' }
+        { role: 'bot', text: 'Hi! I am the DPGITM Project Management System assistant. I can help you understand grading rubrics, project risks, and dashboard workflows. How can I help?' }
     ]);
     const [input, setInput] = useState('');
 
@@ -57,7 +57,7 @@ export const GlobalChatbot: React.FC = () => {
             <div style={{ padding: '16px', backgroundColor: 'var(--primary)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Bot size={20} />
-                    <span style={{ fontWeight: 600 }}>Deva AI Assistant</span>
+                    <span style={{ fontWeight: 600 }}>DPGITM Assistant</span>
                 </div>
                 <button onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
                     <X size={20} />

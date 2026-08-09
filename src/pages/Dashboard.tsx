@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../utils/authStore';
-import { Card, Button, Loader, ProjectTimeline } from '../components';
+import { Card, Button, Loader, ProjectTimeline, ReferenceTemplatesCard } from '../components';
 import { useToastStore } from '../utils/toastStore';
 import { useNavigate } from 'react-router-dom';
 import { Check, X, Bell, Users, CheckCircle, Info, Calendar, Video, MapPin, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
 import { api } from '../services/api';
 import { DeliverableUploader } from '../components/DeliverableUploader';
+import { isValidMeetingLink, openMeetingLink } from '../utils/meetingLinks';
 
 export const Dashboard: React.FC = () => {
     const { user, isAuthenticated } = useAuthStore();
@@ -123,11 +124,14 @@ export const Dashboard: React.FC = () => {
 
             if (myProjects.length > 0) {
                 try {
-                    const mRes = await api.get(`/supervisor/meetings/project/${myProjects[0].projectId}`);
+                    const current = myProjects[0];
+                    const mRes = await api.get(`/supervisor/meetings/project/${current.projectId}`);
                     setMeetings(mRes.data || []);
                 } catch (e) {
                     console.error(e);
                 }
+            } else {
+                setMeetings([]);
             }
 
             // Deduplicate members list based on ID
@@ -259,6 +263,8 @@ export const Dashboard: React.FC = () => {
 
                         <ProjectTimeline project={currentProject} />
 
+                        <ReferenceTemplatesCard formId={currentProject?.formId} currentStage={currentProject?.stageStatus} />
+
                         {/* Active Members List */}
                         <Card elevation={1} style={{ padding: '0', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
                             <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fdfdfd' }}>
@@ -340,8 +346,12 @@ export const Dashboard: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && meeting.locationOrLink && (
-                                            <Button size="sm" variant="outline" onClick={() => window.open(meeting.locationOrLink, '_blank')} style={{ borderColor: '#0284c7', color: '#0284c7' }}>Join GMeet</Button>
+                                        {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
+                                            isValidMeetingLink(meeting.locationOrLink) ? (
+                                                <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink, () => addToast('This meeting has an invalid link. Ask your supervisor/admin to update it.', 'error'))} style={{ borderColor: '#0284c7', color: '#0284c7' }}>Join GMeet</Button>
+                                            ) : (
+                                                <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
+                                            )
                                         )}
                                     </div>
                                 ))}
@@ -385,8 +395,12 @@ export const Dashboard: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && meeting.locationOrLink && (
-                                            <Button size="sm" variant="outline" onClick={() => window.open(meeting.locationOrLink, '_blank')}>Join GMeet</Button>
+                                        {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
+                                            isValidMeetingLink(meeting.locationOrLink) ? (
+                                                <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink, () => addToast('This meeting has an invalid link. Ask your supervisor/admin to update it.', 'error'))}>Join GMeet</Button>
+                                            ) : (
+                                                <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
+                                            )
                                         )}
                                     </div>
                                 ))}

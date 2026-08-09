@@ -6,6 +6,7 @@ import { useAuthStore } from '../utils/authStore';
 import { useToastStore } from '../utils/toastStore';
 import { ToastContainer } from '../components/Toast';
 import { Lock, Mail } from 'lucide-react';
+import dpgitmLogo from '../assets/images/dpgitm-logo.png';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -192,14 +193,18 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
-      <Card style={{ width: '100%', maxWidth: '400px' }} elevation={2}>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh', padding: '24px' }}>
+      <Card style={{ width: '100%', maxWidth: '430px', borderTop: '4px solid var(--primary)' }} elevation={3}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <img src={dpgitmLogo} alt="DPGITM logo" style={{ width: '72px', height: '72px', objectFit: 'contain', marginBottom: '14px' }} />
+          <div style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: 800, marginBottom: '8px' }}>
+            DPGITM Project Management System
+          </div>
           <h2 style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
             {verifyState === 'LOGIN' ? 'Welcome Back' : 'First Time Setup'}
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-            {verifyState === 'LOGIN' ? 'Sign in to continue to NYT Project Flow' : 
+            {verifyState === 'LOGIN' ? 'Sign in to continue to DPGITM Project Management System' : 
              verifyState.startsWith('FORGOT_PASSWORD') ? 'Reset your password securely' :
              'Verify your account and set up a secure password'}
           </p>

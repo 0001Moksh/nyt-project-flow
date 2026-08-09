@@ -22,11 +22,69 @@ export const MeetingManagementPanel: React.FC<MeetingManagementPanelProps> = ({ 
         fetchSessions();
     }, [formId]);
 
+    const addMinutes = (timeStr: string, mins: number) => {
+        const [h, m] = timeStr.split(':').map(Number);
+        const date = new Date();
+        date.setHours(h, m, 0, 0);
+        date.setMinutes(date.getMinutes() + mins);
+        return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:00`;
+    };
+
     const fetchSessions = async () => {
         setIsLoading(true);
         try {
-            const res = await api.get(`/admin/meetings/sessions/${formId}`);
-            setSessions(res.data || []);
+            const projectsRes = await api.get('/projects').catch(() => ({ data: [] }));
+            const formProjects = (projectsRes.data || []).filter((project: any) => project.formId === formId);
+            const projectById = new Map<string, any>(formProjects.map((project: any) => [project.projectId, project]));
+
+            const meetingResponses = await Promise.all(
+                formProjects.map((project: any) => api.get(`/supervisor/meetings/project/${project.projectId}`).catch(() => ({ data: [] })))
+            );
+            const meetings = meetingResponses.flatMap((response) => response.data || []);
+
+            const grouped = meetings.reduce((acc: Record<string, any>, meeting: any) => {
+                const key = [
+                    meeting.stage,
+                    meeting.mode,
+                    meeting.meetingDate,
+                    meeting.locationOrLink || ''
+                ].join('|');
+
+                if (!acc[key]) {
+                    acc[key] = {
+                        sessionId: key,
+                        stage: meeting.stage,
+                        mode: meeting.mode,
+                        meetingDate: meeting.meetingDate,
+                        sessionStartTime: meeting.meetingTime,
+                        sessionEndTime: meeting.meetingTime,
+                        durationPerTeam: 0,
+                        locationOrLink: meeting.locationOrLink,
+                        slots: []
+                    };
+                }
+
+                const project = projectById.get(meeting.projectId);
+                acc[key].slots.push({
+                    ...meeting,
+                    projectTitle: project?.projectTitle,
+                    endTime: addMinutes(meeting.meetingTime, 0)
+                });
+                return acc;
+            }, {});
+
+            const nextSessions = Object.values(grouped).map((session: any) => {
+                const sortedSlots = session.slots.sort((a: any, b: any) => (a.meetingTime || '').localeCompare(b.meetingTime || ''));
+                return {
+                    ...session,
+                    sessionStartTime: sortedSlots[0]?.meetingTime || session.sessionStartTime,
+                    sessionEndTime: sortedSlots[sortedSlots.length - 1]?.meetingTime || session.sessionEndTime,
+                    slots: sortedSlots
+                };
+            }).sort((a: any, b: any) => `${b.meetingDate} ${b.sessionStartTime}`.localeCompare(`${a.meetingDate} ${a.sessionStartTime}`));
+
+            setSessions(nextSessions);
+            setSessionSlots(Object.fromEntries(nextSessions.map((session: any) => [session.sessionId, session.slots])));
         } catch (err) {
             console.error(err);
             addToast('Failed to fetch meeting sessions', 'error');
@@ -44,13 +102,7 @@ export const MeetingManagementPanel: React.FC<MeetingManagementPanelProps> = ({ 
         setExpandedSession(sessionId);
         
         if (!sessionSlots[sessionId]) {
-            try {
-                const res = await api.get(`/admin/meetings/sessions/${sessionId}/slots`);
-                setSessionSlots(prev => ({ ...prev, [sessionId]: res.data || [] }));
-            } catch (err) {
-                console.error(err);
-                addToast('Failed to fetch session slots', 'error');
-            }
+            setSessionSlots(prev => ({ ...prev, [sessionId]: [] }));
         }
     };
 
@@ -97,8 +149,8 @@ export const MeetingManagementPanel: React.FC<MeetingManagementPanelProps> = ({ 
                                             </div>
                                             <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '16px' }}>
                                                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={14} /> {session.meetingDate}</span>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} /> {session.sessionStartTime} - {session.sessionEndTime}</span>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} /> {session.durationPerTeam}m / team</span>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} /> {session.sessionStartTime?.substring(0, 5)} - {session.sessionEndTime?.substring(0, 5)}</span>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Users size={14} /> {session.slots.length} team(s)</span>
                                             </div>
                                         </div>
                                     </div>
@@ -136,7 +188,7 @@ export const MeetingManagementPanel: React.FC<MeetingManagementPanelProps> = ({ 
                                                             </div>
                                                         </div>
                                                         <div style={{ flex: 1, borderLeft: '1px solid var(--border-color)', paddingLeft: '16px' }}>
-                                                            <div style={{ fontSize: '14px', fontWeight: 500 }}>Project ID: {slot.projectId}</div>
+                                                            <div style={{ fontSize: '14px', fontWeight: 500 }}>{slot.projectTitle || `Project ID: ${slot.projectId}`}</div>
                                                             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                                 <Users size={12} /> Supervisor ID: {slot.supervisorId}
                                                             </div>

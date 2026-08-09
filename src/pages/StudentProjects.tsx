@@ -4,8 +4,9 @@ import { Card, Button, Loader, ProjectTimeline } from '../components';
 import { useNavigate } from 'react-router-dom';
 import { Check, X, Bell, Users, CheckCircle, Info, Star, ChevronRight, User, Briefcase, Hash, FolderKanban, History, Paperclip, Video, MapPin, Calendar, Clock } from 'lucide-react';
 import { api } from '../services/api';
-import type { FormAttachment, FormResponse } from '../services/adminService';
+import type { FormAttachment, FormResponse, Template } from '../services/adminService';
 import { getPreviewUrl } from '../utils/filePreview';
+import { isValidMeetingLink, openMeetingLink } from '../utils/meetingLinks';
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
     if (!json) return [];
@@ -16,6 +17,15 @@ const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
         return [];
     }
 };
+
+const templateToAttachment = (template: Template): FormAttachment => ({
+    attachmentId: template.id,
+    fileName: template.name,
+    fileUrl: template.fileUrl,
+    uploadedAt: template.createdAt,
+    source: template.sourceType,
+    stage: template.stageId
+});
 
 export const StudentProjects: React.FC = () => {
     const { user, isAuthenticated } = useAuthStore();
@@ -29,6 +39,7 @@ export const StudentProjects: React.FC = () => {
     const [supervisorHistory, setSupervisorHistory] = useState<any[]>([]);
     const [meetings, setMeetings] = useState<any[]>([]);
     const [formConfig, setFormConfig] = useState<FormResponse | null>(null);
+    const [templates, setTemplates] = useState<Template[]>([]);
     const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
 
     useEffect(() => {
@@ -113,6 +124,9 @@ export const StudentProjects: React.FC = () => {
                 const formRes = await api.get(`/forms/${myProject.formId}`).catch(() => ({ data: null }));
                 setFormConfig(formRes.data);
 
+                const templatesRes = await api.get(`/templates?form_id=${myProject.formId}`).catch(() => ({ data: [] }));
+                setTemplates(templatesRes.data || []);
+
                 const meetingsRes = await api.get(`/supervisor/meetings/project/${myProject.projectId}`).catch(() => ({ data: [] }));
                 setMeetings(meetingsRes.data || []);
             }
@@ -137,7 +151,10 @@ export const StudentProjects: React.FC = () => {
         );
     }
 
-    const referenceFiles = parseReferenceFiles(formConfig?.referenceFilesJson);
+    const referenceFiles = [
+        ...parseReferenceFiles(formConfig?.referenceFilesJson),
+        ...templates.map(templateToAttachment)
+    ];
 
     const matchesStage = (file: FormAttachment, stage?: string) => {
         const value = (file.stage || 'GENERAL').toUpperCase();
@@ -352,8 +369,12 @@ export const StudentProjects: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && meeting.locationOrLink && (
-                                        <Button size="sm" variant="outline" onClick={() => window.open(meeting.locationOrLink, '_blank')} style={{ borderColor: '#0284c7', color: '#0284c7' }}>Join GMeet</Button>
+                                    {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
+                                        isValidMeetingLink(meeting.locationOrLink) ? (
+                                            <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink)} style={{ borderColor: '#0284c7', color: '#0284c7' }}>Join GMeet</Button>
+                                        ) : (
+                                            <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
+                                        )
                                     )}
                                 </div>
                             ))}
@@ -395,8 +416,12 @@ export const StudentProjects: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && meeting.locationOrLink && (
-                                        <Button size="sm" variant="outline" onClick={() => window.open(meeting.locationOrLink, '_blank')}>Join GMeet</Button>
+                                    {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
+                                        isValidMeetingLink(meeting.locationOrLink) ? (
+                                            <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink)}>Join GMeet</Button>
+                                        ) : (
+                                            <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
+                                        )
                                     )}
                                 </div>
                             ))}

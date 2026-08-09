@@ -6,6 +6,7 @@ import { api } from '../services/api';
 import '../styles/landing.css';
 import heroImg from '../assets/images/hero.png';
 import techImg from '../assets/images/tech.png';
+import dpgitmLogo from '../assets/images/dpgitm-logo.png';
 
 export const LandingPage: React.FC = () => {
     const navigate = useNavigate();
@@ -111,14 +112,21 @@ export const LandingPage: React.FC = () => {
             {/* Hero Section */}
             <section className="hero-wrapper">
                 <div className="hero-content animate-fade-in-up delay-100">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '24px' }}>
+                        <img src={dpgitmLogo} alt="DPGITM logo" style={{ width: '64px', height: '64px', objectFit: 'contain' }} />
+                        <div>
+                            <div style={{ fontSize: '1.05rem', color: '#143d7d', fontWeight: 800 }}>DPGITM</div>
+                            <div style={{ fontSize: '0.9rem', color: '#5b6475', fontWeight: 600 }}>Project Management System</div>
+                        </div>
+                    </div>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: '#F0F4FF', color: '#0A2B73', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
                         <Brain size={16} /> AI-Powered Academic Environment
                     </div>
                     <h1 className="heading-xl">
-                        Streamlining Academic Projects with <span className="text-gradient">AI-Powered Intelligence</span>
+                        DPGITM Project Management System
                     </h1>
                     <p className="subtitle delay-200">
-                        Seamless collaboration, automated team formations, and real-time tracking from synopsis to final submission. Experience the future of research management.
+                        Manage teams, submissions, supervisor reviews, meetings, and milestone timelines from one structured academic workspace.
                     </p>
                     <div style={{ display: 'flex', gap: '16px' }} className="animate-fade-in-up delay-300">
                         <button className="btn btn-primary" onClick={() => navigate('/login')} style={{ padding: '16px 32px', fontSize: '1.1rem' }}>
@@ -314,7 +322,7 @@ export const LandingPage: React.FC = () => {
             <section style={{ padding: '100px 5%', background: '#0A2B73', color: '#FFF', textAlign: 'center' }}>
                 <h2 style={{ fontSize: '4rem', fontWeight: 800, marginBottom: '24px', letterSpacing: '-0.02em' }}>Ready to elevate your department?</h2>
                 <p style={{ fontSize: '1.2rem', color: '#B6C8F2', maxWidth: '600px', margin: '0 auto 48px', lineHeight: '1.6' }}>
-                    Join 40+ premier institutions using Chancellor Academia to manage the next generation of breakthroughs.
+                    Bring faculty, students, and administrators into one reliable workflow for final year project execution.
                 </p>
                 <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
                     <button className="btn btn-white" style={{ padding: '16px 32px', fontSize: '1.1rem' }}>Request Institution Demo</button>
@@ -323,16 +331,9 @@ export const LandingPage: React.FC = () => {
             </section>
 
             {/* Footer */}
-            <footer style={{ padding: '64px 5%', background: '#051A49', color: '#889BCE', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <footer style={{ padding: '32px 5%', background: '#051A49', color: '#889BCE', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: '#FFF' }}>
-                        <Brain size={24} />
-                        <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>NexYug Tech</span>
-                    </div>
-                    <p style={{ fontSize: '0.9rem', maxWidth: '300px' }}>Setting the global standard for academic project management through innovation and integrity.</p>
-                </div>
-                <div style={{ textAlign: 'right', fontSize: '0.9rem' }}>
-                    <p>© 2026 NexYug Tech. ALL RIGHTS RESERVED.</p>
+                    <p style={{ fontSize: '0.78rem' }}>Powered by - Nexyug Tech</p>
                 </div>
             </footer>
 

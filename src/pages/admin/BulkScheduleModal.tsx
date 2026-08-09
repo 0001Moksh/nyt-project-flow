@@ -3,6 +3,7 @@ import { Button, Input } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { Calendar, Video, MapPin, X } from 'lucide-react';
+import { isValidMeetingLink, normalizeMeetingLink } from '../../utils/meetingLinks';
 
 interface BulkScheduleModalProps {
     formId: string;
@@ -18,7 +19,7 @@ export const BulkScheduleModal: React.FC<BulkScheduleModalProps> = ({ formId, st
         meetingDate: '',
         startTime: '09:00',
         durationMinutes: 15,
-        locationOrLink: mode === 'OFFLINE' ? '' : 'https://meet.google.com/auto-generated'
+        locationOrLink: ''
     });
 
     const handleSchedule = async () => {
@@ -27,6 +28,9 @@ export const BulkScheduleModal: React.FC<BulkScheduleModalProps> = ({ formId, st
         }
         if (mode === 'OFFLINE' && !formData.locationOrLink) {
             return addToast('Room / Location is required for OFFLINE mode.', 'error');
+        }
+        if (mode === 'ONLINE' && !isValidMeetingLink(formData.locationOrLink)) {
+            return addToast('Please paste a valid meeting link. Google Meet links must look like https://meet.google.com/abc-defg-hij.', 'error');
         }
 
         setIsLoading(true);
@@ -38,7 +42,7 @@ export const BulkScheduleModal: React.FC<BulkScheduleModalProps> = ({ formId, st
                 meetingDate: formData.meetingDate,
                 startTime: formData.startTime + ':00', // appending seconds for LocalTime
                 durationMinutes: formData.durationMinutes,
-                locationOrLink: mode === 'ONLINE' ? null : formData.locationOrLink // Backend generates Google Meet link if ONLINE
+                locationOrLink: mode === 'ONLINE' ? normalizeMeetingLink(formData.locationOrLink) : formData.locationOrLink.trim()
             };
             await api.post('/admin/meetings/bulk-schedule', payload);
             addToast(`Successfully bulk scheduled meetings for ${stage}!`, 'success');
@@ -93,18 +97,12 @@ export const BulkScheduleModal: React.FC<BulkScheduleModalProps> = ({ formId, st
                         </div>
                     </div>
 
-                    {mode === 'OFFLINE' ? (
-                        <Input 
-                            label="Room / Location *" 
-                            placeholder="e.g., Room 101, CS Block"
-                            value={formData.locationOrLink} 
-                            onChange={(e: any) => setFormData({...formData, locationOrLink: e.target.value})} 
-                        />
-                    ) : (
-                        <div style={{ padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Video size={16} /> Google Meet links will be automatically generated.
-                        </div>
-                    )}
+                    <Input
+                        label={mode === 'ONLINE' ? 'Google Meet Link *' : 'Room / Location *'}
+                        placeholder={mode === 'ONLINE' ? 'https://meet.google.com/abc-defg-hij' : 'e.g., Room 101, CS Block'}
+                        value={formData.locationOrLink}
+                        onChange={(e: any) => setFormData({...formData, locationOrLink: e.target.value})}
+                    />
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '32px' }}>

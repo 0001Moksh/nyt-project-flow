@@ -4,6 +4,7 @@ import { useAuthStore } from '../utils/authStore';
 import { Button, Sidebar, NotificationBell } from './index';
 import { ToastContainer } from './Toast';
 import { GlobalChatbot } from './GlobalChatbot';
+import dpgitmLogo from '../assets/images/dpgitm-logo.png';
 
 export const Layout: React.FC = () => {
     const { user, logout } = useAuthStore();
@@ -39,18 +40,21 @@ export const Layout: React.FC = () => {
         return (
             <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
                 <header style={{
-                    backgroundColor: 'var(--surface)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.92)',
                     boxShadow: 'var(--shadow-1)',
-                    padding: '16px 32px',
+                    borderBottom: '1px solid var(--border-color)',
+                    padding: '14px 32px',
                     display: 'flex',
                     justifyContent: 'space-between',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    backdropFilter: 'blur(14px)'
                 }}>
                     <div
                         onClick={() => navigate('/')}
-                        style={{ cursor: 'pointer', fontWeight: 700 }}
+                        style={{ cursor: 'pointer', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--primary)' }}
                     >
-                        NYT Project Flow
+                        <img src={dpgitmLogo} alt="DPGITM logo" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
+                        DPGITM Project Management System
                     </div>
 
                     <Button onClick={() => navigate('/login')}>
@@ -143,6 +147,9 @@ export const Layout: React.FC = () => {
                 }}>
                     <Outlet />
                 </main>
+                <footer style={{ padding: '10px 32px 18px', textAlign: 'center', color: 'var(--text-disabled)', fontSize: '11px' }}>
+                    Powered by - Nexyug Tech
+                </footer>
             </div>
 
             {/* COMMAND PALETTE */}
