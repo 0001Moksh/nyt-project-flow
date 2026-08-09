@@ -204,6 +204,32 @@ export const Dashboard: React.FC = () => {
         }
     };
 
+    const handleCompleteTeam = async () => {
+        const currentProject = activeProjects[0];
+        if (!currentProject) return;
+        try {
+            const { data: tm } = await api.get(`/team-members/${currentProject.teamId}`);
+            let joined = JSON.parse(tm.joinMemberArray || '[]');
+            let pending = JSON.parse(tm.notJoinMemberArray || '[]');
+            let rejected = JSON.parse(tm.rejectedMemberArray || '[]');
+
+            // Move all pending to rejected
+            rejected = [...rejected, ...pending];
+            pending = [];
+
+            await api.put(`/team-members/${currentProject.teamId}`, {
+                joinMemberIds: joined,
+                notJoinMemberIds: pending,
+                rejectedMemberIds: rejected
+            });
+            
+            addToast('Team marked as complete. All pending invitations have been closed.', 'success');
+            fetchData();
+        } catch (err) {
+            addToast('Failed to complete team.', 'error');
+        }
+    };
+
     if (!user || isLoading) return <div style={{ display: 'flex', justifyContent: 'center', marginTop: '100px' }}><Loader size="lg" /></div>;
 
     const currentProject = activeProjects[0]; // For visual dashboard, focus on primary active project
@@ -269,7 +295,12 @@ export const Dashboard: React.FC = () => {
                         <Card elevation={1} style={{ padding: '0', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
                             <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fdfdfd' }}>
                                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Active Members</h3>
-                                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>3/4 SLOTS</span>
+                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                    {currentProject.leaderId === user.id && (
+                                        <Button variant="outline" size="sm" onClick={handleCompleteTeam}>Complete Team</Button>
+                                    )}
+                                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>3/4 SLOTS</span>
+                                </div>
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -284,7 +315,7 @@ export const Dashboard: React.FC = () => {
                                                     {tm.name} {tm.studentId === user.id ? '(You)' : ''}
                                                 </div>
                                                 <div style={{ fontSize: '13px', color: 'var(--text-disabled)' }}>
-                                                    {tm.isLeader ? 'Team Lead' : 'Team Member'} • Data Scientist
+                                                    {tm.isLeader ? 'Team Lead' : 'Team Member'} • {tm.rollNo || 'N/A'} • {tm.mail || 'No Email'}
                                                 </div>
                                             </div>
                                         </div>

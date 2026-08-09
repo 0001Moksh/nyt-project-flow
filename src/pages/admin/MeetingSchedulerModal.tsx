@@ -74,8 +74,24 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
         try {
             const res = await api.get(`/projects`);
             // Removing status === 'approved' strict check as per feedback
-            const formProjects = res.data.filter((p: any) => p.formId === formId && p.supervisorId);
+            let formProjects = res.data.filter((p: any) => p.formId === formId && p.supervisorId);
             
+            // Filter out projects that already have a meeting for this stage
+            const meetingResponses = await Promise.all(
+                formProjects.map((project: any) => api.get(`/supervisor/meetings/project/${project.projectId}`).catch(() => ({ data: [] })))
+            );
+            
+            const alreadyScheduledProjectIds = new Set();
+            meetingResponses.forEach((response, idx) => {
+                const projectMeetings = response.data || [];
+                const hasMeetingForStage = projectMeetings.some((m: any) => m.stage === stage);
+                if (hasMeetingForStage) {
+                    alreadyScheduledProjectIds.add(formProjects[idx].projectId);
+                }
+            });
+            
+            formProjects = formProjects.filter((p: any) => !alreadyScheduledProjectIds.has(p.projectId));
+
             const initialSequence = formProjects.map((p: any) => ({
                 id: p.projectId,
                 type: 'PROJECT' as const,
@@ -326,6 +342,13 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
                                             </>
                                         )}
                                     </div>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setSequence(sequence.filter((_, i) => i !== idx))}
+                                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-disabled)', padding: '8px' }}
+                                    >
+                                        <X size={18} />
+                                    </button>
                                 </div>
                             ))}
                         </div>

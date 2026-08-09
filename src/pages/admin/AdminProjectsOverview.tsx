@@ -261,8 +261,13 @@ export const AdminProjectsOverview: React.FC = () => {
                                         <tr style={{ backgroundColor: '#f8fafc', borderTop: '0' }}>
                                             <td colSpan={5} style={{ padding: '0 24px 24px 24px' }}>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '4px solid #3b82f6', paddingLeft: '24px', marginLeft: '56px' }}>
+                                                    {/* View Form Config & Supervisor Assignment Bar */}
+                                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                                                        <Button variant="outline" size="sm" onClick={() => window.location.href = `/admin/form-details/${proj.formId}`}>
+                                                            View Form Config
+                                                        </Button>
+                                                    </div>
                                                     
-                                                    {/* Supervisor Assignment Bar (from FormDetails) */}
                                                     <div className="admin-projects-assign" style={{ padding: '16px 24px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                                                         <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Assign Supervisor:</div>
                                                         <select 

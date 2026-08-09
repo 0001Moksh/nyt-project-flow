@@ -34,7 +34,7 @@ export const SupervisorReview: React.FC = () => {
     // Grading Form State
     const [score, setScore] = useState('');
     const [feedback, setFeedback] = useState('');
-    const [decision, setDecision] = useState<'APPROVE' | 'REJECT'>('APPROVE');
+    const [decision, setDecision] = useState<'APPROVE' | 'REJECT' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const addToast = useToastStore(state => state.addToast);
@@ -251,45 +251,66 @@ export const SupervisorReview: React.FC = () => {
                             <div style={{ fontSize: '48px', fontWeight: 800, color: '#15803d' }}>
                                 {project[`${activeStage.toLowerCase()}Score`]}<span style={{ fontSize: '20px', color: '#4ade80' }}>/10</span>
                             </div>
-                            <Button style={{ marginTop: '24px', width: '100%' }} variant="outline" onClick={() => navigate(`?grade=true`)}>Edit Assessment</Button>
+                            <Button style={{ marginTop: '24px', width: '100%' }} variant="outline" onClick={() => navigate(`?grade=true`)} disabled>Edit Assessment (Disabled)</Button>
                         </div>
                     ) : (
                         <form onSubmit={handleEvaluation} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Milestone Grade (Out of 10)</label>
-                                <input 
-                                    type="number" 
-                                    min="0" 
-                                    max="10" 
-                                    required 
-                                    value={score} 
-                                    onChange={e => setScore(e.target.value)}
-                                    placeholder="Enter score 0-10" 
-                                    style={{ width: '100%', padding: '12px', fontSize: '16px', fontWeight: 600, borderRadius: '8px', border: '2px solid var(--border-color)' }}
-                                />
-                            </div>
-
-                            <div>
-                                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Overall Feedback to Team</label>
-                                <textarea 
-                                    rows={8} 
-                                    required 
-                                    value={feedback} 
-                                    onChange={e => setFeedback(e.target.value)}
-                                    placeholder="Provide detailed feedback on the submission. What went well? What needs rework?"
-                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', resize: 'vertical', fontFamily: 'inherit' }}
-                                />
-                            </div>
-
                             <div style={{ display: 'flex', gap: '12px' }}>
-                                <Button type="button" variant={decision === 'APPROVE' ? 'primary' : 'outline'} onClick={() => setDecision('APPROVE')} leftIcon={<ThumbsUp size={16} />}>
+                                <Button type="button" variant={decision === 'APPROVE' ? 'primary' : 'outline'} onClick={() => setDecision('APPROVE')} leftIcon={<ThumbsUp size={16} />} style={{ flex: 1 }}>
                                     Approve
                                 </Button>
-                                <Button type="button" variant={decision === 'REJECT' ? 'primary' : 'outline'} onClick={() => setDecision('REJECT')} leftIcon={<ThumbsDown size={16} />}>
+                                <Button type="button" variant={decision === 'REJECT' ? 'primary' : 'outline'} onClick={() => setDecision('REJECT')} leftIcon={<ThumbsDown size={16} />} style={{ flex: 1 }}>
                                     Request Changes
                                 </Button>
                             </div>
-                            <Button type="submit" isLoading={isSubmitting} size="lg" style={{ marginTop: '8px', width: '100%' }}>{decision === 'APPROVE' ? 'Confirm Approval' : 'Send Back for Revision'}</Button>
+
+                            {decision === 'APPROVE' && (
+                                <>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Milestone Grade (Out of 10)</label>
+                                        <input 
+                                            type="number" 
+                                            min="0" 
+                                            max="10" 
+                                            required 
+                                            value={score} 
+                                            onChange={e => setScore(e.target.value)}
+                                            placeholder="Enter score 0-10" 
+                                            style={{ width: '100%', padding: '12px', fontSize: '16px', fontWeight: 600, borderRadius: '8px', border: '2px solid var(--border-color)' }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Overall Feedback to Team</label>
+                                        <textarea 
+                                            rows={6} 
+                                            required 
+                                            value={feedback} 
+                                            onChange={e => setFeedback(e.target.value)}
+                                            placeholder="Provide detailed feedback on the submission. What went well? What needs rework?"
+                                            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', resize: 'vertical', fontFamily: 'inherit' }}
+                                        />
+                                    </div>
+                                </>
+                            )}
+
+                            {decision === 'REJECT' && (
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Required Changes (Comments)</label>
+                                    <textarea 
+                                        rows={6} 
+                                        required 
+                                        value={feedback} 
+                                        onChange={e => setFeedback(e.target.value)}
+                                        placeholder="Specify what changes are required..."
+                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', resize: 'vertical', fontFamily: 'inherit' }}
+                                    />
+                                </div>
+                            )}
+
+                            <Button type="submit" disabled={!decision} isLoading={isSubmitting} size="lg" style={{ marginTop: '8px', width: '100%' }}>
+                                {decision === 'APPROVE' ? 'Confirm Approval' : decision === 'REJECT' ? 'Send Back for Revision' : 'Select a decision'}
+                            </Button>
                         </form>
                     )}
 
