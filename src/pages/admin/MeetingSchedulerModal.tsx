@@ -187,21 +187,31 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
             return addToast('Please paste a valid meeting link. Google Meet links must look like https://meet.google.com/abc-defg-hij.', 'error');
         }
         if (slots.length === 0) {
-            return addToast('No approved projects to schedule.', 'error');
+            return addToast('No projects available to schedule.', 'error');
         }
 
         setIsLoading(true);
         try {
             const meetingSlots = slots.filter(s => s.type === 'PROJECT');
-            await Promise.all(meetingSlots.map((slot) => api.post('/supervisor/meetings', {
-                projectId: slot.project.projectId,
-                supervisorId: slot.project.supervisorId,
+            const lastSlot = meetingSlots[meetingSlots.length - 1];
+            const payload = {
+                formId,
                 stage,
-                meetingDate: formData.meetingDate,
-                meetingTime: `${slot.startTime}:00`,
                 mode,
-                locationOrLink: mode === 'ONLINE' ? normalizeMeetingLink(formData.locationOrLink) : formData.locationOrLink.trim()
-            })));
+                meetingDate: formData.meetingDate,
+                sessionStartTime: `${formData.startTime}:00`,
+                sessionEndTime: `${(lastSlot?.endTime || formData.startTime)}:00`,
+                durationMinutes: formData.durationMinutes,
+                locationOrLink: mode === 'ONLINE' ? normalizeMeetingLink(formData.locationOrLink) : formData.locationOrLink.trim(),
+                slots: meetingSlots.map((slot) => ({
+                    projectId: slot.project.projectId,
+                    supervisorId: slot.project.supervisorId,
+                    meetingTime: `${slot.startTime}:00`,
+                    endTime: `${slot.endTime}:00`,
+                })),
+            };
+
+            await api.post('/admin/meetings/custom-schedule', payload, { timeout: 60000 });
             addToast(`Successfully scheduled meetings for ${stage}! Notifications sent to guests.`, 'success');
             onClose();
         } catch (err: any) {

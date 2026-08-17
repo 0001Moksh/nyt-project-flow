@@ -679,12 +679,39 @@ export const FormDetails: React.FC = () => {
 
       {/* MEETING MANAGEMENT PANEL */}
       {isMeetingPanelOpen && formId && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'flex-end', zIndex: 900 }} onClick={() => setIsMeetingPanelOpen(false)}>
-          <div style={{ width: '800px', maxWidth: '90vw', height: '100%', backgroundColor: 'var(--surface)', overflowY: 'auto', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-            <div style={{ position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 10, padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.4)',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            zIndex: 900,
+            animation: 'meetingOverlayFade 180ms ease-out',
+          }}
+          onClick={() => setIsMeetingPanelOpen(false)}
+        >
+          <div
+            style={{
+              width: '820px',
+              maxWidth: '94vw',
+              height: '100%',
+              backgroundColor: 'var(--surface)',
+              overflowY: 'auto',
+              boxShadow: '-8px 0 32px rgba(15, 23, 42, 0.12)',
+              display: 'flex',
+              flexDirection: 'column',
+              animation: 'meetingPanelSlide 220ms ease-out',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 10, padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <h2 style={{ margin: 0, fontSize: '20px' }}>Meeting Management</h2>
-                  <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>Overview of batch meeting sessions.</p>
+                  <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 650 }}>Meeting Management</h2>
+                  <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>Batch sessions for this form — expand a stage to manage team slots.</p>
                 </div>
                 <button onClick={() => setIsMeetingPanelOpen(false)} style={{ background: 'var(--surface-hover)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
                   <X size={20} />
@@ -694,6 +721,16 @@ export const FormDetails: React.FC = () => {
                 <MeetingManagementPanel formId={formId} />
             </div>
           </div>
+          <style>{`
+            @keyframes meetingOverlayFade {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            @keyframes meetingPanelSlide {
+              from { transform: translateX(28px); opacity: 0.85; }
+              to { transform: translateX(0); opacity: 1; }
+            }
+          `}</style>
         </div>
       )}
     </div>

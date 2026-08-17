@@ -57,6 +57,8 @@ export const Enrollment: React.FC = () => {
 
   // Available students to search
   const [allStudents, setAllStudents] = useState<any[]>([]);
+  const [allTeams, setAllTeams] = useState<any[]>([]);
+  const [alreadyEnrolled, setAlreadyEnrolled] = useState(false);
 
   useEffect(() => {
     if (!formId) {
@@ -69,8 +71,24 @@ export const Enrollment: React.FC = () => {
       try {
         const data = await studentService.getFormDetails(formId);
         setFormConfig(data);
-        const { data: stdRes } = await api.get('/students');
-        setAllStudents(stdRes);
+        const [stdRes, teamsRes, projectsRes] = await Promise.all([
+          api.get('/students'),
+          api.get('/teams').catch(() => ({ data: [] })),
+          api.get('/projects').catch(() => ({ data: [] })),
+        ]);
+        setAllStudents(stdRes.data || []);
+        setAllTeams(teamsRes.data || []);
+
+        if (user?.id) {
+          const me = (stdRes.data || []).find((s: any) => s.studentId === user.id);
+          const hasProject = (projectsRes.data || []).some((p: any) => {
+            const team = (teamsRes.data || []).find((t: any) => t.teamId === p.teamId);
+            if (!team) return false;
+            const members = JSON.parse(team.teamMemberArray || '[]');
+            return team.leaderId === user.id || members.includes(user.id);
+          });
+          setAlreadyEnrolled(me?.enrollStatus === 'ENROLLED' || hasProject);
+        }
       } catch (err) {
         addToast('Enrollment form not found or inactive.', 'error');
       } finally {
@@ -78,7 +96,30 @@ export const Enrollment: React.FC = () => {
       }
     };
     fetchForm();
-  }, [formId, addToast]);
+  }, [formId, addToast, user?.id]);
+
+  const enrolledOrBusyStudentIds = new Set<string>();
+  allStudents.forEach((s: any) => {
+    if (s.enrollStatus === 'ENROLLED') enrolledOrBusyStudentIds.add(s.studentId);
+  });
+  allTeams.forEach((team: any) => {
+    if (team.leaderId) enrolledOrBusyStudentIds.add(team.leaderId);
+    try {
+      const members = JSON.parse(team.teamMemberArray || '[]');
+      if (Array.isArray(members)) members.forEach((id: string) => enrolledOrBusyStudentIds.add(id));
+    } catch { /* ignore */ }
+  });
+
+  const selectableStudents = allStudents.filter((s: any) => {
+    const sBranch = (s.branch || '').toLowerCase();
+    const sBatch = (s.batch || '').toLowerCase();
+    const validBranches = (formConfig?.accessBranch || '').split(',').map((b: string) => b.trim().toLowerCase()).filter(Boolean);
+    const validBatches = (formConfig?.accessBatch || '').split(',').map((b: string) => b.trim().toLowerCase()).filter(Boolean);
+    return !enrolledOrBusyStudentIds.has(s.studentId) &&
+      s.studentId !== user?.id &&
+      (validBranches.length === 0 || validBranches.includes(sBranch)) &&
+      (validBatches.length === 0 || validBatches.includes(sBatch));
+  });
 
   const handleQuickLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,13 +162,20 @@ export const Enrollment: React.FC = () => {
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
       e.preventDefault();
-      // Add email as mock member for now if not found in db
-      const existing = allStudents.find(s => s.mail.toLowerCase() === searchQuery.toLowerCase() || s.name.toLowerCase().includes(searchQuery.toLowerCase()));
-
-      setInvitedMembers([...invitedMembers, {
-        mail: existing ? existing.mail : searchQuery,
-        name: existing ? existing.name : searchQuery.split('@')[0]
-      }]);
+      const existing = selectableStudents.find(s =>
+        s.mail.toLowerCase() === searchQuery.toLowerCase() ||
+        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.rollNo || '').toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      if (!existing) {
+        addToast('Only non-enrolled eligible students can be added.', 'error');
+        return;
+      }
+      if (invitedMembers.some(m => m.mail === existing.mail)) {
+        addToast('Student is already in your invite list.', 'error');
+        return;
+      }
+      setInvitedMembers([...invitedMembers, { mail: existing.mail, name: existing.name }]);
       setSearchQuery('');
     }
   };
@@ -139,6 +187,14 @@ export const Enrollment: React.FC = () => {
 
   const handleEnrollmentSubmit = async () => {
     if (!user || !formId || !formConfig) return;
+
+    const fieldsConfig = JSON.parse(formConfig.jsonOfFields || '[]');
+    for (const field of fieldsConfig) {
+      if (field.required && !(answers[field.id] || '').trim()) {
+        addToast(`Please fill required field: ${field.label}`, 'error');
+        return;
+      }
+    }
 
     const totalMembers = invitedMembers.length + 1;
     if (teamSize === 'Individual' && totalMembers !== 1) {
@@ -152,6 +208,15 @@ export const Enrollment: React.FC = () => {
       return;
     }
 
+    for (const member of invitedMembers) {
+      const found = selectableStudents.find((s: any) => s.mail.toLowerCase() === member.mail.toLowerCase())
+        || allStudents.find((s: any) => s.mail.toLowerCase() === member.mail.toLowerCase() && s.enrollStatus !== 'ENROLLED' && !enrolledOrBusyStudentIds.has(s.studentId));
+      if (!found) {
+        addToast(`Cannot invite enrolled or ineligible student: ${member.mail}`, 'error');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       const resolvedMemberIds: string[] = [];
@@ -159,24 +224,16 @@ export const Enrollment: React.FC = () => {
       for (const member of invitedMembers) {
         const found = allStudents.find((s: any) => s.mail.toLowerCase() === member.mail.toLowerCase());
         if (found) {
-          resolvedMemberIds.push(found.studentId);
-        } else {
-          try {
-            const { data: newMember } = await api.post('/students', {
-              name: member.name,
-              mail: member.mail,
-              password: "password",
-              rollNo: Math.random().toString(36).substr(2, 6).toUpperCase(),
-              branch: formConfig?.accessBranch || "General",
-              batch: formConfig?.accessBatch || "2026",
-              enrollStatus: "PENDING"
-            });
-            resolvedMemberIds.push(newMember.studentId);
-          } catch (err) {
-            addToast(`Could not resolve or create member: ${member.mail}`, 'error');
+          if (found.enrollStatus === 'ENROLLED' || enrolledOrBusyStudentIds.has(found.studentId)) {
+            addToast(`Student already enrolled: ${member.mail}`, 'error');
             setIsSubmitting(false);
             return;
           }
+          resolvedMemberIds.push(found.studentId);
+        } else {
+          addToast(`Could not resolve member: ${member.mail}. Only registered students can be invited.`, 'error');
+          setIsSubmitting(false);
+          return;
         }
       }
 
@@ -186,7 +243,6 @@ export const Enrollment: React.FC = () => {
         teamCompleteStatus: true
       });
 
-      const fieldsConfig = JSON.parse(formConfig.jsonOfFields || '[]');
       const projTitle = answers[fieldsConfig.find((f: any) => f.label.toLowerCase().includes('title'))?.id || ''] || `${user.name}'s Project`;
 
       let projDescription = '';
@@ -258,6 +314,23 @@ export const Enrollment: React.FC = () => {
               Continue to Form
             </Button>
           </form>
+        </Card>
+      </div>
+    );
+  }
+
+  if (alreadyEnrolled) {
+    return (
+      <div style={{ maxWidth: '600px', margin: '64px auto', textAlign: 'center' }}>
+        <Card elevation={3} style={{ padding: '64px 32px' }}>
+          <CheckCircle size={64} color="var(--success)" style={{ margin: '0 auto 24px' }} />
+          <h2 style={{ fontSize: '24px', marginBottom: '16px' }}>Already Enrolled</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '32px' }}>
+            You are already enrolled in a project. The enrollment form is hidden for enrolled students.
+          </p>
+          <Button onClick={() => navigate('/dashboard')} size="lg" variant="primary">
+            Go to My Dashboard
+          </Button>
         </Card>
       </div>
     );
@@ -488,15 +561,13 @@ export const Enrollment: React.FC = () => {
                       />
                     </div>
                     <div style={{ padding: '4px', overflowY: 'auto', flex: 1 }}>
-                      {allStudents
+                      {selectableStudents
                         .filter(s => {
-                          const sBranch = (s.branch || '').toLowerCase();
-                          const sBatch = (s.batch || '').toLowerCase();
-                          return s.enrollStatus !== 'ENROLLED' &&
-                            validBranches.includes(sBranch) &&
-                            validBatches.includes(sBatch) &&
-                            s.studentId !== user?.id &&
-                            (searchQuery ? (s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.rollNo.toLowerCase().includes(searchQuery.toLowerCase()) || s.mail.toLowerCase().includes(searchQuery.toLowerCase())) : true);
+                          return !searchQuery || (
+                            s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (s.rollNo || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            s.mail.toLowerCase().includes(searchQuery.toLowerCase())
+                          );
                         })
                         .map(s => {
                           const isSelected = invitedMembers.some(m => m.mail === s.mail);
@@ -532,14 +603,12 @@ export const Enrollment: React.FC = () => {
                             </div>
                           );
                         })}
-                        {allStudents.filter(s => {
-                          const sBranch = (s.branch || '').toLowerCase();
-                          const sBatch = (s.batch || '').toLowerCase();
-                          return s.enrollStatus !== 'ENROLLED' &&
-                            validBranches.includes(sBranch) &&
-                            validBatches.includes(sBatch) &&
-                            s.studentId !== user?.id &&
-                            (searchQuery ? (s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.rollNo.toLowerCase().includes(searchQuery.toLowerCase()) || s.mail.toLowerCase().includes(searchQuery.toLowerCase())) : true);
+                        {selectableStudents.filter(s => {
+                          return !searchQuery || (
+                            s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (s.rollNo || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            s.mail.toLowerCase().includes(searchQuery.toLowerCase())
+                          );
                         }).length === 0 && (
                           <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-disabled)', fontSize: '13px' }}>
                             No matching students found

@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Loader, ProjectTimeline, ReferenceTemplatesCard } from '../../components';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../utils/authStore';
-import { Calendar, Users, MessageSquare, FileText, Star, AlertTriangle, FileCheck, MapPin, Video, CheckCircle, Clock, Paperclip } from 'lucide-react';
+import { Calendar, Users, MessageSquare, FileText, Star, AlertTriangle, FileCheck, MapPin, Video, CheckCircle, Clock, Paperclip, Pencil } from 'lucide-react';
 import { ScheduleMeetingModal } from './ScheduleMeetingModal';
 import { ExecuteMeetingModal } from './ExecuteMeetingModal';
+import { RescheduleMeetingModal } from './RescheduleMeetingModal';
 import type { FormAttachment, FormResponse } from '../../services/adminService';
 import { getPreviewUrl } from '../../utils/filePreview';
 import { isValidMeetingLink, openMeetingLink } from '../../utils/meetingLinks';
@@ -36,6 +37,7 @@ export const SupervisorTeamOverview: React.FC = () => {
     // Modal state
     const [isScheduling, setIsScheduling] = useState(false);
     const [executingMeetingId, setExecutingMeetingId] = useState<string | null>(null);
+    const [rescheduleMeeting, setRescheduleMeeting] = useState<any | null>(null);
 
     useEffect(() => {
         fetchData();
@@ -44,36 +46,58 @@ export const SupervisorTeamOverview: React.FC = () => {
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            const [projRes, teamsRes, stuRes] = await Promise.all([
+            const [projRes, teamsRes, teamMembersRes, stuRes] = await Promise.all([
                 api.get('/projects'),
+                api.get('/teams'),
                 api.get('/team-members'),
                 api.get('/students')
             ]);
 
-            let thisProject = projRes.data.find((p: any) => p.teamId === teamId);
-            const thisTeam = teamsRes.data.find((t: any) => t.teamId === teamId);
+            // Support both teamId and accidental projectId in the route param
+            let thisProject = (projRes.data || []).find((p: any) => p.teamId === teamId)
+                || (projRes.data || []).find((p: any) => p.projectId === teamId);
+            const thisTeam = (teamsRes.data || []).find((t: any) => t.teamId === (thisProject?.teamId || teamId));
+            const thisTeamMembers = (teamMembersRes.data || []).find((t: any) => t.teamId === (thisProject?.teamId || teamId));
 
-            setProject(thisProject);
-            setTeamInfo(thisTeam);
+            setProject(thisProject || null);
+            setTeamInfo(thisTeam || thisTeamMembers || null);
 
-            if (thisProject) {
-                api.get(`/supervisor/meetings/project/${thisProject.projectId}`)
-                    .then(mRes => setMeetings(mRes.data || []))
-                    .catch(console.error);
+            if (thisProject?.projectId) {
+                try {
+                    const mRes = await api.get(`/supervisor/meetings/project/${thisProject.projectId}`);
+                    setMeetings(mRes.data || []);
+                } catch (err) {
+                    console.error(err);
+                    setMeetings([]);
+                }
 
-                api.get(`/forms/${thisProject.formId}`)
-                    .then(fRes => setFormConfig(fRes.data || null))
-                    .catch(console.error);
+                try {
+                    const fRes = await api.get(`/forms/${thisProject.formId}`);
+                    setFormConfig(fRes.data || null);
+                } catch (err) {
+                    console.error(err);
+                }
+            } else {
+                setMeetings([]);
             }
 
-            if (thisTeam && thisTeam.joinMemberArray) {
-                const ids = JSON.parse(thisTeam.joinMemberArray);
-                const mems = ids.map((id: string, idx: number) => {
-                    const s = stuRes.data.find((stu: any) => stu.studentId === id);
-                    return { ...s, role: idx === 0 ? 'Leader' : 'Developer' };
-                }).filter((x: any) => x.studentId);
-                setMembers(mems);
-            }
+            const memberIds: string[] = [];
+            if (thisTeam?.leaderId) memberIds.push(thisTeam.leaderId);
+            try {
+                const invited = JSON.parse(thisTeam?.teamMemberArray || '[]');
+                if (Array.isArray(invited)) memberIds.push(...invited);
+            } catch { /* ignore */ }
+            try {
+                const joined = JSON.parse(thisTeamMembers?.joinMemberArray || '[]');
+                if (Array.isArray(joined)) memberIds.push(...joined);
+            } catch { /* ignore */ }
+
+            const uniqueIds = Array.from(new Set(memberIds));
+            const mems = uniqueIds.map((id: string, idx: number) => {
+                const s = (stuRes.data || []).find((stu: any) => stu.studentId === id);
+                return { ...s, role: id === thisTeam?.leaderId || idx === 0 ? 'Leader' : 'Developer' };
+            }).filter((x: any) => x.studentId);
+            setMembers(mems);
         } catch (err) {
             console.error(err);
         } finally {
@@ -135,20 +159,28 @@ export const SupervisorTeamOverview: React.FC = () => {
 
                     <ReferenceTemplatesCard formId={project?.formId} currentStage={project?.stageStatus} title="Form Reference Templates" />
 
-                    {/* Official Batch Evaluations */}
+                    {/* Official / Project Meetings — includes batch slots + per-team reschedules for THIS project only */}
                     <Card elevation={1} style={{ border: '1px solid #bae6fd', borderRadius: '16px', backgroundColor: '#f0f9ff', padding: '28px' }}>
-                        <h3 style={{ margin: '0 0 20px', fontSize: '19px', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <Calendar size={20} /> Official Batch Evaluations
-                        </h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '19px', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Calendar size={20} /> Project Meetings
+                            </h3>
+                            <Button variant="outline" size="sm" onClick={() => setIsScheduling(true)}>
+                                + New Meeting
+                            </Button>
+                        </div>
+                        <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#0369a1' }}>
+                            Batch schedules from admin appear here. Reschedule applies only to this team — other teams keep their slots.
+                        </p>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                            {meetings.filter(m => m.sessionId).length === 0 && (
+                            {meetings.length === 0 && (
                                 <div style={{ textAlign: 'center', padding: '40px 20px', color: '#0ea5e9', fontSize: '14.5px' }}>
-                                    No official batch evaluations scheduled by Admin yet.
+                                    No meetings scheduled for this project yet.
                                 </div>
                             )}
 
-                            {meetings.filter(m => m.sessionId).map((meeting) => (
+                            {meetings.map((meeting) => (
                                 <div key={meeting.meetingId} style={{
                                     display: 'flex',
                                     justifyContent: 'space-between',
@@ -156,26 +188,40 @@ export const SupervisorTeamOverview: React.FC = () => {
                                     padding: '20px',
                                     border: '1px solid #bae6fd',
                                     borderRadius: '12px',
-                                    backgroundColor: '#ffffff'
+                                    backgroundColor: '#ffffff',
+                                    gap: '16px',
+                                    flexWrap: 'wrap'
                                 }}>
-                                    {/* ... same meeting content as before ... */}
-                                    <div style={{ display: 'flex', gap: '18px' }}>
-                                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <div style={{ display: 'flex', gap: '18px', flex: 1 }}>
+                                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: meeting.status === 'COMPLETED' ? '#dcfce7' : '#e0f2fe', color: meeting.status === 'COMPLETED' ? '#16a34a' : '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                             {meeting.mode === 'ONLINE' ? <Video size={24} /> : <MapPin size={24} />}
                                         </div>
                                         <div>
-                                            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '6px' }}>
+                                            <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                 {meeting.stage} Review
+                                                {meeting.sessionId && (
+                                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#0369a1', backgroundColor: '#e0f2fe', padding: '2px 8px', borderRadius: '999px' }}>BATCH</span>
+                                                )}
+                                                {meeting.originalMeetingDate && (
+                                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#b45309', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px' }}>
+                                                        RESCHEDULED{meeting.rescheduledBy ? ` · ${meeting.rescheduledBy}` : ''}
+                                                    </span>
+                                                )}
                                                 {meeting.status === 'COMPLETED' && (
-                                                    <span style={{ marginLeft: '14px', fontSize: '12px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
+                                                    <span style={{ fontSize: '12px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
                                                         <CheckCircle size={12} style={{ marginRight: '4px' }} />COMPLETED
                                                     </span>
                                                 )}
                                             </div>
-                                            <div style={{ display: 'flex', gap: '20px', fontSize: '14px', color: '#0369a1', fontWeight: 500 }}>
+                                            <div style={{ display: 'flex', gap: '20px', fontSize: '14px', color: '#0369a1', fontWeight: 500, flexWrap: 'wrap' }}>
                                                 <span><Calendar size={15} style={{ marginRight: '6px' }} />{meeting.meetingDate}</span>
-                                                <span><Clock size={15} style={{ marginRight: '6px' }} />{meeting.meetingTime}</span>
+                                                <span><Clock size={15} style={{ marginRight: '6px' }} />{String(meeting.meetingTime || '').substring(0, 5)}{meeting.endTime ? ` - ${String(meeting.endTime).substring(0, 5)}` : ''}</span>
                                             </div>
+                                            {meeting.originalMeetingDate && (
+                                                <div style={{ marginTop: '6px', fontSize: '12px', color: '#64748b' }}>
+                                                    Original batch slot: {meeting.originalMeetingDate} at {String(meeting.originalMeetingTime || '').substring(0, 5)}
+                                                </div>
+                                            )}
                                             {meeting.status === 'COMPLETED' && meeting.conclusionNotes && (
                                                 <div style={{ marginTop: '10px', fontSize: '13.5px', color: '#475569', fontStyle: 'italic' }}>
                                                     “{meeting.conclusionNotes}”
@@ -184,145 +230,21 @@ export const SupervisorTeamOverview: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
-                                        isValidMeetingLink(meeting.locationOrLink) ? (
-                                            <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink)}>
-                                                Join Meeting
-                                            </Button>
-                                        ) : (
-                                            <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
-                                        )
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-
-                    {/* Internal / Casual Meetings */}
-                    <Card elevation={1} style={{ borderRadius: '16px', padding: '24px', border: '1px solid var(--border-color)' }}>
-
-                        <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: '24px'
-                        }}>
-                            <h3 style={{ margin: 0, fontSize: '19px', fontWeight: 600 }}>
-                                Internal Meetings
-                            </h3>
-                            <Button variant="outline" size="sm" onClick={() => setIsScheduling(true)}>
-                                + New Meeting
-                            </Button>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-
-                            {meetings.filter(m => !m.sessionId).length === 0 && (
-                                <div style={{
-                                    textAlign: 'center',
-                                    padding: '60px 20px',
-                                    color: 'var(--text-disabled)',
-                                    fontSize: '15px'
-                                }}>
-                                    No internal meetings scheduled yet.
-                                </div>
-                            )}
-
-                            {meetings.filter(m => !m.sessionId).map((meeting) => (
-                                <div
-                                    key={meeting.meetingId}
-                                    style={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        padding: '20px',
-                                        border: '1px solid var(--border-color)',
-                                        borderRadius: '14px',
-                                        transition: 'all 0.2s ease',
-                                        backgroundColor: '#ffffff'
-
-                                    }}
-                                >
-                                    {/* Left Side - Meeting Info */}
-                                    <div style={{ display: 'flex', gap: '18px', flex: 1 }}>
-                                        <div style={{
-                                            width: '48px',
-                                            height: '48px',
-                                            borderRadius: '12px',
-                                            backgroundColor: meeting.status === 'COMPLETED' ? '#dcfce7' : 'var(--primary-glow)',
-                                            color: meeting.status === 'COMPLETED' ? '#16a34a' : 'var(--primary)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            flexShrink: 0
-                                        }}>
-                                            {meeting.mode === 'ONLINE' ? <Video size={24} /> : <MapPin size={24} />}
-                                        </div>
-
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-                                                <span style={{ fontWeight: 600, fontSize: '16px' }}>
-                                                    Stage: {meeting.stage}
-                                                </span>
-                                                {meeting.status === 'COMPLETED' && (
-                                                    <span style={{
-                                                        fontSize: '12px',
-                                                        color: '#16a34a',
-                                                        backgroundColor: '#dcfce7',
-                                                        padding: '4px 10px',
-                                                        borderRadius: '999px',
-                                                        fontWeight: 600,
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px'
-                                                    }}>
-                                                        <CheckCircle size={13} /> COMPLETED
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            <div style={{
-                                                display: 'flex',
-                                                gap: '18px',
-                                                fontSize: '14.5px',
-                                                color: 'var(--text-secondary)'
-                                            }}>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    <Calendar size={15} /> {meeting.meetingDate}
-                                                </span>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    <Clock size={15} /> {meeting.meetingTime}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Right Side - Action Buttons */}
                                     {meeting.status === 'SCHEDULED' && (
-                                        <div style={{
-                                            display: 'flex',
-                                            gap: '12px',
-                                            flexShrink: 0
-                                        }}>
+                                        <div style={{ display: 'flex', gap: '10px', flexShrink: 0, flexWrap: 'wrap' }}>
                                             {meeting.mode === 'ONLINE' && (
                                                 isValidMeetingLink(meeting.locationOrLink) ? (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => openMeetingLink(meeting.locationOrLink)}
-                                                    >
-                                                        <Video size={16} style={{ marginRight: '6px' }} />
-                                                        Join
+                                                    <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink)}>
+                                                        Join Meeting
                                                     </Button>
                                                 ) : (
-                                                    <span style={{ alignSelf: 'center', fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
+                                                    <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600, alignSelf: 'center' }}>Invalid meeting link</span>
                                                 )
                                             )}
-
-                                            <Button
-                                                size="sm"
-                                                onClick={() => setExecutingMeetingId(meeting.meetingId)}
-                                            >
+                                            <Button size="sm" variant="outline" leftIcon={<Pencil size={14} />} onClick={() => setRescheduleMeeting(meeting)}>
+                                                Reschedule
+                                            </Button>
+                                            <Button size="sm" onClick={() => setExecutingMeetingId(meeting.meetingId)}>
                                                 Evaluate Now
                                             </Button>
                                         </div>
@@ -441,6 +363,15 @@ export const SupervisorTeamOverview: React.FC = () => {
                     teamMembers={members}
                     onClose={() => setExecutingMeetingId(null)}
                     onSuccess={() => { setExecutingMeetingId(null); fetchData(); }}
+                />
+            )}
+
+            {rescheduleMeeting && (
+                <RescheduleMeetingModal
+                    meeting={rescheduleMeeting}
+                    role="SUPERVISOR"
+                    onClose={() => setRescheduleMeeting(null)}
+                    onSuccess={() => { setRescheduleMeeting(null); fetchData(); }}
                 />
             )}
 

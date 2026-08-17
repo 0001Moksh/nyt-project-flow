@@ -13,9 +13,10 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otp, setOtp] = useState('');
-  const [verifyState, setVerifyState] = useState<'LOGIN' | 'SEND_OTP' | 'VERIFY_OTP' | 'SET_PASSWORD' | 'FORGOT_PASSWORD_SEND_OTP' | 'FORGOT_PASSWORD_VERIFY_OTP' | 'FORGOT_PASSWORD_SET_PASSWORD'>('LOGIN');
+  const [verifyState, setVerifyState] = useState<'LOGIN' | 'SEND_OTP' | 'VERIFY_OTP' | 'SET_PASSWORD' | 'SUPERVISOR_SET_PASSWORD' | 'FORGOT_PASSWORD_SEND_OTP' | 'FORGOT_PASSWORD_VERIFY_OTP' | 'FORGOT_PASSWORD_SET_PASSWORD'>('LOGIN');
   const [isLoading, setIsLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
+  const [pendingSupervisorLogin, setPendingSupervisorLogin] = useState<{ id: string; name: string; email: string } | null>(null);
 
   useEffect(() => {
     let interval: any;
@@ -37,71 +38,113 @@ export const Login: React.FC = () => {
       addToast('Please fill all fields', 'error');
       return;
     }
-    
+
     setIsLoading(true);
-    
+    const normalizedEmail = email.trim().toLowerCase();
+
     try {
-      // Fetch all user types to determine role dynamically
-      const [adminsRes, supervisorsRes, studentsRes] = await Promise.all([
-        api.get('/admins').catch(() => ({ data: [] })),
-        api.get('/supervisors').catch(() => ({ data: [] })),
-        api.get('/students').catch(() => ({ data: [] }))
-      ]);
-
-      const admins = adminsRes.data;
-      const supervisors = supervisorsRes.data;
-      const students = studentsRes.data;
-
-      // 1. Check Admin
-      let matchedAdmin = admins?.find((a: any) => a.mail === email && a.password === password);
-      
-      // Fallback for first-time system setup if no admins exist
-      if (!matchedAdmin && email.includes('admin') && (!admins || admins.length === 0)) {
-         const { data: newAdmin } = await api.post('/admins', { 
-            name: "System Admin", 
-            mail: email, 
-            password: password, 
-            department: "Computer Science" 
-         });
-         matchedAdmin = newAdmin;
-      }
-
-      if (matchedAdmin) {
-        login({ id: matchedAdmin.adminId, name: matchedAdmin.name || 'Admin', email, role: 'ADMIN' });
-        addToast('Login successful', 'success');
-        navigate('/admin/dashboard');
-        return;
-      }
-
-      // 2. Check Supervisor
-      const matchedSupervisor = supervisors?.find((s: any) => s.mail === email && s.password === password);
-      if (matchedSupervisor) {
-        login({ id: matchedSupervisor.supervisorId, name: matchedSupervisor.name, email, role: 'SUPERVISOR' });
-        addToast('Login successful', 'success');
-        navigate('/supervisor/dashboard');
-        return;
-      }
-
-      // 3. Check Student (Using secure backend `/api/student/login` endpoint)
+      // 1. Admin login (dedicated endpoint — avoids wrong student/supervisor error messages)
       try {
-        const studentRes = await api.post('/student/login', { email, password });
-        if (studentRes.data) {
+        const adminRes = await api.post('/admins/login', { email: normalizedEmail, password }, { validateStatus: () => true });
+        if (adminRes.status >= 200 && adminRes.status < 300 && adminRes.data?.adminId) {
+          const matchedAdmin = adminRes.data;
+          login({ id: matchedAdmin.adminId, name: matchedAdmin.name || 'Admin', email: normalizedEmail, role: 'ADMIN' });
+          addToast('Login successful', 'success');
+          navigate('/admin/dashboard');
+          return;
+        }
+        if (adminRes.status === 400 && adminRes.data?.message && adminRes.data.message !== 'ADMIN_NOT_FOUND') {
+          addToast(adminRes.data.message, 'error');
+          return;
+        }
+      } catch {
+        // continue to other roles
+      }
+
+      // 2. Supervisor login with status + first-time validation
+      try {
+        const supervisorRes = await api.post('/supervisor/login', { email: normalizedEmail, password }, { validateStatus: () => true });
+        if (supervisorRes.status >= 200 && supervisorRes.status < 300 && supervisorRes.data?.supervisorId) {
+          const matchedSupervisor = supervisorRes.data;
+          if (matchedSupervisor.requiresPasswordSetup) {
+            setPendingSupervisorLogin({
+              id: matchedSupervisor.supervisorId,
+              name: matchedSupervisor.name,
+              email: normalizedEmail,
+            });
+            setPassword('');
+            setConfirmPassword('');
+            setVerifyState('SUPERVISOR_SET_PASSWORD');
+            addToast('First-time supervisor sign-in: please set a new password.', 'info');
+            return;
+          }
+          login({ id: matchedSupervisor.supervisorId, name: matchedSupervisor.name, email: normalizedEmail, role: 'SUPERVISOR' });
+          addToast('Login successful', 'success');
+          navigate('/supervisor/dashboard');
+          return;
+        }
+        if (supervisorRes.status === 400 && supervisorRes.data?.message && supervisorRes.data.message !== 'SUPERVISOR_NOT_FOUND') {
+          addToast(supervisorRes.data.message, 'error');
+          return;
+        }
+      } catch {
+        // continue to student
+      }
+
+      // 3. Student login
+      try {
+        const studentRes = await api.post('/student/login', { email: normalizedEmail, password }, { validateStatus: () => true });
+        if (studentRes.status >= 200 && studentRes.status < 300 && studentRes.data?.studentId) {
           const matchedStudent = studentRes.data;
-          login({ id: matchedStudent.studentId, name: matchedStudent.name, email, role: 'STUDENT' });
+          login({ id: matchedStudent.studentId, name: matchedStudent.name, email: normalizedEmail, role: 'STUDENT' });
           addToast('Login successful', 'success');
           navigate('/dashboard');
           return;
         }
-      } catch (err: any) {
-         // Silently catch to allow fallback to invalid credentials message below if it's purely an auth error
+        if (studentRes.status === 400 && studentRes.data?.message && studentRes.data.message !== 'STUDENT_NOT_FOUND') {
+          addToast(studentRes.data.message === 'Invalid email or password' ? 'Invalid email or password' : studentRes.data.message, 'error');
+          return;
+        }
+      } catch {
+        // fall through
       }
 
-      // If no match found
       addToast('Invalid email or password', 'error');
-
     } catch (error: any) {
-       console.error(error);
-       addToast(error.response?.data?.message || 'Network error occurred.', 'error');
+      console.error(error);
+      addToast(error.response?.data?.message || 'Network error occurred.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSupervisorSetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 6) return addToast('Password must be at least 6 characters', 'error');
+    if (password !== confirmPassword) return addToast('Passwords do not match', 'error');
+    setIsLoading(true);
+    try {
+      await api.post('/supervisor/set-password', {
+        email: (pendingSupervisorLogin?.email || email).trim().toLowerCase(),
+        password,
+        confirmPassword,
+      });
+      const supervisorEmail = (pendingSupervisorLogin?.email || email).trim().toLowerCase();
+      const supervisorName = pendingSupervisorLogin?.name || 'Supervisor';
+      const supervisorId = pendingSupervisorLogin?.id;
+      if (supervisorId) {
+        login({ id: supervisorId, name: supervisorName, email: supervisorEmail, role: 'SUPERVISOR' });
+        addToast('Password set successfully. Welcome!', 'success');
+        navigate('/supervisor/dashboard');
+      } else {
+        addToast('Password set successfully. Please log in.', 'success');
+        setVerifyState('LOGIN');
+      }
+      setPendingSupervisorLogin(null);
+      setPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      addToast(err.response?.data?.message || 'Failed to set password', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -264,6 +307,20 @@ export const Login: React.FC = () => {
               <Input label="New Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" leftIcon={<Lock size={18} />} />
               <Input label="Confirm Password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm your password" leftIcon={<Lock size={18} />} />
               <Button type="submit" fullWidth size="lg" isLoading={isLoading} style={{ marginTop: '16px' }}>Complete Setup</Button>
+            </form>
+        )}
+
+        {verifyState === 'SUPERVISOR_SET_PASSWORD' && (
+            <form onSubmit={handleSupervisorSetPassword}>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                Welcome{pendingSupervisorLogin?.name ? `, ${pendingSupervisorLogin.name}` : ''}. Set a permanent password to finish first-time supervisor sign-in.
+              </p>
+              <Input label="New Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" leftIcon={<Lock size={18} />} />
+              <Input label="Confirm Password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm your password" leftIcon={<Lock size={18} />} />
+              <Button type="submit" fullWidth size="lg" isLoading={isLoading} style={{ marginTop: '16px' }}>Set Password & Continue</Button>
+              <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                <button type="button" onClick={() => { setVerifyState('LOGIN'); setPendingSupervisorLogin(null); }} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '14px' }}>Back to Login</button>
+              </div>
             </form>
         )}
 

@@ -149,7 +149,8 @@ export const Dashboard: React.FC = () => {
                     const myBatch = (me.batch || '').toLowerCase();
                     return fBranches.includes(myBranch) && fBatches.includes(myBatch);
                 });
-                setApplicableForms(myForms);
+                // Hide enrollment forms for students already enrolled / already on a project
+                setApplicableForms(me.enrollStatus === 'ENROLLED' || myProjects.length > 0 ? [] : myForms);
             }
 
         } catch (err) {
@@ -340,35 +341,45 @@ export const Dashboard: React.FC = () => {
                             />
                         )}
 
-                        {/* Official Batch Evaluations */}
+                        {/* Team Meetings — only this team's slots (incl. per-team reschedules) */}
                         <Card elevation={1} style={{ border: '1px solid #bae6fd', borderRadius: '12px', marginBottom: '24px', backgroundColor: '#f0f9ff', padding: '24px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                                 <h3 style={{ margin: 0, fontSize: '18px', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Calendar size={20} /> Official Batch Evaluations
+                                    <Calendar size={20} /> Your Team Meetings
                                 </h3>
                             </div>
+                            <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#0369a1' }}>
+                                Shows only meetings for your team. If your slot was rescheduled, you see the new time here.
+                            </p>
                             
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                {meetings.filter(m => m.sessionId).length === 0 && (
+                                {meetings.length === 0 && (
                                     <div style={{ textAlign: 'center', padding: '16px', color: '#0ea5e9', fontSize: '14px', fontStyle: 'italic' }}>
-                                        No official batch evaluations scheduled by Admin yet.
+                                        No meetings scheduled for your team yet.
                                     </div>
                                 )}
-                                {meetings.filter(m => m.sessionId).map((meeting) => (
-                                    <div key={meeting.meetingId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid #bae6fd', borderRadius: '8px', backgroundColor: '#ffffff' }}>
+                                {meetings.map((meeting) => (
+                                    <div key={meeting.meetingId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid #bae6fd', borderRadius: '8px', backgroundColor: '#ffffff', gap: '12px', flexWrap: 'wrap' }}>
                                         <div style={{ display: 'flex', gap: '16px' }}>
-                                            <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: meeting.status === 'COMPLETED' ? '#dcfce7' : '#e0f2fe', color: meeting.status === 'COMPLETED' ? '#16a34a' : '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                 {meeting.mode === 'ONLINE' ? <Video size={20} /> : <MapPin size={20} />}
                                             </div>
                                             <div>
-                                                <div style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a', marginBottom: '4px' }}>
+                                                <div style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                     {meeting.stage} Review
-                                                    {meeting.status === 'COMPLETED' && <span style={{ marginLeft: '12px', fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }}/>COMPLETED</span>}
+                                                    {meeting.sessionId && <span style={{ fontSize: '10px', fontWeight: 700, color: '#0369a1', backgroundColor: '#e0f2fe', padding: '2px 8px', borderRadius: '999px' }}>BATCH</span>}
+                                                    {meeting.originalMeetingDate && <span style={{ fontSize: '10px', fontWeight: 700, color: '#b45309', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px' }}>RESCHEDULED</span>}
+                                                    {meeting.status === 'COMPLETED' && <span style={{ fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }}/>COMPLETED</span>}
                                                 </div>
                                                 <div style={{ fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'center', gap: '16px' }}>
                                                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#0369a1' }}><Calendar size={14} /> {meeting.meetingDate}</span>
-                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#0369a1' }}><Clock size={14} /> {meeting.meetingTime}</span>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#0369a1' }}><Clock size={14} /> {String(meeting.meetingTime || '').substring(0, 5)}{meeting.endTime ? ` - ${String(meeting.endTime).substring(0, 5)}` : ''}</span>
                                                 </div>
+                                                {meeting.originalMeetingDate && (
+                                                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '6px' }}>
+                                                        Was: {meeting.originalMeetingDate} at {String(meeting.originalMeetingTime || '').substring(0, 5)}
+                                                    </div>
+                                                )}
                                                 {meeting.status === 'COMPLETED' && meeting.conclusionNotes && (
                                                     <div style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px', fontStyle: 'italic' }}>
                                                         " {meeting.conclusionNotes} "
@@ -380,55 +391,6 @@ export const Dashboard: React.FC = () => {
                                         {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
                                             isValidMeetingLink(meeting.locationOrLink) ? (
                                                 <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink, () => addToast('This meeting has an invalid link. Ask your supervisor/admin to update it.', 'error'))} style={{ borderColor: '#0284c7', color: '#0284c7' }}>Join GMeet</Button>
-                                            ) : (
-                                                <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
-                                            )
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
-
-                        {/* Internal / Casual Meetings Tracker */}
-                        <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '24px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                                <h3 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Video size={18} color="var(--primary)" /> Internal / Casual Meetings
-                                </h3>
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                {meetings.filter(m => !m.sessionId).length === 0 && (
-                                    <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-disabled)', fontSize: '14px' }}>
-                                        No internal meetings scheduled yet.
-                                    </div>
-                                )}
-                                {meetings.filter(m => !m.sessionId).map((meeting) => (
-                                    <div key={meeting.meetingId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)' }}>
-                                        <div style={{ display: 'flex', gap: '16px' }}>
-                                            <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: meeting.status === 'COMPLETED' ? '#dcfce7' : 'var(--primary-glow)', color: meeting.status === 'COMPLETED' ? '#16a34a' : 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                {meeting.mode === 'ONLINE' ? <Video size={20} /> : <MapPin size={20} />}
-                                            </div>
-                                            <div>
-                                                <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                                                    {meeting.stage} Review
-                                                    {meeting.status === 'COMPLETED' && <span style={{ marginLeft: '12px', fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }}/>COMPLETED</span>}
-                                                </div>
-                                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={14} /> {meeting.meetingDate}</span>
-                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} /> {meeting.meetingTime}</span>
-                                                </div>
-                                                {meeting.status === 'COMPLETED' && meeting.conclusionNotes && (
-                                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px', fontStyle: 'italic' }}>
-                                                        " {meeting.conclusionNotes} "
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
-                                            isValidMeetingLink(meeting.locationOrLink) ? (
-                                                <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink, () => addToast('This meeting has an invalid link. Ask your supervisor/admin to update it.', 'error'))}>Join GMeet</Button>
                                             ) : (
                                                 <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
                                             )

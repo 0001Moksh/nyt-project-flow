@@ -240,8 +240,8 @@ export const AdminStudents: React.FC = () => {
                                                 </div>
                                             </td>
                                             <td style={{ padding: '16px' }}>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: student.status === 'ACTIVE' || student.status === 'ENROLLED' ? '#16a34a' : student.status === 'AT_RISK' ? '#ef4444' : '#f59e0b' }}>
-                                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: student.status === 'ACTIVE' || student.status === 'ENROLLED' ? '#16a34a' : student.status === 'AT_RISK' ? '#ef4444' : '#f59e0b' }}></div>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: student.status === 'ACTIVE' || student.status === 'ENROLLED' ? '#16a34a' : student.status === 'AT_RISK' || student.status === 'REJECTED' ? '#ef4444' : '#f59e0b' }}>
+                                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: student.status === 'ACTIVE' || student.status === 'ENROLLED' ? '#16a34a' : student.status === 'AT_RISK' || student.status === 'REJECTED' ? '#ef4444' : '#f59e0b' }}></div>
                                                     {student.status.replace('_', ' ')}
                                                 </span>
                                             </td>

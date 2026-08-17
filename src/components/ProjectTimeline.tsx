@@ -17,14 +17,32 @@ const getSubmissionId = (submission: any, endpoint: string) =>
 
 const formatDate = (value?: string | null) => {
   if (!value) return 'Not scheduled';
+  // Prefer date-only parsing to avoid timezone shifting YYYY-MM-DD
+  const raw = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, m, d] = raw.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
   return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatTime = (value?: string | null) => {
+  if (!value) return '';
+  return String(value).substring(0, 5);
 };
 
 const daysUntil = (value?: string | null) => {
   if (!value) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const target = new Date(value);
+  const raw = String(value);
+  let target: Date;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, m, d] = raw.split('-').map(Number);
+    target = new Date(y, m - 1, d);
+  } else {
+    target = new Date(value);
+  }
   target.setHours(0, 0, 0, 0);
   return Math.ceil((target.getTime() - today.getTime()) / 86400000);
 };
@@ -39,6 +57,27 @@ const timeAgo = (value?: string | null) => {
   if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
   const days = Math.floor(hours / 24);
   return `${days} day${days === 1 ? '' : 's'} ago`;
+};
+
+/** Pick the best meeting for a stage: prefer upcoming/scheduled, then most recent. */
+const pickStageMeeting = (meetings: any[], stageKey: string) => {
+  const stageMeetings = (meetings || []).filter((m) => String(m.stage || '').toUpperCase() === stageKey);
+  if (stageMeetings.length === 0) return null;
+
+  const rank = (m: any) => {
+    const status = String(m.status || '').toUpperCase();
+    if (status === 'SCHEDULED') return 0;
+    if (status === 'COMPLETED') return 2;
+    return 1;
+  };
+
+  return stageMeetings.slice().sort((a, b) => {
+    const byStatus = rank(a) - rank(b);
+    if (byStatus !== 0) return byStatus;
+    const aKey = `${a.meetingDate || ''} ${a.meetingTime || ''}`;
+    const bKey = `${b.meetingDate || ''} ${b.meetingTime || ''}`;
+    return bKey.localeCompare(aKey); // newest first among same status
+  })[0];
 };
 
 interface ProjectTimelineProps {
@@ -93,7 +132,18 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
 
   const stageIndex = Math.max(0, STAGES.findIndex((stage) => stage.key === project?.stageStatus));
   const stageRows = useMemo(() => STAGES.map((stage, index) => {
-    const deadline = timeline?.[stage.dateField];
+    const formDeadline = timeline?.[stage.dateField];
+    const stageMeeting = pickStageMeeting(meetings, stage.key);
+    // Team-specific meeting date/time wins over batch form timeline (covers reschedules)
+    const deadline = stageMeeting?.meetingDate || formDeadline || null;
+    const meetingTimeLabel = stageMeeting
+      ? `${formatTime(stageMeeting.meetingTime)}${stageMeeting.endTime ? ` - ${formatTime(stageMeeting.endTime)}` : ''}`
+      : null;
+    const isRescheduled = Boolean(stageMeeting?.originalMeetingDate);
+    const originalLabel = isRescheduled
+      ? `${formatDate(stageMeeting.originalMeetingDate)}${stageMeeting.originalMeetingTime ? ` at ${formatTime(stageMeeting.originalMeetingTime)}` : ''}`
+      : null;
+
     const stageTasks = tasks.filter((task) => task.stageStatus === stage.key);
     const doneTasks = stageTasks.filter((task) => ['DONE', 'COMPLETED'].includes((task.status || '').toUpperCase())).length;
     const stageSubmissions = submissions.filter((submission) => submission.stage === stage.key);
@@ -103,8 +153,20 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
     const completed = index < stageIndex || latestSubmission?.status === 'APPROVED';
     const current = index === stageIndex;
 
-    return { ...stage, deadline, stageTasks, doneTasks, latestSubmission, completed, current };
-  }), [timeline, tasks, submissions, stageIndex]);
+    return {
+      ...stage,
+      deadline,
+      formDeadline,
+      meetingTimeLabel,
+      isRescheduled,
+      originalLabel,
+      stageTasks,
+      doneTasks,
+      latestSubmission,
+      completed,
+      current,
+    };
+  }), [timeline, tasks, submissions, meetings, stageIndex]);
 
   const currentStage = stageRows[stageIndex] || stageRows[0];
   const nextDeadline = currentStage?.deadline;
@@ -114,25 +176,6 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
     .sort((a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime())[0];
   const completedStages = stageRows.filter((stage) => stage.completed).length;
   const completion = Math.round((completedStages / STAGES.length) * 100);
-  const taskCounts = {
-    todo: tasks.filter((task) => ['TODO', 'PENDING'].includes((task.status || '').toUpperCase())).length,
-    progress: tasks.filter((task) => ['IN_PROGRESS', 'REVIEW'].includes((task.status || '').toUpperCase())).length,
-    done: tasks.filter((task) => ['DONE', 'COMPLETED'].includes((task.status || '').toUpperCase())).length
-  };
-  const hasTasks = tasks.length > 0;
-  const totalTasks = Math.max(tasks.length, 1);
-  const stageProgressSegments = stageRows.map((stage, index) => ({
-    color: stage.completed ? stage.color : stage.current ? '#dbeafe' : 'var(--surface-hover)',
-    width: `${100 / STAGES.length}%`,
-    opacity: stage.completed || stage.current ? 1 : 0.7,
-    title: `${stage.label}: ${stage.completed ? 'Completed' : stage.current ? 'Current' : 'Pending'}`
-  }));
-  const taskProgressSegments = [
-    { color: '#ef4444', width: `${(taskCounts.todo / totalTasks) * 100}%`, opacity: 1, title: 'To do' },
-    { color: '#f59e0b', width: `${(taskCounts.progress / totalTasks) * 100}%`, opacity: 1, title: 'In progress' },
-    { color: '#22c55e', width: `${(taskCounts.done / totalTasks) * 100}%`, opacity: 1, title: 'Completed' }
-  ];
-  const progressSegments = hasTasks ? taskProgressSegments : stageProgressSegments;
 
   if (isLoading) {
     return <Card elevation={1}><Loader /></Card>;
@@ -157,7 +200,13 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
           <h2 style={{ margin: '0 0 8px', fontSize: '32px', fontWeight: 700 }}>{remainingDays === null ? '-' : Math.max(remainingDays, 0)}</h2>
           <p style={{ margin: 0, fontSize: '12px', color: remainingDays !== null && remainingDays < 0 ? '#dc2626' : '#2563eb', fontWeight: 600 }}>
             {currentStage?.label}: {formatDate(nextDeadline)}
+            {currentStage?.meetingTimeLabel ? ` · ${currentStage.meetingTimeLabel}` : ''}
           </p>
+          {currentStage?.isRescheduled && (
+            <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#b45309', fontWeight: 600 }}>
+              Rescheduled{currentStage.originalLabel ? ` (was ${currentStage.originalLabel})` : ''}
+            </p>
+          )}
         </Card>
 
         <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '8px' }}>
@@ -171,8 +220,6 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
         </Card>
       </div>
 
-
-
       <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '8px' }}>
         <h3 style={{ margin: '0 0 24px', fontSize: '18px' }}>Project Timeline</h3>
         <div style={{ display: 'flex', flexDirection: 'column', position: 'relative', paddingLeft: '24px' }}>
@@ -182,16 +229,25 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
               <div style={{ position: 'absolute', left: '-22px', top: '4px', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'white', border: `2px solid ${stage.color}` }} />
               <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     {stage.label}
                     {stage.completed && <CheckCircle size={14} color="#16a34a" />}
                     {stage.current && <span style={{ fontSize: '10px', color: '#2563eb', backgroundColor: '#dbeafe', padding: '2px 8px', borderRadius: '999px' }}>CURRENT</span>}
+                    {stage.isRescheduled && <span style={{ fontSize: '10px', color: '#b45309', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px' }}>RESCHEDULED</span>}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    <span><Calendar size={12} style={{ verticalAlign: 'middle' }} /> Deadline {formatDate(stage.deadline)}</span>
+                    <span>
+                      <Calendar size={12} style={{ verticalAlign: 'middle' }} /> Deadline {formatDate(stage.deadline)}
+                      {stage.meetingTimeLabel ? ` · ${stage.meetingTimeLabel}` : ''}
+                    </span>
                     <span><FileText size={12} style={{ verticalAlign: 'middle' }} />{stage.doneTasks}/{stage.stageTasks.length || 0} tasks done</span>
                     <span><UploadCloud size={12} style={{ verticalAlign: 'middle' }} /> {stage.latestSubmission ? stage.latestSubmission.status : 'No submission'}</span>
                   </div>
+                  {stage.isRescheduled && stage.originalLabel && (
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+                      Was: {stage.originalLabel}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -81,13 +81,21 @@ export const AdminSupervisors: React.FC = () => {
         e.preventDefault();
         setInviting(true);
         try {
-            await api.post('/admin/invite-supervisor', inviteForm);
+            const payload = {
+                name: inviteForm.name.trim(),
+                email: inviteForm.email.trim().toLowerCase(),
+                branch: inviteForm.branch.trim().toUpperCase(),
+            };
+            await api.post('/admin/invite-supervisor', payload, { timeout: 30000 });
             useToastStore.getState().addToast('Invitation sent successfully', 'success');
             setIsInviteOpen(false);
             setInviteForm({ name: '', email: '', branch: '' });
             fetchData();
         } catch (err: any) {
-            useToastStore.getState().addToast(err.response?.data?.message || 'Failed to send invitation', 'error');
+            // Interceptor already toasts; keep a clear fallback if message is missing
+            if (!err.response?.data?.message) {
+                useToastStore.getState().addToast('Failed to send invitation', 'error');
+            }
         } finally {
             setInviting(false);
         }
@@ -97,7 +105,10 @@ export const AdminSupervisors: React.FC = () => {
 
     const getWorkload = (supId: string) => {
         const count = projects.filter(p => p.supervisorId === supId).length;
-        const max = 5; // mocked max capacity for AI computation in wireframe
+        const assignedCounts = supervisors.map(s => projects.filter(p => p.supervisorId === s.supervisorId).length);
+        const activeSupervisors = Math.max(supervisors.filter(s => s.enrollStatus !== 'INACTIVE').length, 1);
+        const fairShare = Math.ceil(projects.filter(p => p.supervisorId).length / activeSupervisors);
+        const max = Math.max(fairShare, ...assignedCounts, 1);
         return { count, max, percentage: Math.min((count / max) * 100, 100) };
     };
 

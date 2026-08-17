@@ -3,7 +3,7 @@ import { Card, Button, Loader, ProjectTimeline, ReferenceTemplatesCard } from '.
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { useAuthStore } from '../../utils/authStore';
-import { CheckCircle, Clock, Users, X, Download, FolderKanban } from 'lucide-react';
+import { CheckCircle, Clock, Users, X, FolderKanban } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const SupervisorDashboard: React.FC = () => {
@@ -69,10 +69,6 @@ export const SupervisorDashboard: React.FC = () => {
              <div>
                 <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: '0 0 8px', fontWeight: 700 }}>Team Approvals & Monitoring</h1>
                 <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '15px' }}>Manage and oversee team formation workflows across your departments.</p>
-             </div>
-             <div style={{ display: 'flex', gap: '12px' }}>
-                 <Button variant="outline" size="sm" leftIcon={<Download size={16} />}>Export CSV</Button>
-                 <Button variant="primary" size="sm">Batch Approve</Button>
              </div>
          </div>
 

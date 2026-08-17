@@ -4,11 +4,13 @@ import { Card, Button, Input, Loader } from '../components';
 import { useToastStore } from '../utils/toastStore';
 import { api } from '../services/api';
 import { MessageSquare, Send, Paperclip, Mail, Users } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export const Chat: React.FC = () => {
     const { user, isAuthenticated } = useAuthStore();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const projectQueryId = searchParams.get('project');
     const addToast = useToastStore(state => state.addToast);
 
     const [isLoading, setIsLoading] = useState(true);
@@ -24,7 +26,7 @@ export const Chat: React.FC = () => {
             return;
         }
         fetchData();
-    }, [isAuthenticated, currentProject?.projectId]);
+    }, [isAuthenticated, projectQueryId]);
 
     // WebSocket STOMP Connection Setup
     useEffect(() => {
@@ -85,32 +87,41 @@ export const Chat: React.FC = () => {
                 api.get('/students').catch(() => ({ data: [] }))
             ]);
 
-            // Find project where user is enrolled
+            // Find project where user is enrolled (respect ?project= for supervisor project view)
             let activeProj = null;
             let activeTeam = null;
+            const allProjects = projectsRes.data || [];
 
-            if (user?.role === 'SUPERVISOR') {
-                activeProj = projectsRes.data.find((p: any) => p.supervisorId === user.id);
-            } else if (user?.role === 'ADMIN') {
-                activeProj = projectsRes.data[0]; // Admin fallback
-            } else {
-                // Student
-                const membersRes = await api.get('/team-members').catch(() => ({ data: [] }));
-                
-                const myMembership = membersRes.data.find((tm: any) => {
-                    const joined = JSON.parse(tm.joinMemberArray || '[]');
-                    const teamInfo = teamsRes.data.find((t:any) => t.teamId === tm.teamId);
-                    return joined.includes(user?.id) || teamInfo?.leaderId === user?.id;
-                });
-                
-                if (myMembership) {
-                    activeProj = projectsRes.data.find((p: any) => p.teamId === myMembership.teamId);
-                    activeTeam = teamsRes.data.find((t:any) => t.teamId === myMembership.teamId);
+            if (projectQueryId) {
+                activeProj = allProjects.find((p: any) => p.projectId === projectQueryId) || null;
+                if (user?.role === 'SUPERVISOR' && activeProj && activeProj.supervisorId !== user.id) {
+                    activeProj = null;
+                }
+            }
+
+            if (!activeProj) {
+                if (user?.role === 'SUPERVISOR') {
+                    activeProj = allProjects.find((p: any) => p.supervisorId === user.id) || null;
+                } else if (user?.role === 'ADMIN') {
+                    activeProj = allProjects[0] || null;
+                } else {
+                    const membersRes = await api.get('/team-members').catch(() => ({ data: [] }));
+                    
+                    const myMembership = (membersRes.data || []).find((tm: any) => {
+                        const joined = JSON.parse(tm.joinMemberArray || '[]');
+                        const teamInfo = (teamsRes.data || []).find((t:any) => t.teamId === tm.teamId);
+                        return joined.includes(user?.id) || teamInfo?.leaderId === user?.id;
+                    });
+                    
+                    if (myMembership) {
+                        activeProj = allProjects.find((p: any) => p.teamId === myMembership.teamId) || null;
+                        activeTeam = (teamsRes.data || []).find((t:any) => t.teamId === myMembership.teamId) || null;
+                    }
                 }
             }
 
             if (!activeTeam && activeProj) {
-                activeTeam = teamsRes.data.find((t:any) => t.teamId === activeProj.teamId);
+                activeTeam = (teamsRes.data || []).find((t:any) => t.teamId === activeProj.teamId) || null;
             }
 
             setCurrentProject(activeProj);
@@ -120,7 +131,7 @@ export const Chat: React.FC = () => {
                 
                 // Hydrate Team Members
                 if (activeTeam) {
-                    const studentData = studentsRes.data;
+                    const studentData = studentsRes.data || [];
                     const membersIds = [activeTeam.leaderId, ...JSON.parse(activeTeam.teamMemberArray || '[]')];
                     
                     const uniqueIds = Array.from(new Set(membersIds));
