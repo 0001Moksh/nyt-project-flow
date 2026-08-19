@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle, Clock, FileText, Square, UploadCloud } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, FileText, UploadCloud } from 'lucide-react';
 import { Card } from './Card';
 import { Loader } from './Loader';
 import { api } from '../services/api';
-import { extractFirstUrl } from '../utils/filePreview';
 
 const STAGES = [
   { key: 'SYNOPSIS', label: 'Synopsis', dateField: 'synopsisDate', color: '#ef4444', endpoint: 'synopsis' },
@@ -29,34 +28,6 @@ const formatDate = (value?: string | null) => {
 const formatTime = (value?: string | null) => {
   if (!value) return '';
   return String(value).substring(0, 5);
-};
-
-const daysUntil = (value?: string | null) => {
-  if (!value) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const raw = String(value);
-  let target: Date;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    const [y, m, d] = raw.split('-').map(Number);
-    target = new Date(y, m - 1, d);
-  } else {
-    target = new Date(value);
-  }
-  target.setHours(0, 0, 0, 0);
-  return Math.ceil((target.getTime() - today.getTime()) / 86400000);
-};
-
-const timeAgo = (value?: string | null) => {
-  if (!value) return '';
-  const diff = Date.now() - new Date(value).getTime();
-  const minutes = Math.max(0, Math.floor(diff / 60000));
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} min${minutes === 1 ? '' : 's'} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days === 1 ? '' : 's'} ago`;
 };
 
 /** Pick the best meeting for a stage: prefer upcoming/scheduled, then most recent. */
@@ -168,60 +139,14 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
     };
   }), [timeline, tasks, submissions, meetings, stageIndex]);
 
-  const currentStage = stageRows[stageIndex] || stageRows[0];
-  const nextDeadline = currentStage?.deadline;
-  const remainingDays = daysUntil(nextDeadline);
-  const latestSubmission = submissions
-    .slice()
-    .sort((a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime())[0];
-  const completedStages = stageRows.filter((stage) => stage.completed).length;
-  const completion = Math.round((completedStages / STAGES.length) * 100);
-
   if (isLoading) {
     return <Card elevation={1}><Loader /></Card>;
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? '16px' : '24px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : 'repeat(3, 1fr)', gap: '16px' }}>
-        <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h4 style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)' }}>Overall Completion</h4>
-            <Square size={18} fill="#3b82f6" color="#3b82f6" />
-          </div>
-          <h2 style={{ margin: '0 0 16px', fontSize: '32px', fontWeight: 700 }}>{completion}%</h2>
-          <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--surface-hover)', borderRadius: '2px', overflow: 'hidden' }}>
-            <div style={{ width: `${completion}%`, height: '100%', backgroundColor: completion >= 75 ? '#22c55e' : completion >= 50 ? '#f59e0b' : '#ef4444' }} />
-          </div>
-        </Card>
-
-        <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 16px', fontSize: '14px', color: 'var(--text-secondary)' }}>Days Remaining</h4>
-          <h2 style={{ margin: '0 0 8px', fontSize: '32px', fontWeight: 700 }}>{remainingDays === null ? '-' : Math.max(remainingDays, 0)}</h2>
-          <p style={{ margin: 0, fontSize: '12px', color: remainingDays !== null && remainingDays < 0 ? '#dc2626' : '#2563eb', fontWeight: 600 }}>
-            {currentStage?.label}: {formatDate(nextDeadline)}
-            {currentStage?.meetingTimeLabel ? ` · ${currentStage.meetingTimeLabel}` : ''}
-          </p>
-          {currentStage?.isRescheduled && (
-            <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#b45309', fontWeight: 600 }}>
-              Rescheduled{currentStage.originalLabel ? ` (was ${currentStage.originalLabel})` : ''}
-            </p>
-          )}
-        </Card>
-
-        <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h4 style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)' }}>Last Submission</h4>
-            <span style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>{timeAgo(latestSubmission?.uploadedAt)}</span>
-          </div>
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600, wordBreak: 'break-word' }}>
-            {latestSubmission ? (latestSubmission.fileName || extractFirstUrl(latestSubmission.comment) || `${latestSubmission.stage} submission`) : 'No submissions yet'}
-          </h2>
-        </Card>
-      </div>
-
-      <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-        <h3 style={{ margin: '0 0 24px', fontSize: '18px' }}>Project Timeline</h3>
+      <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+        <h3 style={{ margin: '0 0 24px', fontSize: '18px', fontWeight: 600 }}>Project Timeline</h3>
         <div style={{ display: 'flex', flexDirection: 'column', position: 'relative', paddingLeft: '24px' }}>
           <div style={{ position: 'absolute', left: '6px', top: '8px', bottom: '24px', width: '2px', backgroundColor: '#dbeafe' }} />
           {stageRows.map((stage, index) => (

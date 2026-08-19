@@ -57,7 +57,6 @@ export const Enrollment: React.FC = () => {
 
   // Available students to search
   const [allStudents, setAllStudents] = useState<any[]>([]);
-  const [allTeams, setAllTeams] = useState<any[]>([]);
   const [alreadyEnrolled, setAlreadyEnrolled] = useState(false);
 
   useEffect(() => {
@@ -71,23 +70,23 @@ export const Enrollment: React.FC = () => {
       try {
         const data = await studentService.getFormDetails(formId);
         setFormConfig(data);
-        const [stdRes, teamsRes, projectsRes] = await Promise.all([
-          api.get('/students'),
-          api.get('/teams').catch(() => ({ data: [] })),
-          api.get('/projects').catch(() => ({ data: [] })),
+        const [stdRes] = await Promise.all([
+          api.get('/students?excludeEnrolled=true'),
         ]);
-        setAllStudents(stdRes.data || []);
-        setAllTeams(teamsRes.data || []);
+        // Available = non-ENROLLED from API (pending/active/declined all included).
+        const available = stdRes.data || [];
+        setAllStudents(available);
 
         if (user?.id) {
-          const me = (stdRes.data || []).find((s: any) => s.studentId === user.id);
-          const hasProject = (projectsRes.data || []).some((p: any) => {
-            const team = (teamsRes.data || []).find((t: any) => t.teamId === p.teamId);
-            if (!team) return false;
-            const members = JSON.parse(team.teamMemberArray || '[]');
-            return team.leaderId === user.id || members.includes(user.id);
-          });
-          setAlreadyEnrolled(me?.enrollStatus === 'ENROLLED' || hasProject);
+          // Leader/joined students are ENROLLED and won't appear in excludeEnrolled list — fetch self.
+          let me = available.find((s: any) => s.studentId === user.id);
+          if (!me) {
+            try {
+              const meRes = await api.get(`/students/${user.id}`);
+              me = meRes.data;
+            } catch { /* ignore */ }
+          }
+          setAlreadyEnrolled(me?.enrollStatus === 'ENROLLED');
         }
       } catch (err) {
         addToast('Enrollment form not found or inactive.', 'error');
@@ -98,26 +97,15 @@ export const Enrollment: React.FC = () => {
     fetchForm();
   }, [formId, addToast, user?.id]);
 
-  const enrolledOrBusyStudentIds = new Set<string>();
-  allStudents.forEach((s: any) => {
-    if (s.enrollStatus === 'ENROLLED') enrolledOrBusyStudentIds.add(s.studentId);
-  });
-  allTeams.forEach((team: any) => {
-    if (team.leaderId) enrolledOrBusyStudentIds.add(team.leaderId);
-    try {
-      const members = JSON.parse(team.teamMemberArray || '[]');
-      if (Array.isArray(members)) members.forEach((id: string) => enrolledOrBusyStudentIds.add(id));
-    } catch { /* ignore */ }
-  });
-
+  // Only ENROLLED students are excluded (API already filters). Keep branch/batch + self rules.
   const selectableStudents = allStudents.filter((s: any) => {
+    if (s.studentId === user?.id) return false;
+    if (String(s.enrollStatus || '').toUpperCase() === 'ENROLLED') return false;
     const sBranch = (s.branch || '').toLowerCase();
     const sBatch = (s.batch || '').toLowerCase();
     const validBranches = (formConfig?.accessBranch || '').split(',').map((b: string) => b.trim().toLowerCase()).filter(Boolean);
     const validBatches = (formConfig?.accessBatch || '').split(',').map((b: string) => b.trim().toLowerCase()).filter(Boolean);
-    return !enrolledOrBusyStudentIds.has(s.studentId) &&
-      s.studentId !== user?.id &&
-      (validBranches.length === 0 || validBranches.includes(sBranch)) &&
+    return (validBranches.length === 0 || validBranches.includes(sBranch)) &&
       (validBatches.length === 0 || validBatches.includes(sBatch));
   });
 
@@ -210,7 +198,7 @@ export const Enrollment: React.FC = () => {
 
     for (const member of invitedMembers) {
       const found = selectableStudents.find((s: any) => s.mail.toLowerCase() === member.mail.toLowerCase())
-        || allStudents.find((s: any) => s.mail.toLowerCase() === member.mail.toLowerCase() && s.enrollStatus !== 'ENROLLED' && !enrolledOrBusyStudentIds.has(s.studentId));
+        || allStudents.find((s: any) => s.mail.toLowerCase() === member.mail.toLowerCase() && String(s.enrollStatus || '').toUpperCase() !== 'ENROLLED');
       if (!found) {
         addToast(`Cannot invite enrolled or ineligible student: ${member.mail}`, 'error');
         return;
@@ -224,7 +212,7 @@ export const Enrollment: React.FC = () => {
       for (const member of invitedMembers) {
         const found = allStudents.find((s: any) => s.mail.toLowerCase() === member.mail.toLowerCase());
         if (found) {
-          if (found.enrollStatus === 'ENROLLED' || enrolledOrBusyStudentIds.has(found.studentId)) {
+          if (String(found.enrollStatus || '').toUpperCase() === 'ENROLLED') {
             addToast(`Student already enrolled: ${member.mail}`, 'error');
             setIsSubmitting(false);
             return;

@@ -293,4 +293,8 @@ h6 {
   .form-details-grid {
     grid-template-columns: 1fr;
   }
+
+  .student-dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
 }

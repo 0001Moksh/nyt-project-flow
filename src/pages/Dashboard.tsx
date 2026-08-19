@@ -3,7 +3,7 @@ import { useAuthStore } from '../utils/authStore';
 import { Card, Button, Loader, ProjectTimeline, ReferenceTemplatesCard } from '../components';
 import { useToastStore } from '../utils/toastStore';
 import { useNavigate } from 'react-router-dom';
-import { Check, X, Bell, Users, CheckCircle, Info, Calendar, Video, MapPin, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
+import { Check, Bell, CheckCircle, Calendar, Video, MapPin, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
 import { api } from '../services/api';
 import { DeliverableUploader } from '../components/DeliverableUploader';
 import { isValidMeetingLink, openMeetingLink } from '../utils/meetingLinks';
@@ -262,168 +262,164 @@ export const Dashboard: React.FC = () => {
             )}
 
             {currentProject ? (
-                <div style={{ display: 'flex', gap: '32px', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
-                    {/* LEFT COLUMN: Project Canvas */}
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    {/* Project info + performance badge */}
+                    <Card elevation={1} style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                            <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                padding: '6px 12px',
+                                borderRadius: '999px',
+                                backgroundColor: performanceScore < 50 ? '#fef2f2' : '#ecfdf5',
+                                color: performanceScore < 50 ? '#b91c1c' : '#047857',
+                                border: `1px solid ${performanceScore < 50 ? '#fecaca' : '#a7f3d0'}`,
+                            }}>
+                                <TrendingUp size={14} />
+                                Your performance on this project: {performanceScore}
+                            </span>
+                            {performanceScore < 50 && (
+                                <span style={{ fontSize: '12px', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <AlertTriangle size={14} /> Attend meetings to avoid penalties
+                                </span>
+                            )}
+                        </div>
+                        <h2 style={{ margin: '0 0 8px', fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {currentProject.projectTitle || 'Untitled Project'}
+                        </h2>
+                        <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                            {currentProject.projectDescription
+                                ? String(currentProject.projectDescription).replace(/\*\*/g, '').trim()
+                                : 'No project description provided.'}
+                        </p>
+                    </Card>
 
-                        {/* Project Banner Card */}
-                        <div style={{ backgroundColor: 'var(--primary)', borderRadius: '12px', padding: '32px', color: 'white', boxShadow: '0 10px 25px -5px rgba(37, 99, 235, 0.4)' }}>
-                            <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 600, letterSpacing: '1px', opacity: 0.8 }}>CS-501: ADVANCED NEURAL NETWORKS</p>
-                            <h2 style={{ margin: '0 0 32px', fontSize: '28px', fontWeight: 700 }}>{currentProject.projectTitle}</h2>
+                    {/* Top grid: Timeline (left) | Meetings + Deliverables (right) */}
+                    <div
+                        className="student-dashboard-grid"
+                        style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(0, 0.85fr)', gap: '24px', alignItems: 'start' }}
+                    >
+                        <div style={{ minWidth: 0 }}>
+                            <ProjectTimeline project={currentProject} />
+                        </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 500 }}><Users size={16} /> Team Capacity</span>
-                                <span style={{ fontSize: '14px', fontWeight: 600 }}>75% Complete</span>
-                            </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0 }}>
+                            <Card elevation={1} style={{ border: '1px solid #bae6fd', borderRadius: '12px', backgroundColor: '#f0f9ff', padding: '24px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                    <h3 style={{ margin: 0, fontSize: '18px', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Calendar size={20} /> Your Team Meetings
+                                    </h3>
+                                </div>
+                                <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#0369a1' }}>
+                                    Shows only meetings for your team. If your slot was rescheduled, you see the new time here.
+                                </p>
 
-                            {/* Progress Bar */}
-                            <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: '4px', overflow: 'hidden', marginBottom: '16px' }}>
-                                <div style={{ width: '75%', height: '100%', backgroundColor: 'white', borderRadius: '4px' }}></div>
-                            </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    {meetings.length === 0 && (
+                                        <div style={{ textAlign: 'center', padding: '16px', color: '#0ea5e9', fontSize: '14px', fontStyle: 'italic' }}>
+                                            No meetings scheduled for your team yet.
+                                        </div>
+                                    )}
+                                    {meetings.map((meeting) => (
+                                        <div key={meeting.meetingId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid #bae6fd', borderRadius: '8px', backgroundColor: '#ffffff', gap: '12px', flexWrap: 'wrap' }}>
+                                            <div style={{ display: 'flex', gap: '16px' }}>
+                                                <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: meeting.status === 'COMPLETED' ? '#dcfce7' : '#e0f2fe', color: meeting.status === 'COMPLETED' ? '#16a34a' : '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                    {meeting.mode === 'ONLINE' ? <Video size={20} /> : <MapPin size={20} />}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                        {meeting.stage} Review
+                                                        {meeting.sessionId && <span style={{ fontSize: '10px', fontWeight: 700, color: '#0369a1', backgroundColor: '#e0f2fe', padding: '2px 8px', borderRadius: '999px' }}>BATCH</span>}
+                                                        {meeting.originalMeetingDate && <span style={{ fontSize: '10px', fontWeight: 700, color: '#b45309', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px' }}>RESCHEDULED</span>}
+                                                        {meeting.status === 'COMPLETED' && <span style={{ fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }} />COMPLETED</span>}
+                                                    </div>
+                                                    <div style={{ fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#0369a1' }}><Calendar size={14} /> {meeting.meetingDate}</span>
+                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#0369a1' }}><Clock size={14} /> {String(meeting.meetingTime || '').substring(0, 5)}{meeting.endTime ? ` - ${String(meeting.endTime).substring(0, 5)}` : ''}</span>
+                                                    </div>
+                                                    {meeting.originalMeetingDate && (
+                                                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '6px' }}>
+                                                            Was: {meeting.originalMeetingDate} at {String(meeting.originalMeetingTime || '').substring(0, 5)}
+                                                        </div>
+                                                    )}
+                                                    {meeting.status === 'COMPLETED' && meeting.conclusionNotes && (
+                                                        <div style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px', fontStyle: 'italic' }}>
+                                                            &quot; {meeting.conclusionNotes} &quot;
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', opacity: 0.8 }}>
-                                <span>{teamMembersList.length} Members Active</span>
-                                <span>1 Spot Remaining</span>
+                                            {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
+                                                isValidMeetingLink(meeting.locationOrLink) ? (
+                                                    <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink, () => addToast('This meeting has an invalid link. Ask your supervisor/admin to update it.', 'error'))} style={{ borderColor: '#0284c7', color: '#0284c7' }}>Join GMeet</Button>
+                                                ) : (
+                                                    <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
+                                                )
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+
+                            {currentProject?.documentId && (
+                                <DeliverableUploader
+                                    projectId={currentProject.projectId}
+                                    documentId={currentProject.documentId}
+                                    currentStage={currentProject.stageStatus}
+                                    isLeader={currentProject.leaderId === user.id}
+                                    onSuccess={fetchData}
+                                />
+                            )}
+                        </div>
+                    </div>
+
+                    <ReferenceTemplatesCard formId={currentProject?.formId} currentStage={currentProject?.stageStatus} />
+
+                    {/* Active Members */}
+                    <Card elevation={1} style={{ padding: '0', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
+                        <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fdfdfd' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Active Members</h3>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                {currentProject.leaderId === user.id && (
+                                    <Button variant="outline" size="sm" onClick={handleCompleteTeam}>Complete Team</Button>
+                                )}
+                                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                    {teamMembersList.filter((m: any) => m.status === 'APPROVED').length}/{teamMembersList.length || 0} joined
+                                </span>
                             </div>
                         </div>
 
-                        <ProjectTimeline project={currentProject} />
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            {teamMembersList.map((tm, idx) => (
+                                <div key={idx} style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: idx !== teamMembersList.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: tm.status === 'APPROVED' ? 'var(--primary-glow)' : 'var(--surface-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: tm.status === 'APPROVED' ? 'var(--primary)' : 'var(--text-secondary)' }}>
+                                            {tm.name?.charAt(0) || '?'}
+                                        </div>
+                                        <div>
+                                            <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>
+                                                {tm.name} {tm.studentId === user.id ? '(You)' : ''}
+                                            </div>
+                                            <div style={{ fontSize: '13px', color: 'var(--text-disabled)' }}>
+                                                {tm.isLeader ? 'Team Lead' : 'Team Member'} • {tm.rollNo || 'N/A'} • {tm.mail || 'No Email'}
+                                            </div>
+                                        </div>
+                                    </div>
 
-                        <ReferenceTemplatesCard formId={currentProject?.formId} currentStage={currentProject?.stageStatus} />
-
-                        {/* Active Members List */}
-                        <Card elevation={1} style={{ padding: '0', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
-                            <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fdfdfd' }}>
-                                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Active Members</h3>
-                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                                    {currentProject.leaderId === user.id && (
-                                        <Button variant="outline" size="sm" onClick={handleCompleteTeam}>Complete Team</Button>
+                                    {tm.status === 'APPROVED' ? (
+                                        <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: '#e6f4ea', color: '#1e8e3e', padding: '4px 12px', borderRadius: '12px' }}>APPROVED</span>
+                                    ) : (
+                                        <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: '#fef3c7', color: '#d97706', padding: '4px 12px', borderRadius: '12px' }}>PENDING APPROVAL</span>
                                     )}
-                                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>3/4 SLOTS</span>
                                 </div>
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                {teamMembersList.map((tm, idx) => (
-                                    <div key={idx} style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: idx !== teamMembersList.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: tm.status === 'APPROVED' ? 'var(--primary-glow)' : 'var(--surface-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: tm.status === 'APPROVED' ? 'var(--primary)' : 'var(--text-secondary)' }}>
-                                                {tm.name.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>
-                                                    {tm.name} {tm.studentId === user.id ? '(You)' : ''}
-                                                </div>
-                                                <div style={{ fontSize: '13px', color: 'var(--text-disabled)' }}>
-                                                    {tm.isLeader ? 'Team Lead' : 'Team Member'} • {tm.rollNo || 'N/A'} • {tm.mail || 'No Email'}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {tm.status === 'APPROVED' ? (
-                                            <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: '#e6f4ea', color: '#1e8e3e', padding: '4px 12px', borderRadius: '12px' }}>APPROVED</span>
-                                        ) : (
-                                            <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: '#fef3c7', color: '#d97706', padding: '4px 12px', borderRadius: '12px' }}>PENDING APPROVAL</span>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
-
-                        {currentProject?.documentId && (
-                            <DeliverableUploader
-                                projectId={currentProject.projectId}
-                                documentId={currentProject.documentId}
-                                currentStage={currentProject.stageStatus}
-                                isLeader={currentProject.leaderId === user.id}
-                                onSuccess={fetchData}
-                            />
-                        )}
-
-                        {/* Team Meetings — only this team's slots (incl. per-team reschedules) */}
-                        <Card elevation={1} style={{ border: '1px solid #bae6fd', borderRadius: '12px', marginBottom: '24px', backgroundColor: '#f0f9ff', padding: '24px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                <h3 style={{ margin: 0, fontSize: '18px', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Calendar size={20} /> Your Team Meetings
-                                </h3>
-                            </div>
-                            <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#0369a1' }}>
-                                Shows only meetings for your team. If your slot was rescheduled, you see the new time here.
-                            </p>
-                            
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                {meetings.length === 0 && (
-                                    <div style={{ textAlign: 'center', padding: '16px', color: '#0ea5e9', fontSize: '14px', fontStyle: 'italic' }}>
-                                        No meetings scheduled for your team yet.
-                                    </div>
-                                )}
-                                {meetings.map((meeting) => (
-                                    <div key={meeting.meetingId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid #bae6fd', borderRadius: '8px', backgroundColor: '#ffffff', gap: '12px', flexWrap: 'wrap' }}>
-                                        <div style={{ display: 'flex', gap: '16px' }}>
-                                            <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: meeting.status === 'COMPLETED' ? '#dcfce7' : '#e0f2fe', color: meeting.status === 'COMPLETED' ? '#16a34a' : '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                {meeting.mode === 'ONLINE' ? <Video size={20} /> : <MapPin size={20} />}
-                                            </div>
-                                            <div>
-                                                <div style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                    {meeting.stage} Review
-                                                    {meeting.sessionId && <span style={{ fontSize: '10px', fontWeight: 700, color: '#0369a1', backgroundColor: '#e0f2fe', padding: '2px 8px', borderRadius: '999px' }}>BATCH</span>}
-                                                    {meeting.originalMeetingDate && <span style={{ fontSize: '10px', fontWeight: 700, color: '#b45309', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px' }}>RESCHEDULED</span>}
-                                                    {meeting.status === 'COMPLETED' && <span style={{ fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }}/>COMPLETED</span>}
-                                                </div>
-                                                <div style={{ fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#0369a1' }}><Calendar size={14} /> {meeting.meetingDate}</span>
-                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#0369a1' }}><Clock size={14} /> {String(meeting.meetingTime || '').substring(0, 5)}{meeting.endTime ? ` - ${String(meeting.endTime).substring(0, 5)}` : ''}</span>
-                                                </div>
-                                                {meeting.originalMeetingDate && (
-                                                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '6px' }}>
-                                                        Was: {meeting.originalMeetingDate} at {String(meeting.originalMeetingTime || '').substring(0, 5)}
-                                                    </div>
-                                                )}
-                                                {meeting.status === 'COMPLETED' && meeting.conclusionNotes && (
-                                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px', fontStyle: 'italic' }}>
-                                                        " {meeting.conclusionNotes} "
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
-                                            isValidMeetingLink(meeting.locationOrLink) ? (
-                                                <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink, () => addToast('This meeting has an invalid link. Ask your supervisor/admin to update it.', 'error'))} style={{ borderColor: '#0284c7', color: '#0284c7' }}>Join GMeet</Button>
-                                            ) : (
-                                                <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
-                                            )
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
-
-                    </div>
-
-                    {/* RIGHT COLUMN: Sidebar Panels */}
-                    <div style={{ width: '340px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-                        {/* Performance Panel */}
-                        <Card elevation={1} style={{ padding: '24px', border: `1px solid ${performanceScore < 50 ? '#fecaca' : 'var(--border-color)'}`, borderRadius: '12px', backgroundColor: performanceScore < 50 ? '#fef2f2' : 'var(--surface)' }}>
-                            <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', color: performanceScore < 50 ? '#dc2626' : 'var(--text-primary)' }}>
-                                <TrendingUp size={20} /> My Performance
-                            </h3>
-                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', marginBottom: '16px' }}>
-                                <h2 style={{ fontSize: '48px', margin: 0, fontWeight: 800, color: performanceScore < 50 ? '#ef4444' : '#16a34a', lineHeight: '48px' }}>{performanceScore}</h2>
-                                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Points</span>
-                            </div>
-                            <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden', marginBottom: '16px' }}>
-                                <div style={{ width: `${Math.max(0, performanceScore)}%`, height: '100%', backgroundColor: performanceScore < 50 ? '#ef4444' : '#16a34a' }}></div>
-                            </div>
-                            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
-                                {performanceScore < 50 ? (
-                                    <span style={{ display: 'flex', gap: '6px', color: '#b91c1c' }}><AlertTriangle size={16} /> Warning: Missing mandatory meetings incurs a 10pt penalty.</span>
-                                ) : 'Maintain your score above 50 by completing milestones and attending all scheduled meetings.'}
-                            </p>
-                        </Card>
-                    </div>
+                            ))}
+                        </div>
+                    </Card>
                 </div>
             ) : (
                 <Card elevation={1} style={{ padding: '32px', color: 'var(--text-secondary)' }}>
