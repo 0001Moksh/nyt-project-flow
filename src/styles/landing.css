@@ -205,8 +205,8 @@
   transform: perspective(1000px) rotateY(0deg) rotateX(0deg);
 }
 
-/* Buttons */
-.btn {
+/* Buttons — scoped to landing so app Button styles are not overridden */
+.landing-container .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -220,42 +220,42 @@
   border: none;
 }
 
-.btn-primary {
+.landing-container .btn-primary {
   background-color: #0A2B73;
   color: #FFF;
   box-shadow: 0 4px 14px 0 rgba(10, 43, 115, 0.39);
 }
 
-.btn-primary:hover {
+.landing-container .btn-primary:hover {
   background-color: #08215A;
   box-shadow: 0 6px 20px rgba(10, 43, 115, 0.5);
   transform: translateY(-2px);
 }
 
-.btn-outline {
+.landing-container .btn-outline {
   background-color: transparent;
   color: #0A2B73;
   border: 1px solid #E0E0E0;
 }
 
-.btn-outline:hover {
+.landing-container .btn-outline:hover {
   background-color: #F0F4FF;
   border-color: #0A2B73;
 }
 
-.btn-white {
+.landing-container .btn-white {
   background-color: #FFF;
   color: #1A1A1A;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
-.btn-white:hover {
+.landing-container .btn-white:hover {
   background-color: #F8F9FA;
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
 }
 
-.btn-icon-right {
+.landing-container .btn-icon-right {
   margin-left: 8px;
   display: flex;
   align-items: center;

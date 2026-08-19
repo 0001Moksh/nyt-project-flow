@@ -189,9 +189,19 @@ export const AdminSupervisors: React.FC = () => {
                                             </div>
                                         </td>
                                         <td style={{ padding: '16px' }}>
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: sup.enrollStatus === 'ACTIVE' ? '#16a34a' : '#d97706' }}>
-                                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: sup.enrollStatus === 'ACTIVE' ? '#16a34a' : '#d97706' }}></div> {sup.enrollStatus}
-                                            </span>
+                                            {(() => {
+                                                const status = String(sup.enrollStatus || 'PENDING');
+                                                const color =
+                                                    status === 'ENROLLED' ? '#2563eb'
+                                                    : status === 'ACTIVE' ? '#16a34a'
+                                                    : status === 'INACTIVE' ? '#ef4444'
+                                                    : '#d97706';
+                                                return (
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color }}>
+                                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: color }}></div> {status}
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
                                     </tr>
                                 );

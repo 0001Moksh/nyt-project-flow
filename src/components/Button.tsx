@@ -22,6 +22,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       fullWidth = false,
       children,
       disabled,
+      style,
       ...props
     },
     ref
@@ -62,8 +63,6 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const getVariantClasses = () => {
-      // In a real app we might use a dedicated CSS module or clsx/tailwind
-      // Since we are pure vanilla CSS per instructions with dynamic styles:
       return `btn btn-${variant}`;
     };
 
@@ -71,8 +70,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         disabled={disabled || isLoading}
-        style={getBaseStyles()}
         className={`${getVariantClasses()} ${className}`}
+        style={{ ...getBaseStyles(), ...style }}
         {...props}
       >
         {isLoading && <span className="btn-spinner" />}

@@ -6,7 +6,7 @@ import { studentService } from '../services/studentService';
 import type { FormAttachment, FormResponse } from '../services/adminService';
 import { useAuthStore } from '../utils/authStore';
 import { useToastStore } from '../utils/toastStore';
-import { CheckCircle, Check, Clock, User, X, Search, Info, ArrowLeft, Mail, ArrowRight, Paperclip, Users } from 'lucide-react';
+import { CheckCircle, Check, X, Search, ArrowLeft, Mail, ArrowRight, Paperclip, Users } from 'lucide-react';
 import { getPreviewUrl } from '../utils/filePreview';
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
@@ -388,39 +388,7 @@ export const Enrollment: React.FC = () => {
         </Button>
       </div>
 
-      <div style={{ display: 'flex', gap: '32px', alignItems: 'flex-start' }}>
-        {/* LEFT PANE: Form Construction */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-          {/* Active Selection Demo Card */}
-          <Card elevation={1} style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 20px' }}>Active Selection</h3>
-            <div style={{ display: 'flex', gap: '20px' }}>
-              <div style={{ width: '180px', height: '110px', backgroundColor: '#1a1a1a', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {/* Mock Icon mimicking image */}
-                <div style={{ width: '30px', height: '40px', border: '2px solid #fff', borderRadius: '4px', position: 'relative' }}>
-                  <div style={{ position: 'absolute', top: '-10px', left: '12px', width: '2px', height: '10px', backgroundColor: '#fff' }} />
-                  <div style={{ position: 'absolute', bottom: '-20px', left: '12px', width: '2px', height: '20px', backgroundColor: '#fff' }} />
-                  <div style={{ position: 'absolute', top: '10px', left: '10px', width: '6px', height: '6px', backgroundColor: '#fff', borderRadius: '50%' }} />
-                </div>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '10px', fontWeight: 700, backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', padding: '4px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>In Progress</span>
-                  <span style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#e6f4ea', color: '#1e8e3e', padding: '4px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>{formConfig.accessBranch} Eligible</span>
-                </div>
-                <h2 style={{ fontSize: '22px', fontWeight: 700, margin: '0 0 8px' }}>{fieldsConfig.find((f: any) => f.label.toLowerCase().includes('title'))?.label || 'Project Configuration'}</h2>
-                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
-                  Define your team composition and complete the required {formConfig.accessBranch} syllabus fields below to initiate the enrollment process.
-                </p>
-                <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><User size={14} /> Dr. Aris Thorne</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Clock size={14} /> 12 Weeks</span>
-                </div>
-              </div>
-            </div>
-          </Card>
-
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '900px' }}>
           {referenceFiles.length > 0 && (
             <Card elevation={1} style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
               <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -619,7 +587,7 @@ export const Enrollment: React.FC = () => {
                 )}
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px' }}>
-                Showing only non-enrolled students from <strong style={{ color: 'var(--text-secondary)' }}>{formConfig.accessBranch}</strong> {formConfig.accessBatch} (Eligibility requirement)
+                Showing only non-enrolled students from <strong style={{ color: 'var(--text-secondary)' }}>{formConfig.accessBranch}</strong> {formConfig.accessBatch}
               </p>
             </div>
 
@@ -697,112 +665,8 @@ export const Enrollment: React.FC = () => {
 
             <div style={{ display: 'flex', gap: '16px', marginTop: '32px' }}>
               <Button onClick={handleEnrollmentSubmit} isLoading={isSubmitting} size="lg" style={{ flex: 1 }}>Submit Enrollment Form</Button>
-              <Button variant="outline" size="lg" style={{ width: '140px', backgroundColor: 'var(--surface-hover)', borderColor: 'transparent' }}>Save Draft</Button>
             </div>
           </Card>
-        </div>
-
-        {/* RIGHT PANE: Timeline & Context */}
-        <div style={{ width: '340px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-          <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Form Status</h3>
-              <span style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#fef3c7', color: '#d97706', padding: '4px 8px', borderRadius: '12px', textTransform: 'uppercase' }}>Pending</span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {/* Step 1 */}
-              <div style={{ display: 'flex', gap: '16px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Check size={14} color="white" />
-                  </div>
-                  <div style={{ width: '2px', height: '100%', backgroundColor: 'var(--border-color)' }}></div>
-                </div>
-                <div style={{ paddingBottom: '16px' }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 4px', color: 'var(--text-primary)' }}>Form Initiated</h4>
-                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-disabled)', lineHeight: 1.4 }}>Submitted by you on {new Date().toLocaleDateString()}</p>
-                </div>
-              </div>
-
-              {/* Step 2 */}
-              <div style={{ display: 'flex', gap: '16px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <User size={14} color="white" />
-                  </div>
-                  <div style={{ width: '2px', height: '100%', backgroundColor: 'var(--border-color)', minHeight: '60px' }}></div>
-                </div>
-                <div style={{ paddingBottom: '16px', flex: 1 }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 4px', color: 'var(--text-primary)' }}>Team Member Approvals</h4>
-                  <p style={{ margin: '0 0 16px', fontSize: '12px', color: '#d97706', fontWeight: 500 }}>Waiting for confirmation (1/{invitedMembers.length + 1})</p>
-
-                  {/* Inner statuses */}
-                  {invitedMembers.length > 0 && (
-                    <div style={{ backgroundColor: '#fdfdfd', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {invitedMembers.map((m, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--surface-hover)', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                              {m.name.charAt(0)}
-                            </div>
-                            <span style={{ fontSize: '13px', fontWeight: 500 }}>{m.name}</span>
-                          </div>
-                          <Clock size={16} color="var(--text-disabled)" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Step 3 */}
-              <div style={{ display: 'flex', gap: '16px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: 'var(--surface-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <User size={14} color="var(--text-disabled)" />
-                  </div>
-                  <div style={{ width: '2px', height: '100%', backgroundColor: 'var(--border-color)' }}></div>
-                </div>
-                <div style={{ paddingBottom: '16px' }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: 500, margin: '0 0 4px', color: 'var(--text-disabled)' }}>Supervisor Review</h4>
-                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-disabled)' }}>Awaiting Dr. Aris Thorne</p>
-                </div>
-              </div>
-
-              {/* Step 4 */}
-              <div style={{ display: 'flex', gap: '16px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: 'var(--surface-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Check size={14} color="var(--text-disabled)" />
-                  </div>
-                </div>
-                <div style={{ paddingBottom: '0' }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: 500, margin: '0 0 4px', color: 'var(--text-disabled)' }}>Final Enrollment</h4>
-                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-disabled)' }}>Project Workspace Creation</p>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '24px', paddingTop: '16px', textAlign: 'center' }}>
-              <button style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', margin: '0 auto' }}>
-                <Mail size={14} /> Resend Invite Notifications
-              </button>
-            </div>
-          </Card>
-
-          <div style={{ backgroundColor: 'var(--primary-glow)', border: '1px solid #dbeafe', borderRadius: '12px', padding: '16px', display: 'flex', gap: '12px' }}>
-            <Info size={16} color="var(--primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
-            <div>
-              <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 600, color: '#1e3a8a' }}>Eligibility Note</h4>
-              <p style={{ margin: 0, fontSize: '12px', color: 'var(--primary)', lineHeight: 1.5 }}>
-                Ensure all invited members have completed 'CS201: Data Structures' to avoid supervisor rejection during the review phase.
-              </p>
-            </div>
-          </div>
-
-        </div>
       </div>
     </div>
   );

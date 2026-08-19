@@ -19,11 +19,27 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       leftIcon,
       rightIcon,
       id,
+      style,
+      onFocus,
+      onBlur,
       ...props
     },
     ref
   ) => {
     const inputId = id || `input-${Math.random().toString(36).substring(2, 9)}`;
+
+    const baseInputStyle: React.CSSProperties = {
+      width: '100%',
+      padding: `12px ${rightIcon ? '40px' : '12px'} 12px ${leftIcon ? '40px' : '12px'}`,
+      borderRadius: 'var(--radius-md)',
+      border: `1px solid ${error ? 'var(--danger)' : 'var(--border-color)'}`,
+      fontSize: '16px',
+      color: 'var(--text-primary)',
+      backgroundColor: 'var(--surface)',
+      transition: 'var(--transition-fast)',
+      outline: 'none',
+      boxShadow: 'none',
+    };
 
     return (
       <div className={`input-container ${className}`} style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '16px' }}>
@@ -43,23 +59,14 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <input
             ref={ref}
             id={inputId}
-            style={{
-              width: '100%',
-              padding: `12px ${rightIcon ? '40px' : '12px'} 12px ${leftIcon ? '40px' : '12px'}`,
-              borderRadius: 'var(--radius-md)',
-              border: `1px solid ${error ? 'var(--danger)' : 'var(--border-color)'}`,
-              fontSize: '16px',
-              color: 'var(--text-primary)',
-              backgroundColor: 'var(--surface)',
-              transition: 'var(--transition-fast)',
-              outline: 'none',
-              boxShadow: 'none',
-            }}
+            style={{ ...baseInputStyle, ...style }}
             onFocus={(e) => {
               if (!error) e.target.style.border = '1px solid var(--primary)';
+              onFocus?.(e);
             }}
             onBlur={(e) => {
               if (!error) e.target.style.border = '1px solid var(--border-color)';
+              onBlur?.(e);
             }}
             {...props}
           />

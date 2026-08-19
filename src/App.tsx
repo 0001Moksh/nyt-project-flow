@@ -58,6 +58,7 @@ const App: React.FC = () => {
             <Route path="admin/students" element={<AdminStudents />} />
             <Route path="admin/create-form" element={<CreateForm />} />
             <Route path="admin/form-details/:formId" element={<FormDetails />} />
+            <Route path="admin/settings" element={<Settings />} />
             
             {/* Supervisor Routes */}
             <Route path="/supervisor">
@@ -66,6 +67,7 @@ const App: React.FC = () => {
               <Route path="teams/:teamId" element={<SupervisorTeamOverview />} />
               <Route path="tasks" element={<SupervisorTasks />} />
               <Route path="submissions/:projectId" element={<SupervisorReview />} />
+              <Route path="settings" element={<Settings />} />
             </Route>
             
             {/* Catch all - 404 fallback */}

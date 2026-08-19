@@ -3,33 +3,34 @@ import { useAuthStore } from '../utils/authStore';
 import { Card, Button, Input } from '../components';
 import { useToastStore } from '../utils/toastStore';
 import { api } from '../services/api';
-import { Mail, Bell, Clock, Info } from 'lucide-react';
+import { Mail, Info } from 'lucide-react';
 
 export const Settings: React.FC = () => {
     const { user } = useAuthStore();
     const addToast = useToastStore(state => state.addToast);
 
-    // Form
     const [name, setName] = useState(user?.name || '');
-    const [mail, setMail] = useState('');
+    const [mail, setMail] = useState(user?.email || '');
     const [department, setDepartment] = useState('');
     const [rollNo, setRollNo] = useState('');
-    
-    // Passwords & Security
+    const [loadingProfile, setLoadingProfile] = useState(true);
+
     const [newPass, setNewPass] = useState('');
     const [confPass, setConfPass] = useState('');
     const [otpSent, setOtpSent] = useState(false);
     const [otp, setOtp] = useState('');
 
-    // Notifications
     const [emailAlerts, setEmailAlerts] = useState(true);
-    const [pushAlerts, setPushAlerts] = useState(false);
-    const [deadlineAlerts, setDeadlineAlerts] = useState(true);
+    const [savingNotifications, setSavingNotifications] = useState(false);
 
     useEffect(() => {
-        if (!user?.id) return;
-        
+        if (!user?.id) {
+            setLoadingProfile(false);
+            return;
+        }
+
         const fetchProfile = async () => {
+            setLoadingProfile(true);
             try {
                 if (user.role === 'ADMIN') {
                     const res = await api.get(`/admins/${user.id}`);
@@ -37,48 +38,56 @@ export const Settings: React.FC = () => {
                         setName(res.data.name || '');
                         setMail(res.data.mail || '');
                         setDepartment(res.data.department || '');
+                        setEmailAlerts(res.data.emailNotifications !== false);
                     }
                 } else if (user.role === 'SUPERVISOR') {
-                    const res = await api.get(`/supervisors`);
-                    const sup = res.data?.find((s: any) => s.supervisorId === user.id);
-                    if (sup) {
-                        setName(sup.name || '');
-                        setMail(sup.mail || '');
-                        setDepartment(sup.branch || '');
+                    const res = await api.get(`/supervisors/${user.id}`);
+                    if (res.data) {
+                        setName(res.data.name || '');
+                        setMail(res.data.mail || '');
+                        setDepartment(res.data.branch || '');
+                        setEmailAlerts(res.data.emailNotifications !== false);
                     }
                 } else if (user.role === 'STUDENT') {
-                    const res = await api.get(`/students`);
-                    const stu = res.data?.find((s: any) => s.studentId === user.id);
-                    if (stu) {
-                        setName(stu.name || '');
-                        setMail(stu.mail || '');
-                        setDepartment(stu.branch || '');
-                        setRollNo(stu.rollNo || '');
+                    const res = await api.get(`/students/${user.id}`);
+                    if (res.data) {
+                        setName(res.data.name || '');
+                        setMail(res.data.mail || '');
+                        setDepartment(res.data.branch || '');
+                        setRollNo(res.data.rollNo || '');
+                        setEmailAlerts(res.data.emailNotifications !== false);
                     }
                 }
             } catch (err) {
                 console.error(err);
+                // Fallback to session values so the page is never blank
+                setName(user.name || '');
+                setMail(user.email || '');
+                addToast('Could not load full profile from server', 'error');
+            } finally {
+                setLoadingProfile(false);
             }
         };
         fetchProfile();
     }, [user]);
 
-    const handleSave = async () => {
+    const persistEmailNotifications = async (enabled: boolean) => {
+        if (!user?.id) return;
+        setSavingNotifications(true);
         try {
-            if (user?.role === 'ADMIN' && user.id) {
-                // If the user hasn't changed their password, we don't send it, or we have to send a blank payload 
-                // But the backend AdminUpdateRequest expects password to be populated or ignored depending on logic.
-                // Assuming standard PUT payload without password overrides cleanly:
-                await api.put(`/admins/${user.id}`, {
-                    name,
-                    mail,
-                    department,
-                    password: '' // Mock empty bypass, real implementation depends on backend validator
-                });
+            if (user.role === 'ADMIN') {
+                await api.put(`/admins/${user.id}`, { emailNotifications: enabled });
+            } else if (user.role === 'SUPERVISOR') {
+                await api.put(`/supervisors/${user.id}`, { emailNotifications: enabled });
+            } else if (user.role === 'STUDENT') {
+                await api.put(`/students/${user.id}`, { emailNotifications: enabled });
             }
-            addToast('Profile updated successfully!', 'success');
+            setEmailAlerts(enabled);
+            addToast(enabled ? 'Email notifications enabled' : 'Email notifications disabled', 'success');
         } catch (err) {
-            addToast('Failed to update profile', 'error');
+            addToast('Failed to update notification preference', 'error');
+        } finally {
+            setSavingNotifications(false);
         }
     };
 
@@ -107,8 +116,12 @@ export const Settings: React.FC = () => {
             return;
         }
         try {
-            await api.post('/auth/forgot-password/reset', { email: mail, password: newPass, confirmPassword: confPass, otp });
-
+            await api.post('/auth/forgot-password/reset', {
+                email: mail,
+                password: newPass,
+                confirmPassword: confPass,
+                otp
+            });
             addToast('Password updated successfully', 'success');
             setOtpSent(false);
             setOtp('');
@@ -119,164 +132,135 @@ export const Settings: React.FC = () => {
         }
     };
 
+    const roleLabel = user?.role === 'ADMIN' ? 'Admin' : user?.role === 'SUPERVISOR' ? 'Supervisor' : 'Student';
+
     return (
         <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            
-            {/* Header */}
             <div>
                 <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>Profile Settings</h1>
                 <p style={{ color: 'var(--text-secondary)', margin: '8px 0 0', fontSize: '15px' }}>
-                    Manage your administrative identity and security preferences.
+                    View your account details, reset password, and manage email notifications.
                 </p>
             </div>
 
-            {/* Personal Information */}
             <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
-                <h3 style={{ margin: '0 0 24px', fontSize: '18px', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>Personal Information</h3>
-                
-                <div style={{ display: 'flex', gap: '32px', alignItems: 'flex-start' }}>
-                    {/* Avatar Upload */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ position: 'relative' }}>
-                            <div style={{ width: '100px', height: '100px', borderRadius: '50%', backgroundColor: '#fed7aa', border: '4px solid #fff', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', overflow: 'hidden', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                                {/* Mock avatar silhouette mimicking image */}
-                                <div style={{ width: '40px', height: '40px', backgroundColor: '#f97316', borderRadius: '50%', marginBottom: '20px' }}></div>
-                                <div style={{ position: 'absolute', bottom: '-10px', width: '80px', height: '50px', backgroundColor: '#f97316', borderRadius: '40px 40px 0 0' }}></div>
-                            </div>
-                            <div style={{ position: 'absolute', bottom: '0', right: '0', backgroundColor: 'var(--primary)', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', border: '2px solid white', cursor: 'pointer' }}>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                            </div>
-                        </div>
-                        <span style={{ fontSize: '11px', color: 'var(--text-disabled)', textAlign: 'center', lineHeight: 1.4 }}>JPG, GIF or PNG. <br/>Max size of 2MB</span>
-                    </div>
+                <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 600 }}>Account details</h3>
+                <p style={{ margin: '0 0 24px', fontSize: '13px', color: 'var(--text-disabled)', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                    These fields are managed by admin and cannot be edited here.
+                </p>
 
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <div style={{ display: 'flex', gap: '16px' }}>
-                            <div style={{ flex: 1 }}>
-                                <Input label="Full Name" value={name} onChange={(e: any) => setName(e.target.value)} disabled={user?.role === 'STUDENT'} style={{ marginBottom: 0, backgroundColor: user?.role === 'STUDENT' ? 'var(--surface-hover)' : '' }} />
+                {loadingProfile ? (
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading profile…</p>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                            <div style={{ flex: '1 1 240px' }}>
+                                <Input label="Full Name" value={name} disabled style={{ marginBottom: 0, backgroundColor: 'var(--surface-hover)' }} />
                             </div>
-                            <div style={{ flex: 1 }}>
-                                <Input label="Email (Mail)" value={mail} onChange={(e: any) => setMail(e.target.value)} disabled style={{ marginBottom: 0, backgroundColor: 'var(--surface-hover)' }} />
+                            <div style={{ flex: '1 1 240px' }}>
+                                <Input label="Email" value={mail} disabled style={{ marginBottom: 0, backgroundColor: 'var(--surface-hover)' }} />
                             </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '16px' }}>
-                            <div style={{ flex: 1 }}>
-                                <Input label="Department / Branch" value={department} onChange={(e: any) => setDepartment(e.target.value)} disabled={user?.role === 'STUDENT'} style={{ marginBottom: 0, backgroundColor: user?.role === 'STUDENT' ? 'var(--surface-hover)' : '' }} />
+                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                            <div style={{ flex: '1 1 240px' }}>
+                                <Input
+                                    label={user?.role === 'ADMIN' ? 'Department' : 'Branch'}
+                                    value={department}
+                                    disabled
+                                    style={{ marginBottom: 0, backgroundColor: 'var(--surface-hover)' }}
+                                />
                             </div>
                             {user?.role === 'STUDENT' && (
-                                <div style={{ flex: 1 }}>
-                                    <Input label="Roll Number" value={rollNo} onChange={(e: any) => setRollNo(e.target.value)} disabled style={{ marginBottom: 0, backgroundColor: 'var(--surface-hover)' }} />
+                                <div style={{ flex: '1 1 240px' }}>
+                                    <Input label="Roll Number" value={rollNo} disabled style={{ marginBottom: 0, backgroundColor: 'var(--surface-hover)' }} />
                                 </div>
                             )}
+                            <div style={{ flex: '1 1 240px' }}>
+                                <Input label="Role" value={roleLabel} disabled style={{ marginBottom: 0, backgroundColor: 'var(--surface-hover)' }} />
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
             </Card>
 
-            {/* Security */}
             <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden', padding: 0 }}>
                 <div style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '24px' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Security: Password Update</h3>
-                        {!otpSent && <Button size="sm" onClick={handleSendOTP} disabled={!mail}>Send Update OTP</Button>}
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Reset password</h3>
+                        {!otpSent && (
+                            <Button size="sm" onClick={handleSendOTP} disabled={!mail}>
+                                Send OTP
+                            </Button>
+                        )}
                     </div>
 
                     {otpSent ? (
                         <div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: '16px', marginBottom: '16px' }}>
-                                <Input label="Enter OTP from Email" value={otp} onChange={e=>setOtp(e.target.value)} style={{ marginBottom: 0 }} />
-                                <Input label="New Password" type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} style={{ marginBottom: 0 }} />
-                                <Input label="Confirm New Password" type="password" value={confPass} onChange={e=>setConfPass(e.target.value)} style={{ marginBottom: 0 }} />
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+                                <Input label="OTP from Email" value={otp} onChange={e => setOtp(e.target.value)} style={{ marginBottom: 0 }} />
+                                <Input label="New Password" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} style={{ marginBottom: 0 }} />
+                                <Input label="Confirm New Password" type="password" value={confPass} onChange={e => setConfPass(e.target.value)} style={{ marginBottom: 0 }} />
                             </div>
                             <Button variant="primary" onClick={handleUpdatePassword}>Verify & Update Password</Button>
                         </div>
                     ) : (
                         <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                            Click "Send Update OTP" to receive a verification code on your registered email (<strong>{mail || 'Not Configured'}</strong>) and securely change your password.
+                            Click &quot;Send OTP&quot; to receive a verification code on <strong>{mail || 'your registered email'}</strong> and reset your password.
                         </div>
                     )}
                 </div>
                 <div style={{ backgroundColor: '#eff6ff', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '8px', color: '#1e3a8a', fontSize: '12px' }}>
-                   <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>!</div>
-                   Password must be at least 8 characters long with numbers and symbols.
+                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>!</div>
+                    Password must be at least 8 characters long with numbers and symbols.
                 </div>
             </Card>
 
-            {/* Notifications */}
             <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}>
                 <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 600 }}>Notifications</h3>
-                <p style={{ margin: '0 0 24px', fontSize: '13px', color: 'var(--text-disabled)', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>Choose how you stay updated on project status and deadlines.</p>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', gap: '16px' }}>
-                            <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                <Mail size={20} color="var(--text-secondary)" />
-                            </div>
-                            <div>
-                                <h4 style={{ margin: '0 0 4px', fontSize: '15px' }}>Email Notifications</h4>
-                                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-disabled)' }}>Daily project summaries and team updates.</p>
-                            </div>
+                <p style={{ margin: '0 0 24px', fontSize: '13px', color: 'var(--text-disabled)', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                    Control whether you receive notification emails from the system.
+                </p>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '16px' }}>
+                        <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Mail size={20} color="var(--text-secondary)" />
                         </div>
-                        <div 
-                            onClick={() => { setEmailAlerts(!emailAlerts); addToast(emailAlerts ? 'Email Notifications disabled' : 'Email Notifications enabled', 'success'); }}
-                            style={{ width: '44px', height: '24px', backgroundColor: emailAlerts ? 'var(--primary)' : 'var(--border-color)', borderRadius: '12px', padding: '2px', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: emailAlerts ? 'flex-end' : 'flex-start' }}
-                        >
-                            <div style={{ width: '20px', height: '20px', backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}></div>
+                        <div>
+                            <h4 style={{ margin: '0 0 4px', fontSize: '15px' }}>Email notifications</h4>
+                            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-disabled)' }}>
+                                Meeting reminders, assignment updates, and other system emails.
+                            </p>
                         </div>
                     </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', gap: '16px' }}>
-                            <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                <Bell size={20} color="var(--text-secondary)" />
-                            </div>
-                            <div>
-                                <h4 style={{ margin: '0 0 4px', fontSize: '15px' }}>App Push Notifications</h4>
-                                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-disabled)' }}>Real-time alerts for direct mentions and feedback.</p>
-                            </div>
-                        </div>
-                        <div 
-                            onClick={() => { setPushAlerts(!pushAlerts); addToast(pushAlerts ? 'App Push Notifications disabled' : 'App Push Notifications enabled', 'success'); }}
-                            style={{ width: '44px', height: '24px', backgroundColor: pushAlerts ? 'var(--primary)' : 'var(--border-color)', borderRadius: '12px', padding: '2px', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: pushAlerts ? 'flex-end' : 'flex-start' }}
-                        >
-                            <div style={{ width: '20px', height: '20px', backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}></div>
-                        </div>
+                    <div
+                        role="switch"
+                        aria-checked={emailAlerts}
+                        onClick={() => {
+                            if (!savingNotifications) persistEmailNotifications(!emailAlerts);
+                        }}
+                        style={{
+                            width: '44px',
+                            height: '24px',
+                            backgroundColor: emailAlerts ? 'var(--primary)' : 'var(--border-color)',
+                            borderRadius: '12px',
+                            padding: '2px',
+                            cursor: savingNotifications ? 'wait' : 'pointer',
+                            transition: '0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: emailAlerts ? 'flex-end' : 'flex-start',
+                            opacity: savingNotifications ? 0.7 : 1
+                        }}
+                    >
+                        <div style={{ width: '20px', height: '20px', backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
                     </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', gap: '16px' }}>
-                            <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                <Clock size={20} color="var(--text-secondary)" />
-                            </div>
-                            <div>
-                                <h4 style={{ margin: '0 0 4px', fontSize: '15px' }}>Deadline Alerts</h4>
-                                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-disabled)' }}>Priority reminders 24h/48h before project submission.</p>
-                            </div>
-                        </div>
-                        <div 
-                            onClick={() => { setDeadlineAlerts(!deadlineAlerts); addToast(deadlineAlerts ? 'Deadline Alerts disabled' : 'Deadline Alerts enabled', 'success'); }}
-                            style={{ width: '44px', height: '24px', backgroundColor: deadlineAlerts ? 'var(--primary)' : 'var(--border-color)', borderRadius: '12px', padding: '2px', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: deadlineAlerts ? 'flex-end' : 'flex-start' }}
-                        >
-                            <div style={{ width: '20px', height: '20px', backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}></div>
-                        </div>
-                    </div>
-
                 </div>
             </Card>
 
-            {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-disabled)', fontSize: '13px', cursor: 'pointer' }}>
-                    <Info size={16} /> Incorrect Admin Info? <strong style={{color: 'var(--primary)', textDecoration: 'underline'}}>Contact Sub-Admin</strong>
-                </div>
-                <div style={{ display: 'flex', gap: '16px' }}>
-                    <Button variant="outline" style={{ border: 'none', backgroundColor: 'transparent' }}>Discard Changes</Button>
-                    <Button variant="primary" onClick={handleSave}>Save Profile</Button>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-disabled)', fontSize: '13px' }}>
+                <Info size={16} /> Need a name or email change? Contact your admin.
             </div>
-
         </div>
     );
 };
