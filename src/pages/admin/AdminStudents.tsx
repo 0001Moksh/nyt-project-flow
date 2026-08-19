@@ -3,9 +3,12 @@ import { Card, Button, Loader } from '../../components';
 import { api } from '../../services/api';
 import { Download, Upload, UserPlus, GraduationCap, AlertTriangle, X, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToastStore } from '../../utils/toastStore';
+import { AdminProjectDetailDrawer } from './AdminProjectDetailDrawer';
 
 export const AdminStudents: React.FC = () => {
     const [students, setStudents] = useState<any[]>([]);
+    const [projectByStudentId, setProjectByStudentId] = useState<Record<string, { projectId: string; projectTitle: string }>>({});
+    const [viewProjectId, setViewProjectId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     
     // Pagination & Filters
@@ -63,7 +66,31 @@ export const AdminStudents: React.FC = () => {
                 ...(filterStatus !== 'ALL' && { status: filterStatus }),
             });
 
-            const stdRes = await api.get(`/students/paginated?${params.toString()}`);
+            const [stdRes, projectsRes, teamsRes] = await Promise.all([
+                api.get(`/students/paginated?${params.toString()}`),
+                api.get('/projects').catch(() => ({ data: [] })),
+                api.get('/teams').catch(() => ({ data: [] })),
+            ]);
+
+            const allProjects = projectsRes.data || [];
+            const allTeams = teamsRes.data || [];
+            const mapping: Record<string, { projectId: string; projectTitle: string }> = {};
+
+            allTeams.forEach((team: any) => {
+                const project = allProjects.find((p: any) => p.teamId === team.teamId);
+                if (!project) return;
+                const info = { projectId: project.projectId, projectTitle: project.projectTitle || 'Untitled Project' };
+                if (team.leaderId) mapping[team.leaderId] = info;
+                try {
+                    const members = JSON.parse(team.teamMemberArray || '[]');
+                    if (Array.isArray(members)) {
+                        members.forEach((sid: string) => {
+                            mapping[sid] = info;
+                        });
+                    }
+                } catch { /* ignore */ }
+            });
+            setProjectByStudentId(mapping);
             
             const fetchedStudents = (stdRes.data.content || []).map((s: any) => ({
                 id: s.studentId,
@@ -72,7 +99,8 @@ export const AdminStudents: React.FC = () => {
                 branch: s.branch,
                 status: s.enrollStatus || 'ACTIVE',
                 mail: s.mail,
-                performance: s.performanceScore ?? 100
+                performance: s.performanceScore ?? 100,
+                project: mapping[s.studentId] || null,
             }));
 
             setStudents(fetchedStudents);
@@ -182,6 +210,7 @@ export const AdminStudents: React.FC = () => {
                             >
                                 <option value="ALL">All Statuses</option>
                                 <option value="ENROLLED">Enrolled</option>
+                                <option value="ACTIVE">Active</option>
                                 <option value="PENDING">Pending</option>
                                 <option value="REJECTED">Rejected</option>
                             </select>
@@ -207,16 +236,17 @@ export const AdminStudents: React.FC = () => {
                                 <tr>
                                     <th style={{ padding: '16px 24px', fontWeight: 600 }}>Student details</th>
                                     <th style={{ padding: '16px', fontWeight: 600 }}>Branch</th>
+                                    <th style={{ padding: '16px', fontWeight: 600 }}>Project Name</th>
                                     <th style={{ padding: '16px', fontWeight: 600 }}>Email (Mail)</th>
                                     <th style={{ padding: '16px', fontWeight: 600 }}>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {students.length === 0 && !isLoading && (
-                                    <tr><td colSpan={4} style={{ textAlign: 'center', padding: '64px', color: 'var(--text-disabled)' }}>No students found matching your criteria.</td></tr>
+                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '64px', color: 'var(--text-disabled)' }}>No students found matching your criteria.</td></tr>
                                 )}
                                 {students.map((student) => {
-                                    const isRisk = student.status === 'AT_RISK';
+                                    const project = student.project || projectByStudentId[student.id];
 
                                     return (
                                         <tr key={student.id} style={{ borderTop: '1px solid var(--border-color)', fontSize: '14px' }}>
@@ -235,6 +265,33 @@ export const AdminStudents: React.FC = () => {
                                                 {student.branch}
                                             </td>
                                             <td style={{ padding: '16px' }}>
+                                                {project ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setViewProjectId(project.projectId)}
+                                                        title={project.projectTitle}
+                                                        style={{
+                                                            maxWidth: '220px',
+                                                            border: '1px solid #bfdbfe',
+                                                            backgroundColor: '#eff6ff',
+                                                            color: '#1d4ed8',
+                                                            borderRadius: '999px',
+                                                            padding: '4px 12px',
+                                                            fontSize: '12px',
+                                                            fontWeight: 600,
+                                                            cursor: 'pointer',
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            whiteSpace: 'nowrap',
+                                                        }}
+                                                    >
+                                                        {project.projectTitle}
+                                                    </button>
+                                                ) : (
+                                                    <span style={{ color: 'var(--text-disabled)' }}>—</span>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '16px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                                     <div style={{ fontWeight: 500, fontSize: '14px', color: 'var(--text-secondary)' }}>{student.mail}</div>
                                                 </div>
@@ -242,7 +299,7 @@ export const AdminStudents: React.FC = () => {
                                             <td style={{ padding: '16px' }}>
                                                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: student.status === 'ACTIVE' || student.status === 'ENROLLED' ? '#16a34a' : student.status === 'AT_RISK' || student.status === 'REJECTED' ? '#ef4444' : '#f59e0b' }}>
                                                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: student.status === 'ACTIVE' || student.status === 'ENROLLED' ? '#16a34a' : student.status === 'AT_RISK' || student.status === 'REJECTED' ? '#ef4444' : '#f59e0b' }}></div>
-                                                    {student.status.replace('_', ' ')}
+                                                    {String(student.status).replace('_', ' ')}
                                                 </span>
                                             </td>
                                         </tr>
@@ -432,6 +489,8 @@ export const AdminStudents: React.FC = () => {
                     </Card>
                 </div>
             )}
+
+            <AdminProjectDetailDrawer projectId={viewProjectId} onClose={() => setViewProjectId(null)} />
         </div>
     );
 };

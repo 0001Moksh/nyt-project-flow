@@ -36,7 +36,10 @@ export interface FormResponse {
   jsonOfFields: string;
   referenceFilesJson?: string;
   createdBy: string;
-  createAt: string;
+  /** Jackson serializes Form.createdAt; legacy clients may still send createAt */
+  createdAt?: string;
+  createAt?: string;
+  projectCount?: number;
 }
 
 export const parseFormAttachments = (json?: string | null): FormAttachment[] => {

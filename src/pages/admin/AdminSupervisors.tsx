@@ -4,10 +4,12 @@ import { api } from '../../services/api';
 import { useAuthStore } from '../../utils/authStore';
 import { Download, UserPlus, Zap, TrendingUp, AlertTriangle, ShieldCheck, CheckCircle, Upload, X, XCircle } from 'lucide-react';
 import { useToastStore } from '../../utils/toastStore';
+import { AdminProjectDetailDrawer } from './AdminProjectDetailDrawer';
 
 export const AdminSupervisors: React.FC = () => {
     const [supervisors, setSupervisors] = useState<any[]>([]);
     const [projects, setProjects] = useState<any[]>([]);
+    const [viewProjectId, setViewProjectId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -141,6 +143,7 @@ export const AdminSupervisors: React.FC = () => {
                             <tr>
                                 <th style={{ padding: '16px 24px', fontWeight: 600 }}>Supervisor</th>
                                 <th style={{ padding: '16px', fontWeight: 600 }}>Department</th>
+                                <th style={{ padding: '16px', fontWeight: 600 }}>Assigned Projects</th>
                                 <th style={{ padding: '16px', fontWeight: 600 }}>Current Workload</th>
                                 <th style={{ padding: '16px', fontWeight: 600 }}>Email (Mail)</th>
                                 <th style={{ padding: '16px', fontWeight: 600 }}>Status</th>
@@ -148,13 +151,14 @@ export const AdminSupervisors: React.FC = () => {
                         </thead>
                         <tbody>
                             {supervisors.length === 0 && (
-                                <tr><td colSpan={4} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-disabled)' }}>No active supervisors in database.</td></tr>
+                                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-disabled)' }}>No active supervisors in database.</td></tr>
                             )}
                             {supervisors
                                 .filter(sup => sup.name.toLowerCase().includes(searchQuery.toLowerCase()) || (sup.supervisorId && sup.supervisorId.toLowerCase().includes(searchQuery.toLowerCase())))
-                                .map((sup, idx) => {
+                                .map((sup) => {
                                 const workload = getWorkload(sup.supervisorId);
                                 const isOverloaded = workload.percentage >= 100;
+                                const assignedProjects = projects.filter((p) => p.supervisorId === sup.supervisorId);
 
                                 return (
                                     <tr key={sup.supervisorId} style={{ borderTop: '1px solid var(--border-color)', fontSize: '14px' }}>
@@ -173,6 +177,38 @@ export const AdminSupervisors: React.FC = () => {
                                             <div style={{ display: 'flex', gap: '8px' }}>
                                                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#3b82f6', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: '4px' }}>{sup.branch}</span>
                                             </div>
+                                        </td>
+                                        <td style={{ padding: '16px', maxWidth: '280px' }}>
+                                            {assignedProjects.length === 0 ? (
+                                                <span style={{ fontSize: '12px', fontWeight: 600, color: '#d97706' }}>Unassigned</span>
+                                            ) : (
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                    {assignedProjects.map((p) => (
+                                                        <button
+                                                            key={p.projectId}
+                                                            type="button"
+                                                            title={p.projectTitle}
+                                                            onClick={() => setViewProjectId(p.projectId)}
+                                                            style={{
+                                                                maxWidth: '160px',
+                                                                border: '1px solid #bfdbfe',
+                                                                backgroundColor: '#eff6ff',
+                                                                color: '#1d4ed8',
+                                                                borderRadius: '999px',
+                                                                padding: '3px 10px',
+                                                                fontSize: '11px',
+                                                                fontWeight: 600,
+                                                                cursor: 'pointer',
+                                                                overflow: 'hidden',
+                                                                textOverflow: 'ellipsis',
+                                                                whiteSpace: 'nowrap',
+                                                            }}
+                                                        >
+                                                            {p.projectTitle || 'Untitled'}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </td>
                                         <td style={{ padding: '16px' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -329,6 +365,7 @@ export const AdminSupervisors: React.FC = () => {
                 </div>
             )}
 
+            <AdminProjectDetailDrawer projectId={viewProjectId} onClose={() => setViewProjectId(null)} />
         </div>
     );
 };

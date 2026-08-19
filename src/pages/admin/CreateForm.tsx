@@ -6,7 +6,7 @@ import { api } from '../../services/api';
 import { useAuthStore } from '../../utils/authStore';
 import { useToastStore } from '../../utils/toastStore';
 import { useNavigate } from 'react-router-dom';
-import { PlusCircle, Trash2, ArrowLeft, Copy, CheckCircle, Link as LinkIcon, Users, Calendar } from 'lucide-react';
+import { PlusCircle, Trash2, ArrowLeft, Copy, CheckCircle, Link as LinkIcon, FolderKanban, Calendar } from 'lucide-react';
 
 interface FieldConfig {
   id: string;
@@ -14,6 +14,13 @@ interface FieldConfig {
   type: 'text' | 'textarea' | 'number' | 'url';
   required: boolean;
 }
+
+const formatCreatedOn = (raw?: string | null) => {
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 export const CreateForm: React.FC = () => {
   const [isCreating, setIsCreating] = useState(false);
@@ -171,20 +178,52 @@ export const CreateForm: React.FC = () => {
           </Card>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
-            {forms.map(form => (
-              <Card key={form.formId} elevation={2} style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+            {forms.map(form => {
+              const createdLabel = formatCreatedOn(form.createdAt || form.createAt);
+              const projectCount = form.projectCount ?? 0;
+
+              return (
+              <Card key={form.formId} elevation={2} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     <span style={{ backgroundColor: 'var(--surface-hover)', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>Branch: {form.accessBranch}</span>
                     <span style={{ backgroundColor: 'var(--surface-hover)', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>Batch: {form.accessBatch}</span>
                   </div>
+                  <span
+                    title="Projects submitted under this form"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      flexShrink: 0,
+                      backgroundColor: '#eff6ff',
+                      color: '#1d4ed8',
+                      border: '1px solid #bfdbfe',
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                    }}
+                  >
+                    <FolderKanban size={13} />
+                    {projectCount} {projectCount === 1 ? 'Project' : 'Projects'}
+                  </span>
                 </div>
-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', display: 'flex', gap: '12px' }}>
+
+                {createdLabel && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    <Calendar size={14} />
+                    Created on {createdLabel}
+                  </div>
+                )}
+
+                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', display: 'flex', gap: '12px', marginTop: 'auto' }}>
                   <Button variant="outline" fullWidth size="sm" onClick={() => copyLink(form.formId)} leftIcon={<LinkIcon size={14} />}>Copy Link</Button>
                   <Button variant="primary" fullWidth size="sm" onClick={() => navigate(`/admin/form-details/${form.formId}`)}>View Config</Button>
                 </div>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

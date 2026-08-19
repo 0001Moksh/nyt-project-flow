@@ -2,11 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../utils/authStore';
 import { Card, Button, Loader, ProjectTimeline } from '../components';
 import { useNavigate } from 'react-router-dom';
-import { Check, X, Bell, Users, CheckCircle, Info, Star, ChevronRight, User, Briefcase, Hash, FolderKanban, History, Paperclip, Video, MapPin, Calendar, Clock } from 'lucide-react';
+import { Users, CheckCircle, User, Briefcase, FolderKanban, History, Paperclip, Video, MapPin, Calendar, Clock } from 'lucide-react';
 import { api } from '../services/api';
 import type { FormAttachment, FormResponse, Template } from '../services/adminService';
 import { getPreviewUrl } from '../utils/filePreview';
 import { isValidMeetingLink, openMeetingLink } from '../utils/meetingLinks';
+
+const STAGE_LABELS: Record<string, string> = {
+    SYNOPSIS: 'Synopsis',
+    PROGRESS1: 'Progress 1',
+    PROGRESS2: 'Progress 2',
+    FINAL: 'Final Submission',
+};
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
     if (!json) return [];
@@ -27,6 +34,41 @@ const templateToAttachment = (template: Template): FormAttachment => ({
     stage: template.stageId
 });
 
+/** Strip raw markdown markers into clean, readable plain text. */
+const formatProjectDescription = (raw?: string | null): string => {
+    if (!raw) return '';
+    return String(raw)
+        .replace(/\r\n/g, '\n')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/__(.*?)__/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/_(.*?)_/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/^#{1,6}\s*/gm, '')
+        .replace(/^\s*[-*+]\s+/gm, '• ')
+        .replace(/^\s*\d+\.\s+/gm, '')
+        .replace(/:\s*\*+/g, ':')
+        .replace(/\*+:/g, ':')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+};
+
+const getStageLabel = (stage?: string) =>
+    STAGE_LABELS[String(stage || '').toUpperCase()] || stage || '—';
+
+const compactCardStyle: React.CSSProperties = {
+    aspectRatio: '1 / 1',
+    minHeight: '240px',
+    maxHeight: '320px',
+    padding: '16px',
+    borderRadius: '12px',
+    border: '1px solid var(--border-color)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+};
+
 export const StudentProjects: React.FC = () => {
     const { user, isAuthenticated } = useAuthStore();
     const navigate = useNavigate();
@@ -35,7 +77,6 @@ export const StudentProjects: React.FC = () => {
     const [project, setProject] = useState<any>(null);
     const [supervisor, setSupervisor] = useState<any>(null);
     const [members, setMembers] = useState<any[]>([]);
-    const [leader, setLeader] = useState<any>(null);
     const [supervisorHistory, setSupervisorHistory] = useState<any[]>([]);
     const [meetings, setMeetings] = useState<any[]>([]);
     const [formConfig, setFormConfig] = useState<FormResponse | null>(null);
@@ -104,7 +145,6 @@ export const StudentProjects: React.FC = () => {
             }
 
             setProject(myProject);
-            setLeader(myLeader);
             setMembers(myMembersGrid.filter(m => m && m.name));
             setSupervisor(mySupervisor);
 
@@ -163,134 +203,47 @@ export const StudentProjects: React.FC = () => {
     };
 
     const stageFiles = referenceFiles.filter((file) => matchesStage(file, project?.stageStatus));
+    const cleanDescription = formatProjectDescription(project.projectDescription);
+    const officialMeetings = meetings.filter((m) => m.sessionId);
+    const casualMeetings = meetings.filter((m) => !m.sessionId);
 
     return (
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '28px' }}>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                    <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>My Project</h1>
-                    <p style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: '15px' }}>
-                        View your current project details, progress, and team assignments.
-                    </p>
-                </div>
+            <div>
+                <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>My Project</h1>
+                <p style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: '15px' }}>
+                    View your current project details, progress, and team assignments.
+                </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
-                
-                {/* Main Project Details Panel */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    
-                    {/* Project Header Card */}
-                    <Card elevation={1} style={{ padding: '32px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-hover)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                            <div style={{ backgroundColor: '#eff6ff', color: '#2563eb', padding: '6px 12px', borderRadius: '16px', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                                FINAL YEAR PROJECT
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 600, color: '#16a34a' }}>
-                                <CheckCircle size={18} /> Approved
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1.15fr) minmax(280px, 0.85fr)',
+                    gap: '24px',
+                    alignItems: 'start',
+                }}
+            >
+                {/* Top-left summary + timeline */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0 }}>
+                    <Card elevation={1} style={{ padding: '28px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-hover)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                            <h2 style={{ fontSize: '26px', margin: 0, color: 'var(--text-primary)', fontWeight: 800, lineHeight: 1.25 }}>
+                                {project.projectTitle}
+                            </h2>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#b45309', backgroundColor: '#fffbeb', border: '1px solid #fde68a', padding: '6px 12px', borderRadius: '999px', flexShrink: 0 }}>
+                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b' }} />
+                                {getStageLabel(project.stageStatus)}
                             </div>
                         </div>
-                        
-                        <h2 style={{ fontSize: '28px', margin: '0 0 16px', color: 'var(--text-primary)', fontWeight: 800 }}>{project.projectTitle}</h2>
-                        
-                        <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '24px' }}>
-                            {project.projectDescription || "No detailed description provided for this project yet. Please update the project details to provide a comprehensive overview of the objectives and methodology."}
+
+                        <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>
+                            {cleanDescription || 'No detailed description provided for this project yet.'}
                         </p>
-                        
-                        <div style={{ display: 'flex', gap: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '24px' }}>
-                            <div style={{ flex: 1 }}>
-                                <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-disabled)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '8px' }}>Current Stage</span>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 600, color: '#d97706' }}>
-                                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b' }}></div>
-                                    Synopsis Phase Mode
-                                </div>
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-disabled)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '8px' }}>Project ID</span>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 600 }}>
-                                    <Hash size={16} color="var(--text-disabled)" />
-                                    {project.projectId.substring(0, 8)}...
-                                </div>
-                            </div>
-                        </div>
                     </Card>
 
                     <ProjectTimeline project={project} />
-
-                    {/* Team Members Breakdown */}
-                    <Card elevation={1} style={{ padding: '0', borderRadius: '12px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
-                        <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', backgroundColor: '#fdfdfd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Users size={20} color="var(--primary)" /> Team Members
-                            </h3>
-                            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>{members.length} Members</span>
-                        </div>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            {members.map((member, idx) => (
-                                <div key={idx} style={{ padding: '20px 24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', borderBottom: idx !== members.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
-                                    <div style={{ display: 'flex', gap: '16px' }}>
-                                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: member.isLeader ? 'var(--primary-glow)' : 'var(--surface-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '18px', color: member.isLeader ? 'var(--primary)' : 'var(--text-secondary)' }}>
-                                            {member.name.charAt(0)}
-                                        </div>
-                                        <div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                                <div style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)' }}>
-                                                    {member.name} {member.studentId === user?.id ? '(You)' : ''}
-                                                </div>
-                                                {member.isLeader && (
-                                                    <span style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: '12px' }}>TEAM LEADER</span>
-                                                )}
-                                            </div>
-                                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                                                {member.branch || 'Computer Science'} • {member.mail}
-                                            </div>
-                                            <div style={{ fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <Briefcase size={14} color="var(--text-disabled)" /> 
-                                                <span style={{ fontStyle: 'italic' }}>{member.isLeader ? 'Project Architecture & Coordination' : 'Development & Research (Assigned)'}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-
-                    {/* Supervisor History Log */}
-                    <Card elevation={1} style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                        <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <History size={20} color="var(--primary)" /> Supervisor History
-                        </h3>
-                        {supervisorHistory.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-disabled)' }}>
-                                <p style={{ margin: 0 }}>No past supervisor changes recorded.</p>
-                            </div>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '2px solid var(--border-color)', marginLeft: '8px', paddingLeft: '16px' }}>
-                                {supervisorHistory.map((history, idx) => (
-                                    <div key={history.id || idx} style={{ position: 'relative' }}>
-                                        <div style={{ position: 'absolute', left: '-22px', top: '0', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--primary)', border: '2px solid white' }}></div>
-                                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                                            {new Date(history.createdAt).toLocaleString()}
-                                        </div>
-                                        <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                            Assignment Changed
-                                        </div>
-                                        <div style={{ fontSize: '14px', marginTop: '6px', color: 'var(--text-secondary)' }}>
-                                            <span style={{ textDecoration: 'line-through', color: 'var(--danger)', marginRight: '8px' }}>{history.oldSupervisorName}</span>
-                                            ➔ <span style={{ color: 'var(--success)', marginLeft: '8px', fontWeight: 600 }}>{history.newSupervisorName}</span>
-                                        </div>
-                                        {history.reason && (
-                                            <div style={{ marginTop: '8px', fontSize: '13px', fontStyle: 'italic', backgroundColor: 'var(--surface-hover)', padding: '8px 12px', borderRadius: '4px', borderLeft: '2px solid var(--warning)' }}>
-                                                " {history.reason} "
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </Card>
 
                     {stageFiles.length > 0 && (
                         <Card elevation={1} style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
@@ -333,207 +286,240 @@ export const StudentProjects: React.FC = () => {
                             </div>
                         </Card>
                     )}
-
-                    {/* Official Batch Evaluations */}
-                    <Card elevation={1} style={{ border: '1px solid #bae6fd', borderRadius: '12px', padding: '24px', backgroundColor: '#f0f9ff' }}>
-                        <h3 style={{ margin: '0 0 16px', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px', color: '#0369a1' }}>
-                            <Calendar size={20} /> Official Batch Evaluations
-                        </h3>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {meetings.filter(m => m.sessionId).length === 0 && (
-                                <div style={{ textAlign: 'center', padding: '16px', color: '#0ea5e9', fontSize: '14px', fontStyle: 'italic' }}>
-                                    No official batch evaluations scheduled.
-                                </div>
-                            )}
-                            {meetings.filter(m => m.sessionId).map((meeting) => (
-                                <div key={meeting.meetingId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid #bae6fd', borderRadius: '8px', backgroundColor: '#ffffff' }}>
-                                    <div style={{ display: 'flex', gap: '16px' }}>
-                                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {meeting.mode === 'ONLINE' ? <Video size={20} /> : <MapPin size={20} />}
-                                        </div>
-                                        <div>
-                                            <div style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a', marginBottom: '4px' }}>
-                                                {meeting.stage} Review
-                                                {meeting.status === 'COMPLETED' && <span style={{ marginLeft: '12px', fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }}/>COMPLETED</span>}
-                                            </div>
-                                            <div style={{ fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#0369a1' }}><Calendar size={14} /> {meeting.meetingDate}</span>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#0369a1' }}><Clock size={14} /> {meeting.meetingTime}</span>
-                                            </div>
-                                            {meeting.status === 'COMPLETED' && meeting.conclusionNotes && (
-                                                <div style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px', fontStyle: 'italic' }}>
-                                                    " {meeting.conclusionNotes} "
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
-                                        isValidMeetingLink(meeting.locationOrLink) ? (
-                                            <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink)} style={{ borderColor: '#0284c7', color: '#0284c7' }}>Join GMeet</Button>
-                                        ) : (
-                                            <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
-                                        )
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-
-                    {/* Internal / Casual Meetings Tracker */}
-                    <Card elevation={1} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '24px', marginTop: '24px' }}>
-                        <h3 style={{ margin: '0 0 16px', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Video size={18} color="var(--primary)" /> Internal / Casual Meetings
-                        </h3>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            {meetings.filter(m => !m.sessionId).length === 0 && (
-                                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-disabled)', fontSize: '14px' }}>
-                                    No internal meetings scheduled.
-                                </div>
-                            )}
-                            {meetings.filter(m => !m.sessionId).map((meeting) => (
-                                <div key={meeting.meetingId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)' }}>
-                                    <div style={{ display: 'flex', gap: '16px' }}>
-                                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: meeting.status === 'COMPLETED' ? '#dcfce7' : 'var(--primary-glow)', color: meeting.status === 'COMPLETED' ? '#16a34a' : 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {meeting.mode === 'ONLINE' ? <Video size={20} /> : <MapPin size={20} />}
-                                        </div>
-                                        <div>
-                                            <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                                                {meeting.stage} Review
-                                                {meeting.status === 'COMPLETED' && <span style={{ marginLeft: '12px', fontSize: '11px', color: '#16a34a', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}><CheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }}/>COMPLETED</span>}
-                                            </div>
-                                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={14} /> {meeting.meetingDate}</span>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} /> {meeting.meetingTime}</span>
-                                            </div>
-                                            {meeting.status === 'COMPLETED' && meeting.conclusionNotes && (
-                                                <div style={{ fontSize: '12px', color: 'var(--text-disabled)', marginTop: '8px', fontStyle: 'italic' }}>
-                                                    " {meeting.conclusionNotes} "
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
-                                        isValidMeetingLink(meeting.locationOrLink) ? (
-                                            <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink)}>Join GMeet</Button>
-                                        ) : (
-                                            <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
-                                        )
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-
-                    {previewFile && (
-                        <div
-                            style={{
-                                position: 'fixed',
-                                inset: 0,
-                                backgroundColor: 'rgba(15, 23, 42, 0.65)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: '24px',
-                                zIndex: 50
-                            }}
-                            onClick={() => setPreviewFile(null)}
-                        >
-                            <div
-                                style={{
-                                    width: 'min(960px, 96vw)',
-                                    height: 'min(80vh, 720px)',
-                                    backgroundColor: 'var(--surface)',
-                                    borderRadius: '12px',
-                                    overflow: 'hidden',
-                                    border: '1px solid var(--border-color)'
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
-                                    <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
-                                    <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
-                                        Close
-                                    </Button>
-                                </div>
-                                <iframe
-                                    title={previewFile.fileName}
-                                    src={getPreviewUrl(previewFile.fileUrl)}
-                                    style={{ width: '100%', height: '100%', border: 'none' }}
-                                />
-                            </div>
-                        </div>
-                    )}
                 </div>
-                {/* Right Sidebar Details */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    
-                    {/* Supervisor Card */}
+
+                {/* Right column: supervisor + compact square cards */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
                     <Card elevation={2} style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'linear-gradient(to bottom, #ffffff, #f8fafc)' }}>
-                        <h3 style={{ margin: '0 0 24px', fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                            <User size={18} /> Assigned Supervisor
+                        <h3 style={{ margin: '0 0 20px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            <User size={16} /> Assigned Supervisor
                         </h3>
-                        
+
                         {supervisor ? (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                                <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold', marginBottom: '16px', border: '4px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
+                                <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold', marginBottom: '12px', border: '3px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
                                     {supervisor.name.charAt(0).toUpperCase()}
                                 </div>
-                                <h4 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: 700 }}>{supervisor.name}</h4>
-                                <p style={{ margin: '0 0 16px', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>{supervisor.department || 'Computer Science'} Department</p>
-                                
-                                <div style={{ width: '100%', borderTop: '1px solid var(--border-color)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
-                                    <div style={{ fontSize: '13px' }}>
-                                        <span style={{ color: 'var(--text-disabled)', display: 'block', fontSize: '11px', textTransform: 'uppercase', marginBottom: '2px' }}>Email Contact</span>
-                                        {supervisor.mail}
-                                    </div>
-                                    <div style={{ fontSize: '13px' }}>
-                                        <span style={{ color: 'var(--text-disabled)', display: 'block', fontSize: '11px', textTransform: 'uppercase', marginBottom: '2px' }}>Phone</span>
-                                        {supervisor.phoneNumber || 'N/A'}
-                                    </div>
+                                <h4 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 700 }}>{supervisor.name}</h4>
+                                <p style={{ margin: '0 0 12px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>{supervisor.department || supervisor.branch || 'Department'}</p>
+                                <div style={{ width: '100%', borderTop: '1px solid var(--border-color)', paddingTop: '12px', textAlign: 'left', fontSize: '13px' }}>
+                                    <span style={{ color: 'var(--text-disabled)', display: 'block', fontSize: '11px', textTransform: 'uppercase', marginBottom: '2px' }}>Email</span>
+                                    {supervisor.mail}
                                 </div>
-                                
-                                <Button style={{ width: '100%', marginTop: '24px' }} onClick={() => navigate('/chat')}>Message Supervisor</Button>
+                                <Button style={{ width: '100%', marginTop: '16px' }} onClick={() => navigate('/chat')}>Message Supervisor</Button>
                             </div>
                         ) : (
-                            <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--text-disabled)' }}>
-                                <User size={48} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-                                <p style={{ margin: 0, fontSize: '14px' }}>No supervisor assigned yet.<br/>Your project is pending review.</p>
+                            <div style={{ textAlign: 'center', padding: '8px 0', color: 'var(--text-disabled)' }}>
+                                <User size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+                                <p style={{ margin: 0, fontSize: '13px' }}>No supervisor assigned yet.</p>
                             </div>
                         )}
                     </Card>
 
-                    {/* Upcoming Deadlines / Progress Widget */}
-                    <Card elevation={1} style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: '#0f172a', color: 'white' }}>
-                        <h4 style={{ margin: '0 0 24px', fontSize: '12px', fontWeight: 700, letterSpacing: '1px', color: '#94a3b8' }}>NEXT MILESTONE</h4>
-                        
-                        <div style={{ marginBottom: '24px' }}>
-                            <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 700 }}>Synopsis Submission</h3>
-                            <p style={{ margin: 0, fontSize: '13px', color: '#cbd5e1' }}>Due in 14 days</p>
-                        </div>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', opacity: 0.5 }}>
-                                <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #22c55e', backgroundColor: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={10} color="white" /></div>
-                                <span style={{ fontSize: '13px', textDecoration: 'line-through' }}>Team Formation</span>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                        {/* Team Members */}
+                        <Card elevation={1} style={compactCardStyle}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexShrink: 0 }}>
+                                <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <Users size={15} color="var(--primary)" /> Team
+                                </h3>
+                                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>{members.length}</span>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', opacity: 0.5 }}>
-                                <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #22c55e', backgroundColor: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={10} color="white" /></div>
-                                <span style={{ fontSize: '13px', textDecoration: 'line-through' }}>Topic Approval</span>
+                            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
+                                {members.length === 0 && (
+                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>No members listed.</div>
+                                )}
+                                {members.map((member, idx) => (
+                                    <div key={member.studentId || idx} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0, backgroundColor: member.isLeader ? 'var(--primary-glow)' : 'var(--surface-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '13px', color: member.isLeader ? 'var(--primary)' : 'var(--text-secondary)' }}>
+                                            {member.name.charAt(0)}
+                                        </div>
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                                                    {member.name}{member.studentId === user?.id ? ' (You)' : ''}
+                                                </span>
+                                                {member.isLeader && (
+                                                    <span style={{ fontSize: '9px', fontWeight: 700, backgroundColor: '#dbeafe', color: '#1d4ed8', padding: '1px 6px', borderRadius: '8px' }}>LEAD</span>
+                                                )}
+                                            </div>
+                                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                                                <Briefcase size={11} /> {member.isLeader ? 'Coordination' : 'Member'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #3b82f6', backgroundColor: 'transparent' }}></div>
-                                <span style={{ fontSize: '13px', fontWeight: 600, color: '#60a5fa' }}>Draft Synopsis</span>
-                            </div>
-                        </div>
-                    </Card>
+                        </Card>
 
+                        {/* Supervisor History */}
+                        <Card elevation={1} style={compactCardStyle}>
+                            <h3 style={{ margin: '0 0 12px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                <History size={15} color="var(--primary)" /> Supervisor History
+                            </h3>
+                            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+                                {supervisorHistory.length === 0 ? (
+                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)', textAlign: 'center', paddingTop: '24px' }}>
+                                        No changes recorded.
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderLeft: '2px solid var(--border-color)', marginLeft: '4px', paddingLeft: '12px' }}>
+                                        {supervisorHistory.map((history, idx) => (
+                                            <div key={history.id || idx} style={{ position: 'relative' }}>
+                                                <div style={{ position: 'absolute', left: '-18px', top: '2px', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)', border: '2px solid white' }} />
+                                                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginBottom: '2px' }}>
+                                                    {new Date(history.createdAt).toLocaleDateString()}
+                                                </div>
+                                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                                    <span style={{ textDecoration: 'line-through', color: 'var(--danger)' }}>{history.oldSupervisorName}</span>
+                                                    {' → '}
+                                                    <span style={{ color: 'var(--success)', fontWeight: 600 }}>{history.newSupervisorName}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
+
+                        {/* Official Batch Evaluation */}
+                        <Card elevation={1} style={{ ...compactCardStyle, border: '1px solid #bae6fd', backgroundColor: '#f0f9ff' }}>
+                            <h3 style={{ margin: '0 0 12px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', color: '#0369a1', flexShrink: 0 }}>
+                                <Calendar size={15} /> Official Eval
+                            </h3>
+                            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
+                                {officialMeetings.length === 0 && (
+                                    <div style={{ fontSize: '12px', color: '#0ea5e9', fontStyle: 'italic', textAlign: 'center', paddingTop: '20px' }}>
+                                        None scheduled.
+                                    </div>
+                                )}
+                                {officialMeetings.map((meeting) => (
+                                    <div key={meeting.meetingId} style={{ padding: '10px', borderRadius: '8px', border: '1px solid #bae6fd', backgroundColor: '#fff' }}>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                {meeting.mode === 'ONLINE' ? <Video size={14} /> : <MapPin size={14} />}
+                                            </div>
+                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                                <div style={{ fontWeight: 700, fontSize: '12px', color: '#0f172a' }}>
+                                                    {meeting.stage}
+                                                    {meeting.status === 'COMPLETED' && (
+                                                        <CheckCircle size={11} color="#16a34a" style={{ display: 'inline', marginLeft: '4px' }} />
+                                                    )}
+                                                </div>
+                                                <div style={{ fontSize: '11px', color: '#0369a1', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Calendar size={11} />{meeting.meetingDate}</span>
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Clock size={11} />{String(meeting.meetingTime || '').substring(0, 5)}</span>
+                                                </div>
+                                                {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
+                                                    isValidMeetingLink(meeting.locationOrLink) ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openMeetingLink(meeting.locationOrLink)}
+                                                            style={{ marginTop: '6px', border: 'none', background: 'none', color: '#0284c7', fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                                                        >
+                                                            Join GMeet
+                                                        </button>
+                                                    ) : (
+                                                        <span style={{ fontSize: '10px', color: '#dc2626', fontWeight: 600 }}>Invalid link</span>
+                                                    )
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+
+                        {/* Internal Casual Meeting */}
+                        <Card elevation={1} style={compactCardStyle}>
+                            <h3 style={{ margin: '0 0 12px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                <Video size={15} color="var(--primary)" /> Casual Meetings
+                            </h3>
+                            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
+                                {casualMeetings.length === 0 && (
+                                    <div style={{ fontSize: '12px', color: 'var(--text-disabled)', textAlign: 'center', paddingTop: '20px' }}>
+                                        None scheduled.
+                                    </div>
+                                )}
+                                {casualMeetings.map((meeting) => (
+                                    <div key={meeting.meetingId} style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-hover)' }}>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: meeting.status === 'COMPLETED' ? '#dcfce7' : 'var(--primary-glow)', color: meeting.status === 'COMPLETED' ? '#16a34a' : 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                {meeting.mode === 'ONLINE' ? <Video size={14} /> : <MapPin size={14} />}
+                                            </div>
+                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                                <div style={{ fontWeight: 700, fontSize: '12px' }}>
+                                                    {meeting.stage}
+                                                    {meeting.status === 'COMPLETED' && (
+                                                        <CheckCircle size={11} color="#16a34a" style={{ display: 'inline', marginLeft: '4px' }} />
+                                                    )}
+                                                </div>
+                                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Calendar size={11} />{meeting.meetingDate}</span>
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Clock size={11} />{String(meeting.meetingTime || '').substring(0, 5)}</span>
+                                                </div>
+                                                {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
+                                                    isValidMeetingLink(meeting.locationOrLink) ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openMeetingLink(meeting.locationOrLink)}
+                                                            style={{ marginTop: '6px', border: 'none', background: 'none', color: 'var(--primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                                                        >
+                                                            Join GMeet
+                                                        </button>
+                                                    ) : (
+                                                        <span style={{ fontSize: '10px', color: '#dc2626', fontWeight: 600 }}>Invalid link</span>
+                                                    )
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+                    </div>
                 </div>
             </div>
 
+            {previewFile && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '24px',
+                        zIndex: 50
+                    }}
+                    onClick={() => setPreviewFile(null)}
+                >
+                    <div
+                        style={{
+                            width: 'min(960px, 96vw)',
+                            height: 'min(80vh, 720px)',
+                            backgroundColor: 'var(--surface)',
+                            borderRadius: '12px',
+                            overflow: 'hidden',
+                            border: '1px solid var(--border-color)'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
+                            <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
+                            <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+                                Close
+                            </Button>
+                        </div>
+                        <iframe
+                            title={previewFile.fileName}
+                            src={getPreviewUrl(previewFile.fileUrl)}
+                            style={{ width: '100%', height: '100%', border: 'none' }}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
