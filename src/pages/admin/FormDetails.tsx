@@ -5,9 +5,10 @@ import { adminService, type Template } from '../../services/adminService';
 import { useAuthStore } from '../../utils/authStore';
 import { useToastStore } from '../../utils/toastStore';
 import type { FormResponse } from '../../services/adminService';
-import { Search, FileText, Users, AlertTriangle, Upload, Paperclip, ExternalLink, Plus, Link as LinkIcon, Trash2, X, File, Presentation, Eye, MoreVertical, Calendar, Video } from 'lucide-react';
+import { Search, FileText, Users, AlertTriangle, Upload, Paperclip, ExternalLink, Plus, Link as LinkIcon, Trash2, X, File, Presentation, Eye, Calendar, Video } from 'lucide-react';
 import { TimelineConfigModal } from './TimelineConfigModal';
 import { MeetingManagementPanel } from './MeetingManagementPanel';
+import { InlineSupervisorAssign } from './InlineSupervisorAssign';
 import { api } from '../../services/api';
 import { extractFirstUrl, getPreviewUrl } from '../../utils/filePreview';
 
@@ -46,16 +47,6 @@ const fetchProjectSubmissions = async (documentId?: string | null) => {
   return responses
     .flat()
     .sort((a: any, b: any) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime());
-};
-
-const getCompletionPercentage = (stageStatus: string) => {
-  switch (stageStatus) {
-    case 'SYNOPSIS': return 25;
-    case 'PROGRESS1': return 50;
-    case 'PROGRESS2': return 75;
-    case 'FINAL': return 100;
-    default: return 0;
-  }
 };
 
 const getStageLabel = (key: string) => {
@@ -150,19 +141,21 @@ export const FormDetails: React.FC = () => {
       }));
       setSupervisors(sups);
 
-      const enriched = await Promise.all(targetedProjects.map(async (p: any) => {
+      const enriched = targetedProjects.map((p: any) => {
         const team = teamsRes.data.find((t: any) => t.teamId === p.teamId);
         let memberDetails: any[] = [];
+        let leaderName = '—';
         if (team) {
           const arr = JSON.parse(team.teamMemberArray || '[]');
           memberDetails = arr.map((sid: string) => {
             const st = studentsRes.data.find((s: any) => s.studentId === sid);
             return st || { studentId: sid, name: 'Unknown', mail: 'N/A' };
           });
+          const leader = studentsRes.data.find((s: any) => s.studentId === team.leaderId);
+          leaderName = leader?.name || '—';
         }
-        const studentSubmissions = await fetchProjectSubmissions(p.documentId);
-        return { ...p, team, memberDetails, studentSubmissions };
-      }));
+        return { ...p, team, memberDetails, leaderName, studentSubmissions: [] as any[] };
+      });
 
       setProjects(enriched);
     } catch (err) {
@@ -242,6 +235,22 @@ export const FormDetails: React.FC = () => {
     setTFile(null);
     setTLinkUrl('');
     setTemplateInputMode('upload');
+  };
+
+  const openProjectDrawer = async (project: any) => {
+    setViewCompleteProject(project);
+    if (project.documentId) {
+      const studentSubmissions = await fetchProjectSubmissions(project.documentId);
+      setViewCompleteProject((prev: any) => prev && prev.projectId === project.projectId
+        ? { ...prev, studentSubmissions }
+        : prev);
+    }
+  };
+
+  const truncateText = (text?: string, max = 90) => {
+    const clean = String(text || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+    if (!clean) return '—';
+    return clean.length > max ? `${clean.slice(0, max)}…` : clean;
   };
 
   const handleSupervisorSelect = (projectId: string, currentSupervisorId: string, newSupervisorId: string) => {
@@ -413,55 +422,70 @@ export const FormDetails: React.FC = () => {
         </div>
 
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <table className="admin-projects-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'fixed' }}>
             <thead style={{ backgroundColor: 'var(--surface-hover)', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               <tr>
-                <th style={{ padding: '16px 24px', fontWeight: 600 }}>#</th>
-                <th style={{ padding: '16px', fontWeight: 600 }}>Project Name</th>
-                <th style={{ padding: '16px', fontWeight: 600 }}>Current Stage</th>
-                <th style={{ padding: '16px', fontWeight: 600 }}>Assigned Supervisor</th>
-                <th style={{ padding: '16px', fontWeight: 600 }}>Completion</th>
-                <th style={{ padding: '16px', fontWeight: 600 }}>Action</th>
+                <th style={{ padding: '16px 24px', fontWeight: 600, width: '16%' }}>Leader Name</th>
+                <th style={{ padding: '16px', fontWeight: 600, width: '18%' }}>Project Name</th>
+                <th style={{ padding: '16px', fontWeight: 600, width: '28%' }}>Project Description</th>
+                <th style={{ padding: '16px', fontWeight: 600, width: '18%' }}>Assigned Supervisor</th>
+                <th style={{ padding: '16px', fontWeight: 600, width: '12%' }}>Current Stage</th>
+                <th style={{ padding: '16px', fontWeight: 600, width: '8%', textAlign: 'center' }}>View</th>
               </tr>
             </thead>
             <tbody>
               {projects.length === 0 && (
                 <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-disabled)' }}>No projects found.</td></tr>
               )}
-              {projects.map((project, idx) => {
-                const completion = getCompletionPercentage(project.stageStatus);
+              {projects.map((project) => {
                 const sup = supervisors.find(s => s.supervisorId === project.supervisorId);
                 return (
                   <tr key={project.projectId} style={{ borderTop: '1px solid var(--border-color)', fontSize: '14px' }}>
-                    <td style={{ padding: '16px 24px', color: 'var(--text-secondary)' }}>{(idx + 1).toString().padStart(2, '0')}</td>
-                    <td style={{ padding: '16px', fontWeight: 600 }}>{project.projectTitle}</td>
+                    <td style={{ padding: '16px 24px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={project.leaderName}>
+                      {project.leaderName || '—'}
+                    </td>
+                    <td style={{ padding: '16px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={project.projectTitle}>
+                      {project.projectTitle}
+                    </td>
+                    <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }} title={String(project.projectDescription || '')}>
+                      <div style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        {truncateText(project.projectDescription, 120)}
+                      </div>
+                    </td>
+                    <td style={{ padding: '16px', overflow: 'visible' }}>
+                      <InlineSupervisorAssign
+                        projectId={project.projectId}
+                        currentSupervisorId={project.supervisorId}
+                        supervisorName={sup?.name}
+                        supervisors={supervisors}
+                        onSelect={handleSupervisorSelect}
+                      />
+                    </td>
                     <td style={{ padding: '16px' }}>
                       <span style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '4px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 600 }}>
                         {getStageLabel(project.stageStatus)}
                       </span>
                     </td>
-                    <td style={{ padding: '16px' }}>
-                      {sup ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ width: '24px', height: '24px', borderRadius: '12px', backgroundColor: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold' }}>{sup.name.charAt(0)}</div>
-                          {sup.name}
-                        </div>
-                      ) : (
-                        <span style={{ color: 'var(--warning)', fontSize: '12px', fontWeight: 600 }}>Unassigned</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ fontSize: '13px', width: '35px' }}>{completion}%</div>
-                        <div style={{ width: '80px', height: '6px', backgroundColor: 'var(--surface-hover)', borderRadius: '3px' }}>
-                          <div style={{ width: `${completion}%`, height: '100%', backgroundColor: 'var(--primary)', borderRadius: '3px' }}></div>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px' }}>
-                      <Button variant="outline" size="sm" leftIcon={<Eye size={14} />} onClick={() => setViewCompleteProject(project)}>
-                        View Complete
-                      </Button>
+                    <td style={{ padding: '16px', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        title="View project"
+                        onClick={() => openProjectDrawer(project)}
+                        style={{
+                          width: '34px',
+                          height: '34px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: '#fff',
+                          color: 'var(--primary)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Eye size={16} />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -563,22 +587,6 @@ export const FormDetails: React.FC = () => {
             </div>
 
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              <div style={{ padding: '16px 24px', backgroundColor: 'var(--background)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Assign Supervisor:</div>
-                <select
-                  value={viewCompleteProject.supervisorId || ''}
-                  onChange={(e) => handleSupervisorSelect(viewCompleteProject.projectId, viewCompleteProject.supervisorId, e.target.value)}
-                  style={{ flex: 1, maxWidth: '400px', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)' }}
-                >
-                  <option value="">-- Unassigned --</option>
-                  {supervisors.map(sup => (
-                    <option key={sup.supervisorId} value={sup.supervisorId}>
-                      {sup.name} ({sup.assignedCount} Projects Assigned)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               <div>
                 <ProjectTimeline project={viewCompleteProject} />
               </div>
