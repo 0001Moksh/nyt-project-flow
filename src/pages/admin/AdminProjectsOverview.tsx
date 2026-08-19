@@ -1,17 +1,37 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Button, Loader, Input, ProjectTimeline } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { useAuthStore } from '../../utils/authStore';
-import { AlertTriangle, Users, FileText, Eye, X, ExternalLink, Paperclip } from 'lucide-react';
+import { AlertTriangle, Users, FileText, Eye, X, ExternalLink, Paperclip, Search } from 'lucide-react';
 import { extractFirstUrl, getPreviewUrl } from '../../utils/filePreview';
 import { InlineSupervisorAssign } from './InlineSupervisorAssign';
+import { cleanProjectDescription } from '../../utils/projectDescription';
 
 const STAGE_LABELS: Record<string, string> = {
   SYNOPSIS: 'Synopsis',
   PROGRESS1: 'Progress 1',
   PROGRESS2: 'Progress 2',
-  FINAL: 'Final Submission',
+  FINAL: 'Final Solution',
+};
+
+const STAGE_FILTER_OPTIONS = [
+  { value: 'ALL', label: 'All Stages' },
+  { value: 'SYNOPSIS', label: 'Synopsis' },
+  { value: 'PROGRESS1', label: 'Progress 1' },
+  { value: 'PROGRESS2', label: 'Progress 2' },
+  { value: 'FINAL', label: 'Final Solution' },
+];
+
+const filterSelectStyle: React.CSSProperties = {
+  padding: '10px 12px',
+  borderRadius: '8px',
+  border: '1px solid var(--border-color)',
+  backgroundColor: 'var(--surface)',
+  color: 'var(--text-primary)',
+  fontSize: '14px',
+  minWidth: '180px',
+  outline: 'none',
 };
 
 const submissionStages = [
@@ -44,7 +64,7 @@ const fetchProjectSubmissions = async (documentId?: string | null) => {
 };
 
 const truncateText = (text?: string, max = 120) => {
-  const clean = String(text || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+  const clean = cleanProjectDescription(text).replace(/\s+/g, ' ').trim();
   if (!clean) return '—';
   return clean.length > max ? `${clean.slice(0, max)}…` : clean;
 };
@@ -59,6 +79,9 @@ export const AdminProjectsOverview: React.FC = () => {
   const [reasonModalOpen, setReasonModalOpen] = useState(false);
   const [pendingAssignment, setPendingAssignment] = useState<{ projectId: string; newSupervisorId: string } | null>(null);
   const [reasonText, setReasonText] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterSupervisorId, setFilterSupervisorId] = useState('ALL');
+  const [filterStage, setFilterStage] = useState('ALL');
 
   const addToast = useToastStore((state) => state.addToast);
   const { user } = useAuthStore();
@@ -162,6 +185,28 @@ export const AdminProjectsOverview: React.FC = () => {
     }
   };
 
+  const filteredProjects = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+
+    return projects.filter((proj) => {
+      if (filterSupervisorId !== 'ALL' && proj.supervisorId !== filterSupervisorId) {
+        return false;
+      }
+
+      if (filterStage !== 'ALL' && String(proj.stageStatus || '').toUpperCase() !== filterStage) {
+        return false;
+      }
+
+      if (!q) return true;
+
+      const title = String(proj.projectTitle || '').toLowerCase();
+      const description = cleanProjectDescription(proj.projectDescription).toLowerCase();
+      const leader = String(proj.leaderName || '').toLowerCase();
+
+      return title.includes(q) || description.includes(q) || leader.includes(q);
+    });
+  }, [projects, searchQuery, filterSupervisorId, filterStage]);
+
   if (isLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}>
@@ -173,10 +218,69 @@ export const AdminProjectsOverview: React.FC = () => {
   return (
     <div className="admin-projects-overview" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div>
-        <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: '0 0 8px', fontWeight: 700 }}>Project Portfolio</h1>
-        <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '15px' }}>
-          Browse projects, assign supervisors inline, and open details when needed.
-        </p>
+        <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>Projects</h1>
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '12px',
+          alignItems: 'center',
+        }}
+      >
+        <div style={{ position: 'relative', flex: '1 1 280px', minWidth: '220px' }}>
+          <Search
+            size={16}
+            style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-disabled)', pointerEvents: 'none' }}
+          />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by project name, description, or leader…"
+            style={{
+              width: '100%',
+              padding: '10px 12px 10px 38px',
+              borderRadius: '8px',
+              border: '1px solid var(--border-color)',
+              backgroundColor: 'var(--surface)',
+              color: 'var(--text-primary)',
+              fontSize: '14px',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        <select
+          value={filterSupervisorId}
+          onChange={(e) => setFilterSupervisorId(e.target.value)}
+          style={filterSelectStyle}
+          aria-label="Filter by supervisor"
+        >
+          <option value="ALL">All Supervisors</option>
+          {[...supervisors]
+            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+            .map((sup) => (
+              <option key={sup.supervisorId} value={sup.supervisorId}>
+                {sup.name}
+              </option>
+            ))}
+        </select>
+
+        <select
+          value={filterStage}
+          onChange={(e) => setFilterStage(e.target.value)}
+          style={filterSelectStyle}
+          aria-label="Filter by stage"
+        >
+          {STAGE_FILTER_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <Card elevation={1} style={{ padding: '0', borderRadius: '12px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
@@ -193,14 +297,16 @@ export const AdminProjectsOverview: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {projects.length === 0 && (
+              {filteredProjects.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-disabled)' }}>
-                    No active projects.
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '48px 32px', color: 'var(--text-disabled)' }}>
+                    {projects.length === 0
+                      ? 'No active projects.'
+                      : 'No projects match your search or filters.'}
                   </td>
                 </tr>
               )}
-              {projects.map((proj) => {
+              {filteredProjects.map((proj) => {
                 const sup = supervisors.find((s) => s.supervisorId === proj.supervisorId);
                 return (
                   <tr key={proj.projectId} style={{ borderTop: '1px solid var(--border-color)', fontSize: '14px' }}>
@@ -210,7 +316,7 @@ export const AdminProjectsOverview: React.FC = () => {
                     <td style={{ padding: '16px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.projectTitle}>
                       {proj.projectTitle}
                     </td>
-                    <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }} title={String(proj.projectDescription || '')}>
+                    <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }} title={cleanProjectDescription(proj.projectDescription) || undefined}>
                       <div style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {truncateText(proj.projectDescription, 120)}
                       </div>
@@ -357,7 +463,7 @@ export const AdminProjectsOverview: React.FC = () => {
                   <FileText size={16} color="var(--primary)" /> Proposal Context
                 </h4>
                 <div style={{ padding: '16px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '14px', lineHeight: 1.6, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
-                  {viewProject.projectDescription || 'No description provided.'}
+                  {cleanProjectDescription(viewProject.projectDescription) || 'No description provided.'}
                 </div>
               </div>
             </div>

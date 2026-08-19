@@ -3,6 +3,7 @@ import { Button, Loader, ProjectTimeline } from '../../components';
 import { api } from '../../services/api';
 import { Users, FileText, X, ExternalLink, Paperclip } from 'lucide-react';
 import { extractFirstUrl, getPreviewUrl } from '../../utils/filePreview';
+import { cleanProjectDescription } from '../../utils/projectDescription';
 
 const STAGE_LABELS: Record<string, string> = {
   SYNOPSIS: 'Synopsis',
@@ -230,7 +231,7 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
                   <FileText size={16} color="var(--primary)" /> Proposal Context
                 </h4>
                 <div style={{ padding: '16px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '14px', lineHeight: 1.6, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
-                  {project.projectDescription || 'No description provided.'}
+                  {cleanProjectDescription(project.projectDescription) || 'No description provided.'}
                 </div>
               </div>
             </>

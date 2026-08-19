@@ -3,7 +3,6 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../utils/authStore';
 import { Button, Sidebar, NotificationBell } from './index';
 import { ToastContainer } from './Toast';
-import { GlobalChatbot } from './GlobalChatbot';
 import dpgitmLogo from '../assets/images/dpgitm-logo.png';
 
 export const Layout: React.FC = () => {
@@ -194,7 +193,6 @@ export const Layout: React.FC = () => {
                 </div>
             )}
 
-            <GlobalChatbot />
             <ToastContainer />
         </div>
     );

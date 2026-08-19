@@ -7,6 +7,7 @@ import { api } from '../services/api';
 import type { FormAttachment, FormResponse, Template } from '../services/adminService';
 import { getPreviewUrl } from '../utils/filePreview';
 import { isValidMeetingLink, openMeetingLink } from '../utils/meetingLinks';
+import { cleanProjectDescription } from '../utils/projectDescription';
 
 const STAGE_LABELS: Record<string, string> = {
     SYNOPSIS: 'Synopsis',
@@ -34,39 +35,22 @@ const templateToAttachment = (template: Template): FormAttachment => ({
     stage: template.stageId
 });
 
-/** Strip raw markdown markers into clean, readable plain text. */
-const formatProjectDescription = (raw?: string | null): string => {
-    if (!raw) return '';
-    return String(raw)
-        .replace(/\r\n/g, '\n')
-        .replace(/\*\*(.*?)\*\*/g, '$1')
-        .replace(/__(.*?)__/g, '$1')
-        .replace(/\*(.*?)\*/g, '$1')
-        .replace(/_(.*?)_/g, '$1')
-        .replace(/`([^`]+)`/g, '$1')
-        .replace(/^#{1,6}\s*/gm, '')
-        .replace(/^\s*[-*+]\s+/gm, '• ')
-        .replace(/^\s*\d+\.\s+/gm, '')
-        .replace(/:\s*\*+/g, ':')
-        .replace(/\*+:/g, ':')
-        .replace(/[ \t]+\n/g, '\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-};
-
 const getStageLabel = (stage?: string) =>
     STAGE_LABELS[String(stage || '').toUpperCase()] || stage || '—';
 
+/** Compact info cards — no aspect-ratio (avoids grid overlap in narrow columns). */
 const compactCardStyle: React.CSSProperties = {
-    aspectRatio: '1 / 1',
-    minHeight: '240px',
-    maxHeight: '320px',
+    minHeight: '200px',
+    height: '100%',
+    minWidth: 0,
     padding: '16px',
     borderRadius: '12px',
     border: '1px solid var(--border-color)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    position: 'relative',
+    zIndex: 1,
 };
 
 export const StudentProjects: React.FC = () => {
@@ -203,24 +187,17 @@ export const StudentProjects: React.FC = () => {
     };
 
     const stageFiles = referenceFiles.filter((file) => matchesStage(file, project?.stageStatus));
-    const cleanDescription = formatProjectDescription(project.projectDescription);
+    const cleanDescription = cleanProjectDescription(project.projectDescription);
     const officialMeetings = meetings.filter((m) => m.sessionId);
     const casualMeetings = meetings.filter((m) => !m.sessionId);
 
     return (
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '28px' }}>
-
-            <div>
-                <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>My Project</h1>
-                <p style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: '15px' }}>
-                    View your current project details, progress, and team assignments.
-                </p>
-            </div>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
             <div
                 style={{
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1.15fr) minmax(280px, 0.85fr)',
+                    gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 0.8fr)',
                     gap: '24px',
                     alignItems: 'start',
                 }}
@@ -316,7 +293,16 @@ export const StudentProjects: React.FC = () => {
                         )}
                     </Card>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                            gridAutoRows: 'minmax(200px, auto)',
+                            gap: '16px',
+                            width: '100%',
+                            alignItems: 'stretch',
+                        }}
+                    >
                         {/* Team Members */}
                         <Card elevation={1} style={compactCardStyle}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexShrink: 0 }}>

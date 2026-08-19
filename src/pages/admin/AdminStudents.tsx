@@ -92,16 +92,19 @@ export const AdminStudents: React.FC = () => {
             });
             setProjectByStudentId(mapping);
             
-            const fetchedStudents = (stdRes.data.content || []).map((s: any) => ({
-                id: s.studentId,
-                name: s.name,
-                rollNo: s.rollNo,
-                branch: s.branch,
-                status: s.enrollStatus || 'ACTIVE',
-                mail: s.mail,
-                performance: s.performanceScore ?? 100,
-                project: mapping[s.studentId] || null,
-            }));
+            const fetchedStudents = (stdRes.data.content || []).map((s: any) => {
+                const enrollStatus = String(s.enrollStatus || 'ACTIVE').toUpperCase();
+                return {
+                    id: s.studentId,
+                    name: s.name,
+                    rollNo: s.rollNo,
+                    branch: s.branch,
+                    status: enrollStatus,
+                    mail: s.mail,
+                    performance: s.performanceScore ?? 100,
+                    project: enrollStatus === 'ENROLLED' ? (mapping[s.studentId] || null) : null,
+                };
+            });
 
             setStudents(fetchedStudents);
             setTotalPages(stdRes.data.totalPages || 0);
@@ -246,7 +249,10 @@ export const AdminStudents: React.FC = () => {
                                     <tr><td colSpan={5} style={{ textAlign: 'center', padding: '64px', color: 'var(--text-disabled)' }}>No students found matching your criteria.</td></tr>
                                 )}
                                 {students.map((student) => {
-                                    const project = student.project || projectByStudentId[student.id];
+                                    const isEnrolled = String(student.status).toUpperCase() === 'ENROLLED';
+                                    const project = isEnrolled
+                                        ? (student.project || projectByStudentId[student.id])
+                                        : null;
 
                                     return (
                                         <tr key={student.id} style={{ borderTop: '1px solid var(--border-color)', fontSize: '14px' }}>

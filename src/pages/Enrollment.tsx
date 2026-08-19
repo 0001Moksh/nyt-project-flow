@@ -233,12 +233,14 @@ export const Enrollment: React.FC = () => {
 
       const projTitle = answers[fieldsConfig.find((f: any) => f.label.toLowerCase().includes('title'))?.id || ''] || `${user.name}'s Project`;
 
-      let projDescription = '';
-      fieldsConfig.forEach((field: any) => {
-        if (!field.label.toLowerCase().includes('title')) {
-          projDescription += `**${field.label}**: ${answers[field.id] || 'N/A'}\n\n`;
-        }
-      });
+      // Persist ONLY the raw description field value — never prepend "Project Description:"
+      const descField = fieldsConfig.find((f: any) =>
+        String(f.label || '').toLowerCase().includes('description')
+      );
+      let projDescription = descField ? String(answers[descField.id] ?? '').trim() : '';
+      projDescription = projDescription
+        .replace(/^\s*(?:\*\*)?\s*project\s*description\s*(?:\*\*)?\s*:\s*/i, '')
+        .trim();
 
       await studentService.createProject({
         teamId: teamRes.teamId,

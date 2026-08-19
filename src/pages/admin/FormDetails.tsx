@@ -9,6 +9,7 @@ import { Search, FileText, Users, AlertTriangle, Upload, Paperclip, ExternalLink
 import { TimelineConfigModal } from './TimelineConfigModal';
 import { MeetingManagementPanel } from './MeetingManagementPanel';
 import { InlineSupervisorAssign } from './InlineSupervisorAssign';
+import { cleanProjectDescription } from '../../utils/projectDescription';
 import { api } from '../../services/api';
 import { extractFirstUrl, getPreviewUrl } from '../../utils/filePreview';
 
@@ -248,7 +249,7 @@ export const FormDetails: React.FC = () => {
   };
 
   const truncateText = (text?: string, max = 90) => {
-    const clean = String(text || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+    const clean = cleanProjectDescription(text).replace(/\s+/g, ' ').trim();
     if (!clean) return '—';
     return clean.length > max ? `${clean.slice(0, max)}…` : clean;
   };
@@ -447,7 +448,7 @@ export const FormDetails: React.FC = () => {
                     <td style={{ padding: '16px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={project.projectTitle}>
                       {project.projectTitle}
                     </td>
-                    <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }} title={String(project.projectDescription || '')}>
+                    <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }} title={cleanProjectDescription(project.projectDescription) || undefined}>
                       <div style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {truncateText(project.projectDescription, 120)}
                       </div>
@@ -641,7 +642,7 @@ export const FormDetails: React.FC = () => {
               <div>
                 <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}><FileText size={16} color="var(--primary)" /> Proposal Context</h4>
                 <div style={{ padding: '16px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '14px', lineHeight: 1.6, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
-                  {viewCompleteProject.projectDescription}
+                  {cleanProjectDescription(viewCompleteProject.projectDescription) || 'No description provided.'}
                 </div>
               </div>
 

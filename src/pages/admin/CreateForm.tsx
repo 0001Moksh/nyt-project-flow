@@ -54,12 +54,26 @@ export const CreateForm: React.FC = () => {
     try {
       setIsLoading(true);
 
-      const [formsRes, studentsRes] = await Promise.all([
+      const [formsRes, studentsRes, projectsRes] = await Promise.all([
         adminService.getAllForms().catch(() => []),
-        api.get('/students').catch(() => ({ data: [] }))
+        api.get('/students').catch(() => ({ data: [] })),
+        api.get('/projects').catch(() => ({ data: [] })),
       ]);
 
-      setForms(Array.isArray(formsRes) ? formsRes : []);
+      const countByForm: Record<string, number> = {};
+      (projectsRes.data || []).forEach((p: any) => {
+        if (!p?.formId) return;
+        countByForm[p.formId] = (countByForm[p.formId] || 0) + 1;
+      });
+
+      const formsList = Array.isArray(formsRes) ? formsRes : [];
+      setForms(
+        formsList.map((f) => ({
+          ...f,
+          // Prefer live aggregate from projects; fall back to API projectCount
+          projectCount: countByForm[f.formId] ?? Number(f.projectCount) ?? 0,
+        }))
+      );
 
       if (studentsRes.data && studentsRes.data.length > 0) {
         const branchSet = new Set<string>();

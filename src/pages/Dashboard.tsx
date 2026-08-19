@@ -5,8 +5,8 @@ import { useToastStore } from '../utils/toastStore';
 import { useNavigate } from 'react-router-dom';
 import { Check, Bell, CheckCircle, Calendar, Video, MapPin, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
 import { api } from '../services/api';
-import { DeliverableUploader } from '../components/DeliverableUploader';
 import { isValidMeetingLink, openMeetingLink } from '../utils/meetingLinks';
+import { cleanProjectDescription } from '../utils/projectDescription';
 
 export const Dashboard: React.FC = () => {
     const { user, isAuthenticated } = useAuthStore();
@@ -292,13 +292,11 @@ export const Dashboard: React.FC = () => {
                             {currentProject.projectTitle || 'Untitled Project'}
                         </h2>
                         <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                            {currentProject.projectDescription
-                                ? String(currentProject.projectDescription).replace(/\*\*/g, '').trim()
-                                : 'No project description provided.'}
+                            {cleanProjectDescription(currentProject.projectDescription) || 'No project description provided.'}
                         </p>
                     </Card>
 
-                    {/* Top grid: Timeline (left) | Meetings + Deliverables (right) */}
+                    {/* Top grid: Timeline (left) | Meetings (right) */}
                     <div
                         className="student-dashboard-grid"
                         style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(0, 0.85fr)', gap: '24px', alignItems: 'start' }}
@@ -365,16 +363,6 @@ export const Dashboard: React.FC = () => {
                                     ))}
                                 </div>
                             </Card>
-
-                            {currentProject?.documentId && (
-                                <DeliverableUploader
-                                    projectId={currentProject.projectId}
-                                    documentId={currentProject.documentId}
-                                    currentStage={currentProject.stageStatus}
-                                    isLeader={currentProject.leaderId === user.id}
-                                    onSuccess={fetchData}
-                                />
-                            )}
                         </div>
                     </div>
 
