@@ -5,13 +5,13 @@ import { adminService, type Template } from '../../services/adminService';
 import { useAuthStore } from '../../utils/authStore';
 import { useToastStore } from '../../utils/toastStore';
 import type { FormResponse } from '../../services/adminService';
-import { Search, FileText, Users, AlertTriangle, Upload, Paperclip, ExternalLink, Plus, Link as LinkIcon, Trash2, X, File, Presentation, Eye, Calendar, Video } from 'lucide-react';
+import { Search, FileText, Users, AlertTriangle, Upload, ExternalLink, Plus, Link as LinkIcon, Trash2, X, File, Presentation, Eye, Calendar, Video } from 'lucide-react';
 import { TimelineConfigModal } from './TimelineConfigModal';
 import { MeetingManagementPanel } from './MeetingManagementPanel';
 import { InlineSupervisorAssign } from './InlineSupervisorAssign';
 import { cleanProjectDescription } from '../../utils/projectDescription';
 import { api } from '../../services/api';
-import { extractFirstUrl, getPreviewUrl } from '../../utils/filePreview';
+import { getPreviewUrl } from '../../utils/filePreview';
 
 const STAGES = [
   { key: 'SYNOPSIS', label: 'Synopsis' },
@@ -21,38 +21,18 @@ const STAGES = [
   { key: 'GENERAL', label: 'General / All' }
 ];
 
-const submissionStages = [
-  { key: 'SYNOPSIS', endpoint: 'synopsis' },
-  { key: 'PROGRESS1', endpoint: 'progress1' },
-  { key: 'PROGRESS2', endpoint: 'progress2' },
-  { key: 'FINAL', endpoint: 'final' }
-];
-
-const getSubmissionId = (submission: any, endpoint: string) =>
-  submission[`${endpoint}Id`] || submission.finalId || submission.synopsisId || submission.progress1Id || submission.progress2Id;
-
-const fetchProjectSubmissions = async (documentId?: string | null) => {
-  if (!documentId) return [];
-
-  const responses = await Promise.all(
-    submissionStages.map(async (stage) => {
-      const response = await api.get(`/submissions/${stage.endpoint}/document/${documentId}`).catch(() => ({ data: [] }));
-      return (response.data || []).map((submission: any) => ({
-        ...submission,
-        stage: stage.key,
-        submissionId: getSubmissionId(submission, stage.endpoint)
-      }));
-    })
-  );
-
-  return responses
-    .flat()
-    .sort((a: any, b: any) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime());
-};
-
 const getStageLabel = (key: string) => {
   const stage = STAGES.find(s => s.key === key);
   return stage ? stage.label : key;
+};
+
+const parseIdArray = (value?: string | null): string[] => {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 };
 
 export const FormDetails: React.FC = () => {
@@ -130,8 +110,9 @@ export const FormDetails: React.FC = () => {
       setTemplates([...templatesRes, ...mappedLegacyTemplates]);
       const targetedProjects = allProjectsRes.filter((p: any) => p.formId === formId);
 
-      const [teamsRes, studentsRes, supervisorsRes] = await Promise.all([
+      const [teamsRes, teamMembersRes, studentsRes, supervisorsRes] = await Promise.all([
         api.get('/teams'),
+        api.get('/team-members'),
         api.get('/students'),
         api.get('/supervisors')
       ]);
@@ -147,15 +128,26 @@ export const FormDetails: React.FC = () => {
         let memberDetails: any[] = [];
         let leaderName = '—';
         if (team) {
-          const arr = JSON.parse(team.teamMemberArray || '[]');
+          const memberStatus = teamMembersRes.data.find((tm: any) => tm.teamId === team.teamId);
+          const joinedIds = new Set(parseIdArray(memberStatus?.joinMemberArray));
+          const pendingIds = new Set(parseIdArray(memberStatus?.notJoinMemberArray));
+          const arr = Array.from(new Set([
+            ...parseIdArray(team.teamMemberArray),
+            ...Array.from(joinedIds),
+            ...Array.from(pendingIds),
+            team.leaderId,
+          ].filter(Boolean)));
           memberDetails = arr.map((sid: string) => {
             const st = studentsRes.data.find((s: any) => s.studentId === sid);
-            return st || { studentId: sid, name: 'Unknown', mail: 'N/A' };
+            return {
+              ...(st || { studentId: sid, name: 'Unknown', mail: 'N/A' }),
+              inviteStatus: sid === team.leaderId ? 'LEADER' : pendingIds.has(sid) ? 'PENDING' : joinedIds.has(sid) ? 'APPROVED' : 'PENDING',
+            };
           });
           const leader = studentsRes.data.find((s: any) => s.studentId === team.leaderId);
           leaderName = leader?.name || '—';
         }
-        return { ...p, team, memberDetails, leaderName, studentSubmissions: [] as any[] };
+        return { ...p, team, memberDetails, leaderName };
       });
 
       setProjects(enriched);
@@ -240,12 +232,6 @@ export const FormDetails: React.FC = () => {
 
   const openProjectDrawer = async (project: any) => {
     setViewCompleteProject(project);
-    if (project.documentId) {
-      const studentSubmissions = await fetchProjectSubmissions(project.documentId);
-      setViewCompleteProject((prev: any) => prev && prev.projectId === project.projectId
-        ? { ...prev, studentSubmissions }
-        : prev);
-    }
   };
 
   const truncateText = (text?: string, max = 90) => {
@@ -573,12 +559,8 @@ export const FormDetails: React.FC = () => {
           <div style={{ width: '800px', maxWidth: '90vw', height: '100%', backgroundColor: 'var(--surface)', overflowY: 'auto', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)' }} onClick={e => e.stopPropagation()}>
             <div style={{ position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 10, padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                  <h2 style={{ margin: 0, fontSize: '24px' }}>{viewCompleteProject.projectTitle}</h2>
-                  <span style={{ fontSize: '11px', backgroundColor: 'var(--primary)', color: 'white', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>{viewCompleteProject.status.toUpperCase()}</span>
-                </div>
+                <h2 style={{ margin: '0 0 8px', fontSize: '24px' }}>{viewCompleteProject.projectTitle}</h2>
                 <div style={{ display: 'flex', gap: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><FileText size={14} /> ID: {viewCompleteProject.projectId}</span>
                   <span>Stage: <strong>{getStageLabel(viewCompleteProject.stageStatus)}</strong></span>
                 </div>
               </div>
@@ -592,57 +574,25 @@ export const FormDetails: React.FC = () => {
                 <ProjectTimeline project={viewCompleteProject} />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                <div>
-                  <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}><Users size={16} color="var(--primary)" /> Team Members</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {viewCompleteProject.memberDetails?.map((m: any) => (
-                      <div key={m.studentId} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', fontWeight: 'bold' }}>{m.name.charAt(0)}</div>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {m.name}
-                            {m.studentId === viewCompleteProject.team?.leaderId && <span style={{ fontSize: '10px', backgroundColor: 'var(--warning)', color: '#000', padding: '2px 6px', borderRadius: '8px' }}>LEADER</span>}
-                          </div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{m.mail}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}><Paperclip size={16} color="var(--primary)" /> Submissions</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {viewCompleteProject.studentSubmissions?.length ? viewCompleteProject.studentSubmissions.map((submission: any) => {
-                      const submissionUrl = submission.fileUrl || extractFirstUrl(submission.comment);
-                      return (
-                        <div key={submission.submissionId} style={{ padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: '14px' }}>{getStageLabel(submission.stage)}</div>
-                              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                {submission.uploadedAt ? new Date(submission.uploadedAt).toLocaleDateString() : 'Recent'} • {submission.status}
-                              </div>
-                            </div>
-                            {submissionUrl && (
-                              <Button size="sm" variant="outline" onClick={() => window.open(getPreviewUrl(submissionUrl), '_blank')} leftIcon={<ExternalLink size={14} />}>Open</Button>
-                            )}
-                          </div>
-                          {submission.comment && <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)', wordBreak: 'break-word', backgroundColor: 'var(--background)', padding: '8px', borderRadius: '4px' }}>{submission.comment}</div>}
-                        </div>
-                      );
-                    }) : (
-                      <div style={{ padding: '12px', color: 'var(--text-disabled)', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px' }}>No submissions yet.</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
               <div>
-                <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}><FileText size={16} color="var(--primary)" /> Proposal Context</h4>
-                <div style={{ padding: '16px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '14px', lineHeight: 1.6, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
-                  {cleanProjectDescription(viewCompleteProject.projectDescription) || 'No description provided.'}
+                <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}><Users size={16} color="var(--primary)" /> Team Members</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {viewCompleteProject.memberDetails?.map((m: any) => (
+                    <div key={m.studentId} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', fontWeight: 'bold' }}>{m.name?.charAt(0) || '?'}</div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {m.name}
+                          {m.studentId === viewCompleteProject.team?.leaderId ? (
+                            <span style={{ fontSize: '10px', backgroundColor: 'var(--warning)', color: '#000', padding: '2px 6px', borderRadius: '8px' }}>LEADER</span>
+                          ) : m.inviteStatus !== 'APPROVED' ? (
+                            <span style={{ fontSize: '10px', backgroundColor: '#fef3c7', color: '#92400e', padding: '2px 6px', borderRadius: '8px', fontWeight: 700 }}>PENDING</span>
+                          ) : null}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{m.mail}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 

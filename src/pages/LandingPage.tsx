@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Lock, Activity, Brain, Users, Trophy, ArrowRight, Play, X, CheckCircle, Clock } from 'lucide-react';
-import { Loader } from '../components';
+import { ShieldCheck, Lock, Activity, Brain, Users, ArrowRight, Play, X } from 'lucide-react';
 import { api } from '../services/api';
 import '../styles/landing.css';
 import heroImg from '../assets/images/hero.png';
@@ -11,9 +10,6 @@ import dpgitmLogo from '../assets/images/dpgitm-logo.png';
 export const LandingPage: React.FC = () => {
     const navigate = useNavigate();
     const [scrolled, setScrolled] = useState(false);
-    const [projects, setProjects] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [selectedProject, setSelectedProject] = useState<any | null>(null);
 
     useEffect(() => {
         const handleScroll = () => {
@@ -21,30 +17,6 @@ export const LandingPage: React.FC = () => {
         };
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
-    }, []);
-
-    useEffect(() => {
-        const fetchLeaderboard = async () => {
-            setIsLoading(true);
-            try {
-                const { data: projData } = await api.get('/projects');
-                const scoredProjects = (projData || []).map((p: any) => {
-                    const s1 = parseInt(p.synopsisScore || '0');
-                    const s2 = parseInt(p.progress1Score || '0');
-                    const s3 = parseInt(p.progress2Score || '0');
-                    const s4 = parseInt(p.finalScore || '0');
-                    const total = s1 + s2 + s3 + s4;
-                    return { ...p, cumulativeScore: total };
-                }).sort((a: any, b: any) => b.cumulativeScore - a.cumulativeScore);
-
-                setProjects(scoredProjects);
-            } catch (err) {
-                console.error("Failed to load leaderboard");
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchLeaderboard();
     }, []);
 
     const [departments, setDepartments] = useState<string[]>([]);
@@ -255,50 +227,6 @@ export const LandingPage: React.FC = () => {
                 </div>
             </section>
 
-            {/* Leaderboard */}
-            <section id="leaderboard" className="section-wrapper" style={{ background: 'linear-gradient(to bottom, #FFF, #F8F9FA)' }}>
-                <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-                    <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', backgroundColor: '#F0F4FF', color: '#0A2B73', marginBottom: '16px' }}>
-                        <Trophy size={32} />
-                    </div>
-                    <h2 className="heading-lg">Top Ranked Teams</h2>
-                    <p className="subtitle">Discover top-tier academic projects with our live scoring system.</p>
-                </div>
-
-                <div className="glass-card" style={{ padding: '32px', maxWidth: '1000px', margin: '0 auto', background: '#FFF' }}>
-                    {isLoading ? (
-                        <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}><Loader size="lg" /></div>
-                    ) : projects.length === 0 ? (
-                        <div style={{ color: '#888', textAlign: 'center', padding: '48px' }}>No projects evaluated yet.</div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            {projects.slice(0, 5).map((proj, index) => (
-                                <div key={proj.projectId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px', backgroundColor: index < 3 ? '#F0F4FF' : '#FAFAFA', borderRadius: '12px', border: `1px solid ${index < 3 ? '#D2E0FF' : '#EEE'}`, transition: 'transform 0.2s', cursor: 'pointer' }} onClick={() => setSelectedProject(proj)}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                                        <div style={{ fontSize: '28px', fontWeight: 800, color: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : '#AAA', width: '40px', textAlign: 'center' }}>
-                                            #{index + 1}
-                                        </div>
-                                        <div>
-                                            <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 700, color: '#1A1A1A' }}>{proj.projectTitle}</h3>
-                                            <p style={{ margin: 0, fontSize: '0.95rem', color: '#666' }}>
-                                                {proj.projectDescription?.substring(0, 80) || 'No description available'}...
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
-                                        <div style={{ textAlign: 'center' }}>
-                                            <div style={{ fontSize: '0.8rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Score</div>
-                                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0A2B73' }}>{proj.cumulativeScore} <span style={{ fontSize: '1rem', color: '#AAA', fontWeight: 500 }}>/ 40</span></div>
-                                        </div>
-                                        <ArrowRight size={20} color="#0A2B73" style={{ opacity: 0.5 }} />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </section>
-
             {/* Institution Breakdown */}
             <section id="institution" className="section-wrapper" style={{ background: '#F8F9FA' }}>
                 <div style={{ textAlign: 'center', marginBottom: '64px' }}>
@@ -347,57 +275,6 @@ export const LandingPage: React.FC = () => {
                     <p style={{ fontSize: '0.78rem' }}>Powered by - Nexyug Tech</p>
                 </div>
             </footer>
-
-            {/* PROJECT DETAILS MODAL */}
-            {selectedProject && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(4px)' }}>
-                    <div className="glass-card" style={{ width: '90%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', position: 'relative', background: '#FFF', padding: '32px' }}>
-                        <button onClick={() => setSelectedProject(null)} style={{ position: 'absolute', top: '24px', right: '24px', background: 'none', border: 'none', cursor: 'pointer', color: '#888' }}>
-                            <X size={24} />
-                        </button>
-
-                        <div style={{ marginBottom: '24px', borderBottom: '1px solid #EEE', paddingBottom: '24px' }}>
-                            <div style={{ display: 'inline-block', backgroundColor: '#F0F4FF', color: '#0A2B73', padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, marginBottom: '16px' }}>
-                                Total Score: {selectedProject.cumulativeScore}/40
-                            </div>
-                            <h2 style={{ fontSize: '2rem', margin: '0 0 16px', fontWeight: 800, color: '#1A1A1A' }}>{selectedProject.projectTitle}</h2>
-                            <p style={{ color: '#555', lineHeight: '1.6', fontSize: '1.05rem' }}>{selectedProject.projectDescription}</p>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '24px', marginBottom: '32px' }}>
-                            <div style={{ flex: 1, backgroundColor: '#F8F9FA', padding: '24px', borderRadius: '12px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#666', marginBottom: '12px', fontWeight: 600 }}><Users size={18} /> Team Data</div>
-                                <div style={{ fontSize: '0.95rem', color: '#1A1A1A', marginBottom: '8px' }}><strong>Leader:</strong> {selectedProject.leaderId || 'Student'}</div>
-                                <div style={{ fontSize: '0.95rem', color: '#1A1A1A' }}><strong>Supervisor:</strong> {selectedProject.supervisorId || 'Unassigned'}</div>
-                            </div>
-                            <div style={{ flex: 1, backgroundColor: '#F8F9FA', padding: '24px', borderRadius: '12px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#666', marginBottom: '12px', fontWeight: 600 }}><Clock size={18} /> Current Phase</div>
-                                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0A2B73' }}>{selectedProject.stageStatus || 'SYNOPSIS'}</div>
-                            </div>
-                        </div>
-
-                        <h3 style={{ margin: '0 0 20px', fontSize: '1.25rem', fontWeight: 700, color: '#1A1A1A' }}>Evaluation Timeline</h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {['synopsisScore', 'progress1Score', 'progress2Score', 'finalScore'].map((scoreField, i) => {
-                                const phaseMap = ['Synopsis', 'Progress 1', 'Progress 2', 'Final Submission'];
-                                const phaseName = phaseMap[i];
-                                const score = selectedProject[scoreField];
-                                return (
-                                    <div key={phaseName} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', border: '1px solid #EEE', borderRadius: '12px', background: score ? '#F0F4FF' : '#FFF' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            {score ? <CheckCircle size={20} color="#137333" /> : <Clock size={20} color="#AAA" />}
-                                            <span style={{ fontWeight: 600, color: score ? '#0A2B73' : '#666' }}>{phaseName}</span>
-                                        </div>
-                                        <div style={{ fontWeight: 700, color: score ? '#1A1A1A' : '#AAA' }}>
-                                            {score ? `${score}/10` : 'Pending'}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* SUPERVISOR REGISTRATION MODAL */}
             {showRegisterModal && (

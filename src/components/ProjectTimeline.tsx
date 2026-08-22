@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle, Clock, FileText, UploadCloud } from 'lucide-react';
+import { Calendar, Clock, FileText, UploadCloud } from 'lucide-react';
 import { Card } from './Card';
 import { Loader } from './Loader';
 import { api } from '../services/api';
@@ -54,9 +54,11 @@ const pickStageMeeting = (meetings: any[], stageKey: string) => {
 interface ProjectTimelineProps {
   project: any;
   compact?: boolean;
+  /** When true, render nothing until admin has configured at least one stage deadline. */
+  hideWhenUnconfigured?: boolean;
 }
 
-export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compact = false }) => {
+export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compact = false, hideWhenUnconfigured = false }) => {
   const [timeline, setTimeline] = useState<any>(null);
   const [tasks, setTasks] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
@@ -139,8 +141,14 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
     };
   }), [timeline, tasks, submissions, meetings, stageIndex]);
 
+  const hasConfiguredTimeline = STAGES.some((stage) => Boolean(timeline?.[stage.dateField]));
+
   if (isLoading) {
     return <Card elevation={1}><Loader /></Card>;
+  }
+
+  if (hideWhenUnconfigured && !hasConfiguredTimeline) {
+    return null;
   }
 
   return (
@@ -156,9 +164,6 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, compa
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     {stage.label}
-                    {stage.completed && <CheckCircle size={14} color="#16a34a" />}
-                    {stage.current && <span style={{ fontSize: '10px', color: '#2563eb', backgroundColor: '#dbeafe', padding: '2px 8px', borderRadius: '999px' }}>CURRENT</span>}
-                    {stage.isRescheduled && <span style={{ fontSize: '10px', color: '#b45309', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px' }}>RESCHEDULED</span>}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                     <span>

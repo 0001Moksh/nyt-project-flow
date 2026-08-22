@@ -220,7 +220,7 @@ export const StudentProjects: React.FC = () => {
                         </p>
                     </Card>
 
-                    <ProjectTimeline project={project} />
+                    <ProjectTimeline project={project} hideWhenUnconfigured />
 
                     {stageFiles.length > 0 && (
                         <Card elevation={1} style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>

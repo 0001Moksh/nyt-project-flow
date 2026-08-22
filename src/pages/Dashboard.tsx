@@ -302,7 +302,7 @@ export const Dashboard: React.FC = () => {
                         style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(0, 0.85fr)', gap: '24px', alignItems: 'start' }}
                     >
                         <div style={{ minWidth: 0 }}>
-                            <ProjectTimeline project={currentProject} />
+                            <ProjectTimeline project={currentProject} hideWhenUnconfigured />
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0 }}>
