@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../utils/authStore';
-import { Card, Button, Loader, ProjectTimeline, ReferenceTemplatesCard } from '../components';
+import { Card, Button, Loader, ProjectTimeline } from '../components';
 import { useToastStore } from '../utils/toastStore';
 import { useNavigate } from 'react-router-dom';
-import { Check, Bell, CheckCircle, Calendar, Video, MapPin, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
+import { Check, Bell, CheckCircle, Calendar, Video, MapPin, TrendingUp, AlertTriangle, Clock, X, ChevronRight } from 'lucide-react';
 import { api } from '../services/api';
 import { isValidMeetingLink, openMeetingLink } from '../utils/meetingLinks';
 import { cleanProjectDescription } from '../utils/projectDescription';
@@ -25,6 +25,7 @@ export const Dashboard: React.FC = () => {
 
     const [myStudentInfo, setMyStudentInfo] = useState<any>(null);
     const [applicableForms, setApplicableForms] = useState<any[]>([]);
+    const [openMeeting, setOpenMeeting] = useState<any | null>(null);
 
     useEffect(() => {
         if (!isAuthenticated) {
@@ -231,6 +232,27 @@ export const Dashboard: React.FC = () => {
         }
     };
 
+    const getMeetingWindow = (meeting: any) => {
+        const start = new Date(`${meeting.meetingDate}T${String(meeting.meetingTime || '').substring(0, 8)}`);
+        const end = meeting.endTime
+            ? new Date(`${meeting.meetingDate}T${String(meeting.endTime || '').substring(0, 8)}`)
+            : new Date(start.getTime() + 30 * 60000);
+        return { start, end };
+    };
+
+    const isJoinEnabled = (meeting: any) => {
+        if (meeting.mode !== 'ONLINE' || !isValidMeetingLink(meeting.locationOrLink)) return false;
+        const now = new Date();
+        const { start, end } = getMeetingWindow(meeting);
+        const joinOpenAt = new Date(start.getTime() - 2 * 60000);
+        return now >= joinOpenAt && now <= end;
+    };
+
+    const formatMeetingSlot = (meeting: any) => {
+        const { start, end } = getMeetingWindow(meeting);
+        return `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    };
+
     if (!user || isLoading) return <div style={{ display: 'flex', justifyContent: 'center', marginTop: '100px' }}><Loader size="lg" /></div>;
 
     const currentProject = activeProjects[0]; // For visual dashboard, focus on primary active project
@@ -352,21 +374,15 @@ export const Dashboard: React.FC = () => {
                                                 </div>
                                             </div>
 
-                                            {meeting.status === 'SCHEDULED' && meeting.mode === 'ONLINE' && (
-                                                isValidMeetingLink(meeting.locationOrLink) ? (
-                                                    <Button size="sm" variant="outline" onClick={() => openMeetingLink(meeting.locationOrLink, () => addToast('This meeting has an invalid link. Ask your supervisor/admin to update it.', 'error'))} style={{ borderColor: '#0284c7', color: '#0284c7' }}>Join GMeet</Button>
-                                                ) : (
-                                                    <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>Invalid meeting link</span>
-                                                )
-                                            )}
+                                            <Button size="sm" variant="outline" onClick={() => setOpenMeeting(meeting)} style={{ borderColor: '#0284c7', color: '#0284c7' }}>
+                                                Open Meeting
+                                            </Button>
                                         </div>
                                     ))}
                                 </div>
                             </Card>
                         </div>
                     </div>
-
-                    <ReferenceTemplatesCard formId={currentProject?.formId} currentStage={currentProject?.stageStatus} />
 
                     {/* Active Members */}
                     <Card elevation={1} style={{ padding: '0', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
@@ -439,8 +455,70 @@ export const Dashboard: React.FC = () => {
                 </Card>
             )}
 
+            {openMeeting && (
+                <div
+                    style={{ position: 'fixed', inset: 0, zIndex: 1200, backgroundColor: 'rgba(15, 23, 42, 0.55)', display: 'flex', justifyContent: 'flex-end' }}
+                    onClick={() => setOpenMeeting(null)}
+                >
+                    <div
+                        style={{ width: 'min(520px, 96vw)', height: '100%', backgroundColor: 'var(--surface)', borderLeft: '1px solid var(--border-color)', padding: '24px', overflowY: 'auto' }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '20px' }}>
+                            <div>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Meeting Details</div>
+                                <h3 style={{ margin: 0, fontSize: '22px' }}>{openMeeting.stage} - {openMeeting.mode}</h3>
+                            </div>
+                            <button type="button" onClick={() => setOpenMeeting(null)} style={{ border: '1px solid var(--border-color)', background: 'white', borderRadius: '50%', width: '36px', height: '36px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div style={{ display: 'grid', gap: '12px', marginBottom: '20px' }}>
+                            <Card style={{ padding: '16px', backgroundColor: '#f8fafc' }}>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Slot</div>
+                                <div style={{ fontWeight: 600 }}>{formatMeetingSlot(openMeeting)}</div>
+                            </Card>
+                            <Card style={{ padding: '16px', backgroundColor: '#f8fafc' }}>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Mode</div>
+                                <div style={{ fontWeight: 600 }}>{openMeeting.mode}</div>
+                            </Card>
+                            <Card style={{ padding: '16px', backgroundColor: '#f8fafc' }}>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Supervisor</div>
+                                <div style={{ fontWeight: 600 }}>{openMeeting.supervisorName || 'Assigned supervisor'}</div>
+                            </Card>
+                            <Card style={{ padding: '16px', backgroundColor: '#f8fafc' }}>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{openMeeting.mode === 'ONLINE' ? 'Meeting Link' : 'Room / Location'}</div>
+                                <div style={{ fontWeight: 600 }}>{openMeeting.mode === 'ONLINE' ? 'Hidden until join window opens' : openMeeting.locationOrLink || '—'}</div>
+                            </Card>
+                        </div>
+
+                        {openMeeting.mode === 'ONLINE' ? (
+                            isJoinEnabled(openMeeting) ? (
+                                <Button
+                                    style={{ width: '100%' }}
+                                    onClick={() => openMeetingLink(openMeeting.locationOrLink, () => addToast('This meeting has an invalid link. Ask your supervisor/admin to update it.', 'error'))}
+                                    leftIcon={<ChevronRight size={16} />}
+                                >
+                                    Join Meeting
+                                </Button>
+                            ) : (
+                                <div style={{ padding: '14px 16px', borderRadius: '10px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', fontSize: '13px', lineHeight: 1.5 }}>
+                                    Join becomes available 2 minutes before the slot starts and closes when the session ends.
+                                </div>
+                            )
+                        ) : (
+                            <div style={{ padding: '14px 16px', borderRadius: '10px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '13px', lineHeight: 1.5 }}>
+                                Go to room: {openMeeting.locationOrLink || 'Room not set'}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };
 
 export default Dashboard;
+

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../utils/authStore';
 import { Card, Button, Loader, ProjectTimeline } from '../components';
 import { useNavigate } from 'react-router-dom';
-import { Users, CheckCircle, User, Briefcase, FolderKanban, History, Paperclip, Video, MapPin, Calendar, Clock } from 'lucide-react';
+import { Users, CheckCircle, User, Briefcase, FolderKanban, History, Video, MapPin, Calendar, Clock } from 'lucide-react';
 import { api } from '../services/api';
 import type { FormAttachment, FormResponse, Template } from '../services/adminService';
 import { getPreviewUrl } from '../utils/filePreview';
@@ -222,47 +222,6 @@ export const StudentProjects: React.FC = () => {
 
                     <ProjectTimeline project={project} hideWhenUnconfigured />
 
-                    {stageFiles.length > 0 && (
-                        <Card elevation={1} style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                            <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Paperclip size={20} color="var(--primary)" /> Reference Files
-                            </h3>
-                            <div style={{ display: 'grid', gap: '12px' }}>
-                                {stageFiles.map((file) => (
-                                    <div
-                                        key={file.attachmentId}
-                                        style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            gap: '12px',
-                                            padding: '12px 14px',
-                                            borderRadius: '8px',
-                                            border: '1px solid var(--border-color)',
-                                            backgroundColor: 'var(--surface-hover)'
-                                        }}
-                                    >
-                                        <div>
-                                            <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                {file.fileName}
-                                                {file.stage && (
-                                                    <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)' }}>
-                                                        {file.stage}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                                {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'Recently uploaded'}
-                                            </div>
-                                        </div>
-                                        <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>
-                                            Preview
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
-                    )}
                 </div>
 
                 {/* Right column: supervisor + compact square cards */}

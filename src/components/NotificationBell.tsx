@@ -227,19 +227,6 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
                         )}
                     </div>
 
-                    {/* FOOTER */}
-                    <div
-                        style={{
-                            padding: '10px',
-                            textAlign: 'center',
-                            borderTop: '1px solid #eee',
-                            cursor: 'pointer',
-                            fontSize: '13px'
-                        }}
-                        onClick={() => console.log('Go to all notifications')}
-                    >
-                        View All
-                    </div>
                 </div>
             )}
         </div>

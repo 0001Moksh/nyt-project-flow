@@ -141,14 +141,12 @@ export const Layout: React.FC = () => {
                 {/* PAGE CONTENT */}
                 <main style={{
                     flex: 1,
-                    padding: '32px',
+                    padding: '10px 20px 0 20px',
                     overflowY: 'auto'
                 }}>
                     <Outlet />
                 </main>
-                <footer style={{ padding: '10px 32px 18px', textAlign: 'center', color: 'var(--text-disabled)', fontSize: '11px' }}>
-                    Powered by - Nexyug Tech
-                </footer>
+
             </div>
 
             {/* COMMAND PALETTE */}

@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Card, Button, Loader, Input, ProjectTimeline } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
 import { useAuthStore } from '../../utils/authStore';
-import { AlertTriangle, Users, Eye, X, Search } from 'lucide-react';
+import { AlertTriangle, Users, Eye, X, Search, Plus, Filter } from 'lucide-react';
 import { InlineSupervisorAssign } from './InlineSupervisorAssign';
 import { cleanProjectDescription } from '../../utils/projectDescription';
 
@@ -22,16 +22,30 @@ const STAGE_FILTER_OPTIONS = [
   { value: 'FINAL', label: 'Final Solution' },
 ];
 
-const filterSelectStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: '8px',
-  border: '1px solid var(--border-color)',
-  backgroundColor: 'var(--surface)',
-  color: 'var(--text-primary)',
-  fontSize: '14px',
-  minWidth: '180px',
-  outline: 'none',
+type ColumnKey = 'leader' | 'projectName' | 'description' | 'supervisor' | 'stage' | 'view';
+
+type ColumnDef = {
+  key: ColumnKey;
+  label: string;
+  section: 'main' | 'other';
+  defaultVisible?: boolean;
+  filterable?: boolean;
+  width?: string;
 };
+
+const ALL_COLUMNS: ColumnDef[] = [
+  { key: 'leader', label: 'Leader Name', section: 'main', defaultVisible: true, width: '16%' },
+  { key: 'projectName', label: 'Project Name', section: 'main', defaultVisible: true, width: '18%' },
+  { key: 'description', label: 'Project Description', section: 'main', defaultVisible: true, width: '28%' },
+  { key: 'supervisor', label: 'Assigned Supervisor', section: 'main', defaultVisible: true, filterable: true, width: '18%' },
+  { key: 'stage', label: 'Current Stage', section: 'main', defaultVisible: true, filterable: true, width: '12%' },
+  { key: 'view', label: 'View', section: 'other', defaultVisible: true, width: '8%' },
+];
+
+const DEFAULT_VISIBLE = ALL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key);
+const DEFAULT_ORDER = ALL_COLUMNS.map((c) => c.key);
+
+const MENU_Z = 5000;
 
 const truncateText = (text?: string, max = 120) => {
   const clean = cleanProjectDescription(text).replace(/\s+/g, ' ').trim();
@@ -62,12 +76,40 @@ export const AdminProjectsOverview: React.FC = () => {
   const [filterSupervisorId, setFilterSupervisorId] = useState('ALL');
   const [filterStage, setFilterStage] = useState('ALL');
 
+  const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(DEFAULT_VISIBLE);
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(DEFAULT_ORDER);
+  const [isColumnPickerOpen, setIsColumnPickerOpen] = useState(false);
+  const columnPickerRef = useRef<HTMLDivElement>(null);
+
+  const [openHeaderFilter, setOpenHeaderFilter] = useState<ColumnKey | null>(null);
+  const headerFilterRef = useRef<HTMLDivElement>(null);
+
+  const [activeSupervisorRowId, setActiveSupervisorRowId] = useState<string | null>(null);
+
+  const dragCol = useRef<ColumnKey | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<ColumnKey | null>(null);
+
   const addToast = useToastStore((state) => state.addToast);
   const { user } = useAuthStore();
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!isColumnPickerOpen && !openHeaderFilter) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (isColumnPickerOpen && columnPickerRef.current && !columnPickerRef.current.contains(target)) {
+        setIsColumnPickerOpen(false);
+      }
+      if (openHeaderFilter && headerFilterRef.current && !headerFilterRef.current.contains(target)) {
+        setOpenHeaderFilter(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isColumnPickerOpen, openHeaderFilter]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -91,7 +133,6 @@ export const AdminProjectsOverview: React.FC = () => {
         assignedCount: allProjects.filter((p: any) => p.supervisorId === sup.supervisorId).length,
       }));
 
-      // Lightweight enrichment only — submissions load on drawer open
       const enriched = allProjects.map((p: any) => {
         const team = allTeams.find((t: any) => t.teamId === p.teamId);
         let memberDetails: any[] = [];
@@ -100,17 +141,19 @@ export const AdminProjectsOverview: React.FC = () => {
           const memberStatus = allTeamMembers.find((tm: any) => tm.teamId === team.teamId);
           const joinedIds = new Set(parseIdArray(memberStatus?.joinMemberArray));
           const pendingIds = new Set(parseIdArray(memberStatus?.notJoinMemberArray));
-          const arr = Array.from(new Set([
-            ...parseIdArray(team.teamMemberArray),
-            ...Array.from(joinedIds),
-            ...Array.from(pendingIds),
-            team.leaderId,
-          ].filter(Boolean)));
+          const arr = Array.from(
+            new Set(
+              [...parseIdArray(team.teamMemberArray), ...Array.from(joinedIds), ...Array.from(pendingIds), team.leaderId].filter(
+                Boolean
+              )
+            )
+          );
           memberDetails = arr.map((sid: string) => {
             const st = allStudents.find((s: any) => s.studentId === sid);
             return {
               ...(st || { studentId: sid, name: 'Unknown', mail: 'N/A' }),
-              inviteStatus: sid === team.leaderId ? 'LEADER' : pendingIds.has(sid) ? 'PENDING' : joinedIds.has(sid) ? 'APPROVED' : 'PENDING',
+              inviteStatus:
+                sid === team.leaderId ? 'LEADER' : pendingIds.has(sid) ? 'PENDING' : joinedIds.has(sid) ? 'APPROVED' : 'PENDING',
             };
           });
           const leader = allStudents.find((s: any) => s.studentId === team.leaderId);
@@ -137,6 +180,7 @@ export const AdminProjectsOverview: React.FC = () => {
     } else {
       executeAssignSupervisor(projectId, newSupervisorId, '');
     }
+    setActiveSupervisorRowId(null);
   };
 
   const executeAssignSupervisor = async (projectId: string, supervisorId: string, reason: string) => {
@@ -193,32 +237,390 @@ export const AdminProjectsOverview: React.FC = () => {
     });
   }, [projects, searchQuery, filterSupervisorId, filterStage]);
 
+  const orderedVisible = columnOrder.filter((key) => visibleColumns.includes(key));
+
+  const toggleColumn = (key: ColumnKey) => {
+    setVisibleColumns((prev) => {
+      if (prev.includes(key)) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((k) => k !== key);
+      }
+      return [...prev, key];
+    });
+  };
+
+  const onDragStart = (key: ColumnKey) => {
+    dragCol.current = key;
+  };
+
+  const onDragOver = (e: React.DragEvent, key: ColumnKey) => {
+    e.preventDefault();
+    if (dragCol.current && dragCol.current !== key) {
+      setDragOverCol(key);
+    }
+  };
+
+  const onDrop = (targetKey: ColumnKey) => {
+    const fromKey = dragCol.current;
+    if (!fromKey || fromKey === targetKey) {
+      dragCol.current = null;
+      setDragOverCol(null);
+      return;
+    }
+    setColumnOrder((prev) => {
+      const next = [...prev];
+      const fromIdx = next.indexOf(fromKey);
+      const toIdx = next.indexOf(targetKey);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, fromKey);
+      return next;
+    });
+    dragCol.current = null;
+    setDragOverCol(null);
+  };
+
+  const onDragEnd = () => {
+    dragCol.current = null;
+    setDragOverCol(null);
+  };
+
+  const isFilterActive = (key: ColumnKey) => {
+    if (key === 'supervisor') return filterSupervisorId !== 'ALL';
+    if (key === 'stage') return filterStage !== 'ALL';
+    return false;
+  };
+
+  const applyFilter = (key: ColumnKey, value: string) => {
+    if (key === 'supervisor') setFilterSupervisorId(value);
+    if (key === 'stage') setFilterStage(value);
+    setOpenHeaderFilter(null);
+  };
+
+  const getFilterOptions = (key: ColumnKey): { value: string; label: string }[] => {
+    if (key === 'supervisor') {
+      return [
+        { value: 'ALL', label: 'All Supervisors' },
+        ...[...supervisors]
+          .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+          .map((sup) => ({ value: sup.supervisorId, label: sup.name || '—' })),
+      ];
+    }
+    if (key === 'stage') return STAGE_FILTER_OPTIONS;
+    return [];
+  };
+
+  const getCurrentFilterValue = (key: ColumnKey) => {
+    if (key === 'supervisor') return filterSupervisorId;
+    if (key === 'stage') return filterStage;
+    return 'ALL';
+  };
+
+  const menuPanelStyle: React.CSSProperties = {
+    position: 'absolute',
+    minWidth: 180,
+    maxHeight: 280,
+    overflowY: 'auto',
+    background: 'var(--surface)',
+    border: '1px solid var(--border-color)',
+    borderRadius: 10,
+    boxShadow: '0 12px 32px rgba(0,0,0,0.16)',
+    zIndex: MENU_Z,
+    padding: '6px 0',
+    textTransform: 'none',
+    letterSpacing: 0,
+    fontWeight: 500,
+    pointerEvents: 'auto',
+  };
+
+  const renderHeaderCell = (key: ColumnKey) => {
+    const col = ALL_COLUMNS.find((c) => c.key === key)!;
+    const isDragOver = dragOverCol === key;
+    const filterable = !!col.filterable;
+    const active = isFilterActive(key);
+
+    return (
+      <th
+        key={key}
+        draggable={!openHeaderFilter && !isColumnPickerOpen}
+        onDragStart={() => onDragStart(key)}
+        onDragOver={(e) => onDragOver(e, key)}
+        onDrop={() => onDrop(key)}
+        onDragEnd={onDragEnd}
+        style={{
+          padding: '12px 16px',
+          fontWeight: 600,
+          cursor: 'grab',
+          userSelect: 'none',
+          backgroundColor: 'var(--surface-hover)',
+          borderLeft: isDragOver ? '3px solid var(--primary)' : undefined,
+          transition: 'border-left 0.15s',
+          whiteSpace: 'nowrap',
+          position: 'relative',
+          width: col.width,
+          textAlign: key === 'view' ? 'center' : 'left',
+          overflow: 'visible',
+          verticalAlign: 'middle',
+        }}
+      >
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            justifyContent: key === 'view' ? 'center' : undefined,
+          }}
+        >
+          <span>{col.label}</span>
+          {filterable && (
+            <div
+              ref={openHeaderFilter === key ? headerFilterRef : undefined}
+              style={{ position: 'relative', display: 'inline-flex', zIndex: openHeaderFilter === key ? MENU_Z : 1 }}
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenHeaderFilter((prev) => (prev === key ? null : key));
+                  setIsColumnPickerOpen(false);
+                }}
+                title={`Filter by ${col.label}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 2,
+                  border: 'none',
+                  background: active ? 'rgba(37, 99, 235, 0.12)' : 'transparent',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  color: active ? 'var(--primary)' : 'var(--text-secondary)',
+                }}
+              >
+                <Filter size={12} />
+              </button>
+
+              {openHeaderFilter === key && (
+                <div
+                  style={{
+                    ...menuPanelStyle,
+                    left: 0,
+                    top: '100%',
+                    marginTop: 6,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  {getFilterOptions(key).map((opt) => {
+                    const selected = getCurrentFilterValue(key) === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => applyFilter(key, opt.value)}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '8px 14px',
+                          border: 'none',
+                          background: selected ? 'var(--surface-hover)' : 'transparent',
+                          color: selected ? 'var(--primary)' : 'var(--text-primary)',
+                          fontSize: 13,
+                          fontWeight: selected ? 600 : 500,
+                          cursor: 'pointer',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!selected) e.currentTarget.style.background = 'var(--surface-hover)';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!selected) e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </th>
+    );
+  };
+
+  const renderCell = (proj: any, key: ColumnKey) => {
+    const sup = supervisors.find((s) => s.supervisorId === proj.supervisorId);
+    const isActiveRow = activeSupervisorRowId === proj.projectId;
+
+    switch (key) {
+      case 'leader':
+        return (
+          <td
+            key={key}
+            style={{
+              padding: '12px 16px',
+              fontWeight: 500,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              backgroundColor: 'var(--surface)',
+            }}
+            title={proj.leaderName}
+          >
+            {proj.leaderName || '—'}
+          </td>
+        );
+      case 'projectName':
+        return (
+          <td
+            key={key}
+            style={{
+              padding: '12px 16px',
+              fontWeight: 600,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              backgroundColor: 'var(--surface)',
+            }}
+            title={proj.projectTitle}
+          >
+            {proj.projectTitle}
+          </td>
+        );
+      case 'description':
+        return (
+          <td
+            key={key}
+            style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '13px', backgroundColor: 'var(--surface)' }}
+            title={cleanProjectDescription(proj.projectDescription) || undefined}
+          >
+            <div style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {truncateText(proj.projectDescription, 120)}
+            </div>
+          </td>
+        );
+      case 'supervisor':
+        return (
+          <td
+            key={key}
+            style={{
+              padding: '12px 16px',
+              overflow: 'visible',
+              position: 'relative',
+              zIndex: isActiveRow ? 50 : 1,
+              backgroundColor: 'var(--surface)',
+            }}
+            onMouseDown={() => setActiveSupervisorRowId(proj.projectId)}
+            onFocusCapture={() => setActiveSupervisorRowId(proj.projectId)}
+          >
+            <div style={{ position: 'relative', overflow: 'visible' }}>
+              <InlineSupervisorAssign
+                projectId={proj.projectId}
+                currentSupervisorId={proj.supervisorId}
+                supervisorName={sup?.name}
+                supervisors={supervisors}
+                onSelect={handleSupervisorSelect}
+              />
+            </div>
+          </td>
+        );
+      case 'stage':
+        return (
+          <td key={key} style={{ padding: '12px 16px', position: 'relative', zIndex: 0, backgroundColor: 'var(--surface)' }}>
+            <span
+              style={{
+                fontSize: '12px',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                backgroundColor: 'var(--primary-glow)',
+                color: 'var(--primary)',
+                fontWeight: 600,
+              }}
+            >
+              {getStageLabel(proj.stageStatus)}
+            </span>
+          </td>
+        );
+      case 'view':
+        return (
+          <td
+            key={key}
+            style={{ padding: '12px 16px', textAlign: 'center', position: 'relative', zIndex: 0, backgroundColor: 'var(--surface)' }}
+          >
+            <button
+              type="button"
+              title="View project"
+              onClick={() => openProjectDrawer(proj)}
+              style={{
+                width: '34px',
+                height: '34px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: '#fff',
+                color: 'var(--primary)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              <Eye size={16} />
+            </button>
+          </td>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const mainCols = ALL_COLUMNS.filter((c) => c.section === 'main');
+  const otherCols = ALL_COLUMNS.filter((c) => c.section === 'other');
+
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
         <Loader size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="admin-projects-overview" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div>
-        <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>Projects</h1>
-      </div>
-
+    <div
+      className="admin-projects-overview"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+        width: '100%',
+      }}
+    >
+      {/* Fixed search */}
       <div
         style={{
           display: 'flex',
-          flexWrap: 'wrap',
-          gap: '12px',
+          justifyContent: 'flex-end',
           alignItems: 'center',
+          gap: '10px',
+          flexWrap: 'wrap',
+          flexShrink: 0,
         }}
       >
-        <div style={{ position: 'relative', flex: '1 1 280px', minWidth: '220px' }}>
+        <div style={{ position: 'relative', flex: '1 1 280px', minWidth: 220, maxWidth: 400, marginLeft: 'auto' }}>
           <Search
-            size={16}
-            style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-disabled)', pointerEvents: 'none' }}
+            size={15}
+            style={{
+              position: 'absolute',
+              left: 10,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--text-disabled)',
+              pointerEvents: 'none',
+            }}
           />
           <input
             type="search"
@@ -227,124 +629,216 @@ export const AdminProjectsOverview: React.FC = () => {
             placeholder="Search by project name, description, or leader…"
             style={{
               width: '100%',
-              padding: '10px 12px 10px 38px',
+              padding: '8px 10px 8px 34px',
               borderRadius: '8px',
               border: '1px solid var(--border-color)',
               backgroundColor: 'var(--surface)',
               color: 'var(--text-primary)',
-              fontSize: '14px',
+              fontSize: 13,
               outline: 'none',
               boxSizing: 'border-box',
             }}
           />
         </div>
-
-        <select
-          value={filterSupervisorId}
-          onChange={(e) => setFilterSupervisorId(e.target.value)}
-          style={filterSelectStyle}
-          aria-label="Filter by supervisor"
-        >
-          <option value="ALL">All Supervisors</option>
-          {[...supervisors]
-            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-            .map((sup) => (
-              <option key={sup.supervisorId} value={sup.supervisorId}>
-                {sup.name}
-              </option>
-            ))}
-        </select>
-
-        <select
-          value={filterStage}
-          onChange={(e) => setFilterStage(e.target.value)}
-          style={filterSelectStyle}
-          aria-label="Filter by stage"
-        >
-          {STAGE_FILTER_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
       </div>
 
-      <Card elevation={1} style={{ padding: '0', borderRadius: '12px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="admin-projects-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'fixed' }}>
-            <thead style={{ backgroundColor: 'var(--surface-hover)', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+      {/* Table card: sticky header, body scrolls */}
+      <Card
+        elevation={1}
+        style={{
+          padding: 0,
+          borderRadius: '10px',
+          border: '1px solid var(--border-color)',
+          overflow: 'hidden',
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            position: 'relative',
+          }}
+        >
+          <table
+            className="admin-projects-table"
+            style={{
+              width: '100%',
+              borderCollapse: 'separate',
+              borderSpacing: 0,
+              textAlign: 'left',
+              tableLayout: 'fixed',
+            }}
+          >
+            <thead
+              style={{
+                backgroundColor: 'var(--surface-hover)',
+                fontSize: '11px',
+                color: 'var(--text-secondary)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.4px',
+                position: 'sticky',
+                top: 0,
+                zIndex: MENU_Z,
+              }}
+            >
               <tr>
-                <th style={{ padding: '16px 24px', fontWeight: 600, width: '16%' }}>Leader Name</th>
-                <th style={{ padding: '16px', fontWeight: 600, width: '18%' }}>Project Name</th>
-                <th style={{ padding: '16px', fontWeight: 600, width: '28%' }}>Project Description</th>
-                <th style={{ padding: '16px', fontWeight: 600, width: '18%' }}>Assigned Supervisor</th>
-                <th style={{ padding: '16px', fontWeight: 600, width: '12%' }}>Current Stage</th>
-                <th style={{ padding: '16px', fontWeight: 600, width: '8%', textAlign: 'center' }}>View</th>
+                {orderedVisible.map(renderHeaderCell)}
+                <th
+                  style={{
+                    padding: '8px 12px',
+                    width: 48,
+                    textAlign: 'center',
+                    position: 'relative',
+                    overflow: 'visible',
+                    backgroundColor: 'var(--surface-hover)',
+                  }}
+                >
+                  <div ref={columnPickerRef} style={{ display: 'inline-block', position: 'relative' }}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setIsColumnPickerOpen((v) => !v);
+                        setOpenHeaderFilter(null);
+                      }}
+                      title="Show / hide columns"
+                      style={{ padding: '5px', minWidth: 0 }}
+                    >
+                      <Plus size={15} />
+                    </Button>
+
+                    {isColumnPickerOpen && (
+                      <div
+                        style={{
+                          ...menuPanelStyle,
+                          right: 0,
+                          top: '100%',
+                          marginTop: 6,
+                          width: 260,
+                          maxHeight: 'min(320px, 50vh)',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <div
+                          style={{
+                            padding: '4px 14px 6px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: 'var(--text-disabled)',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Main columns
+                        </div>
+                        {mainCols.map((col) => (
+                          <label
+                            key={col.key}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              padding: '7px 14px',
+                              cursor: 'pointer',
+                              fontSize: 13,
+                              color: 'var(--text-primary)',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={visibleColumns.includes(col.key)}
+                              onChange={() => toggleColumn(col.key)}
+                              style={{ width: 15, height: 15, accentColor: 'var(--primary)' }}
+                            />
+                            {col.label}
+                          </label>
+                        ))}
+
+                        <div style={{ height: 1, background: 'var(--border-color)', margin: '8px 0' }} />
+
+                        <div
+                          style={{
+                            padding: '4px 14px 6px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: 'var(--text-disabled)',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Other columns
+                        </div>
+                        {otherCols.map((col) => (
+                          <label
+                            key={col.key}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              padding: '7px 14px',
+                              cursor: 'pointer',
+                              fontSize: 13,
+                              color: 'var(--text-primary)',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={visibleColumns.includes(col.key)}
+                              onChange={() => toggleColumn(col.key)}
+                              style={{ width: 15, height: 15, accentColor: 'var(--primary)' }}
+                            />
+                            {col.label}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </th>
               </tr>
             </thead>
-            <tbody>
+
+            <tbody style={{ position: 'relative', zIndex: 1 }}>
               {filteredProjects.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '48px 32px', color: 'var(--text-disabled)' }}>
-                    {projects.length === 0
-                      ? 'No active projects.'
-                      : 'No projects match your search or filters.'}
+                  <td
+                    colSpan={orderedVisible.length + 1}
+                    style={{
+                      textAlign: 'center',
+                      padding: '48px 32px',
+                      color: 'var(--text-disabled)',
+                      fontSize: 14,
+                      backgroundColor: 'var(--surface)',
+                    }}
+                  >
+                    {projects.length === 0 ? 'No active projects.' : 'No projects match your search or filters.'}
                   </td>
                 </tr>
               )}
-              {filteredProjects.map((proj) => {
-                const sup = supervisors.find((s) => s.supervisorId === proj.supervisorId);
-                return (
-                  <tr key={proj.projectId} style={{ borderTop: '1px solid var(--border-color)', fontSize: '14px' }}>
-                    <td style={{ padding: '16px 24px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.leaderName}>
-                      {proj.leaderName || '—'}
-                    </td>
-                    <td style={{ padding: '16px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.projectTitle}>
-                      {proj.projectTitle}
-                    </td>
-                    <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }} title={cleanProjectDescription(proj.projectDescription) || undefined}>
-                      <div style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        {truncateText(proj.projectDescription, 120)}
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px', overflow: 'visible' }}>
-                      <InlineSupervisorAssign
-                        projectId={proj.projectId}
-                        currentSupervisorId={proj.supervisorId}
-                        supervisorName={sup?.name}
-                        supervisors={supervisors}
-                        onSelect={handleSupervisorSelect}
-                      />
-                    </td>
-                    <td style={{ padding: '16px' }}>
-                      <span style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '4px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 600 }}>
-                        {getStageLabel(proj.stageStatus)}
-                      </span>
-                    </td>
-                    <td style={{ padding: '16px', textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        title="View project"
-                        onClick={() => openProjectDrawer(proj)}
-                        style={{
-                          width: '34px',
-                          height: '34px',
-                          borderRadius: '8px',
-                          border: '1px solid var(--border-color)',
-                          backgroundColor: '#fff',
-                          color: 'var(--primary)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <Eye size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {filteredProjects.map((proj) => (
+                <tr
+                  key={proj.projectId}
+                  style={{
+                    borderTop: '1px solid var(--border-color)',
+                    fontSize: '14px',
+                    position: 'relative',
+                    zIndex: activeSupervisorRowId === proj.projectId ? 20 : 1,
+                    backgroundColor: 'var(--surface)',
+                  }}
+                >
+                  {orderedVisible.map((key) => renderCell(proj, key))}
+                  <td style={{ padding: '12px', backgroundColor: 'var(--surface)' }} />
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -352,55 +846,138 @@ export const AdminProjectsOverview: React.FC = () => {
 
       {viewProject && (
         <div
-          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'flex-end', zIndex: 900 }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            zIndex: 900,
+          }}
           onClick={() => setViewProject(null)}
         >
           <div
-            style={{ width: '800px', maxWidth: '94vw', height: '100%', backgroundColor: 'var(--surface)', overflowY: 'auto', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)' }}
+            style={{
+              width: '800px',
+              maxWidth: '94vw',
+              height: '100%',
+              backgroundColor: 'var(--surface)',
+              overflowY: 'auto',
+              boxShadow: '-4px 0 24px rgba(0,0,0,0.1)',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 10, padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div
+              style={{
+                position: 'sticky',
+                top: 0,
+                backgroundColor: 'var(--surface)',
+                zIndex: 10,
+                padding: '20px 24px',
+                borderBottom: '1px solid var(--border-color)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+              }}
+            >
               <div>
-                <h2 style={{ margin: '0 0 8px', fontSize: '22px' }}>{viewProject.projectTitle}</h2>
+                <h2 style={{ margin: '0 0 8px', fontSize: '20px' }}>{viewProject.projectTitle}</h2>
                 <div style={{ display: 'flex', gap: '16px', color: 'var(--text-secondary)', fontSize: '13px', flexWrap: 'wrap' }}>
-                  <span>Leader: <strong>{viewProject.leaderName || '—'}</strong></span>
-                  <span>Stage: <strong>{getStageLabel(viewProject.stageStatus)}</strong></span>
+                  <span>
+                    Leader: <strong>{viewProject.leaderName || '—'}</strong>
+                  </span>
+                  <span>
+                    Stage: <strong>{getStageLabel(viewProject.stageStatus)}</strong>
+                  </span>
                   <span>
                     Supervisor:{' '}
-                    <strong>
-                      {supervisors.find((s) => s.supervisorId === viewProject.supervisorId)?.name || 'Unassigned'}
-                    </strong>
+                    <strong>{supervisors.find((s) => s.supervisorId === viewProject.supervisorId)?.name || 'Unassigned'}</strong>
                   </span>
                 </div>
               </div>
               <button
                 onClick={() => setViewProject(null)}
-                style={{ background: 'var(--surface-hover)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                style={{
+                  background: 'var(--surface-hover)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '50%',
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                }}
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <ProjectTimeline project={viewProject} />
 
               <div>
-                <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h4 style={{ fontSize: '15px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Users size={16} color="var(--primary)" /> Team Members
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {viewProject.memberDetails?.map((m: any) => (
-                    <div key={m.studentId} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', fontWeight: 'bold' }}>
+                    <div
+                      key={m.studentId}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px',
+                        backgroundColor: 'var(--surface-hover)',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-color)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          backgroundColor: 'var(--primary-glow)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--primary)',
+                          fontWeight: 'bold',
+                        }}
+                      >
                         {m.name?.charAt(0) || '?'}
                       </div>
                       <div>
                         <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           {m.name}
                           {m.studentId === viewProject.team?.leaderId ? (
-                            <span style={{ fontSize: '10px', backgroundColor: 'var(--warning)', color: '#000', padding: '2px 6px', borderRadius: '8px' }}>LEADER</span>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                backgroundColor: 'var(--warning)',
+                                color: '#000',
+                                padding: '2px 6px',
+                                borderRadius: '8px',
+                              }}
+                            >
+                              LEADER
+                            </span>
                           ) : m.inviteStatus !== 'APPROVED' ? (
-                            <span style={{ fontSize: '10px', backgroundColor: '#fef3c7', color: '#92400e', padding: '2px 6px', borderRadius: '8px', fontWeight: 700 }}>PENDING</span>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                backgroundColor: '#fef3c7',
+                                color: '#92400e',
+                                padding: '2px 6px',
+                                borderRadius: '8px',
+                                fontWeight: 700,
+                              }}
+                            >
+                              PENDING
+                            </span>
                           ) : null}
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{m.mail}</div>
@@ -415,8 +992,26 @@ export const AdminProjectsOverview: React.FC = () => {
       )}
 
       {reasonModalOpen && pendingAssignment && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', padding: '24px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: 'white',
+              padding: '20px 24px',
+              borderRadius: '8px',
+              width: '400px',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+            }}
+          >
             <h2 style={{ marginTop: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertTriangle color="#f59e0b" size={20} /> Reassign Supervisor
             </h2>
@@ -424,11 +1019,15 @@ export const AdminProjectsOverview: React.FC = () => {
               You are replacing an existing supervisor. A reason is required for administrative tracking and notifications.
             </p>
 
-            <div style={{ marginTop: '16px', marginBottom: '24px' }}>
+            <div style={{ marginTop: '16px', marginBottom: '20px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>
                 Reason for Change <span style={{ color: 'red' }}>*</span>
               </label>
-              <Input value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="E.g., Requested by student, Availability issues..." />
+              <Input
+                value={reasonText}
+                onChange={(e) => setReasonText(e.target.value)}
+                placeholder="E.g., Requested by student, Availability issues..."
+              />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
@@ -442,7 +1041,9 @@ export const AdminProjectsOverview: React.FC = () => {
                 Cancel
               </Button>
               <Button
-                onClick={() => executeAssignSupervisor(pendingAssignment.projectId, pendingAssignment.newSupervisorId, reasonText)}
+                onClick={() =>
+                  executeAssignSupervisor(pendingAssignment.projectId, pendingAssignment.newSupervisorId, reasonText)
+                }
                 disabled={!reasonText.trim()}
               >
                 Confirm Reassignment

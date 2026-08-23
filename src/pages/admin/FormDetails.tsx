@@ -5,7 +5,7 @@ import { adminService, type Template } from '../../services/adminService';
 import { useAuthStore } from '../../utils/authStore';
 import { useToastStore } from '../../utils/toastStore';
 import type { FormResponse } from '../../services/adminService';
-import { Search, FileText, Users, AlertTriangle, Upload, ExternalLink, Plus, Link as LinkIcon, Trash2, X, File, Presentation, Eye, Calendar, Video } from 'lucide-react';
+import { Search, FileText, Users, AlertTriangle, Upload, ExternalLink, Plus, Link as LinkIcon, Trash2, X, File, Presentation, Eye, Calendar, Video, ChevronDown, Download, Share2, Copy } from 'lucide-react';
 import { TimelineConfigModal } from './TimelineConfigModal';
 import { MeetingManagementPanel } from './MeetingManagementPanel';
 import { InlineSupervisorAssign } from './InlineSupervisorAssign';
@@ -56,7 +56,8 @@ export const FormDetails: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
 
   // Modals & Preview
-  const [previewFileUrl, setPreviewFileUrl] = useState<{ url: string, name: string } | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ url: string; name: string; template: Template } | null>(null);
+  const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
   const [viewCompleteProject, setViewCompleteProject] = useState<any | null>(null);
   const [reasonModalOpen, setReasonModalOpen] = useState(false);
   const [pendingAssignment, setPendingAssignment] = useState<{ projectId: string, newSupervisorId: string } | null>(null);
@@ -66,6 +67,9 @@ export const FormDetails: React.FC = () => {
   const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false);
   const [isStageTemplatesOpen, setIsStageTemplatesOpen] = useState(false);
   const [isMeetingPanelOpen, setIsMeetingPanelOpen] = useState(false);
+  const [timelineConfig, setTimelineConfig] = useState<any>(null);
+  const [meetingConfig, setMeetingConfig] = useState<any>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const { user } = useAuthStore();
   const addToast = useToastStore(state => state.addToast);
@@ -80,6 +84,11 @@ export const FormDetails: React.FC = () => {
         adminService.getAllProjects(),
         adminService.getTemplates(formId).catch(() => []),
         adminService.getFormAttachments(formId).catch(() => [])
+      ]);
+
+      const [timelineRes, meetingConfigRes] = await Promise.all([
+        api.get(`/admin/config/timeline/${formId}`).catch(() => ({ data: null })),
+        api.get(`/admin/config/meeting-config/${formId}`).catch(() => ({ data: null }))
       ]);
 
       const mappedLegacyTemplates: Template[] = (oldAttachmentsRes || []).map((att: any) => {
@@ -107,6 +116,8 @@ export const FormDetails: React.FC = () => {
       });
 
       setFormConfig(formRes);
+      setTimelineConfig(timelineRes.data);
+      setMeetingConfig(meetingConfigRes.data);
       setTemplates([...templatesRes, ...mappedLegacyTemplates]);
       const targetedProjects = allProjectsRes.filter((p: any) => p.formId === formId);
 
@@ -234,6 +245,65 @@ export const FormDetails: React.FC = () => {
     setViewCompleteProject(project);
   };
 
+  const inferTemplateFormat = (template: Template) => {
+    const value = `${template.type || ''} ${template.fileUrl || ''} ${template.name || ''}`.toUpperCase();
+    if (value.includes('PDF')) return 'PDF';
+    if (value.includes('DOCX') || value.includes('DOC ')) return 'DOCX';
+    if (value.includes('XLSX') || value.includes('EXCEL')) return 'XLSX';
+    if (value.includes('CSV')) return 'CSV';
+    if (value.includes('PPTX') || value.includes('PPT')) return 'PPTX';
+    if (value.includes('ZIP')) return 'ZIP';
+    if (value.includes('TXT') || value.includes('CODE') || value.includes('JS') || value.includes('TS') || value.includes('PY')) return 'TXT';
+    return 'LINK';
+  };
+
+  const openTemplateView = (template: Template) => {
+    if (!template.fileUrl) {
+      addToast('Template link is unavailable.', 'error');
+      return;
+    }
+    setPreviewFile({ url: getPreviewUrl(template.fileUrl), name: template.name, template });
+  };
+
+  const copyTemplateLink = async (template: Template) => {
+    if (!template.fileUrl) return;
+    try {
+      await navigator.clipboard.writeText(template.fileUrl);
+      addToast('Template link copied.', 'success');
+    } catch {
+      addToast('Unable to copy template link.', 'error');
+    }
+  };
+
+  const shareTemplate = async (template: Template) => {
+    if (!template.fileUrl) return;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: template.name || 'Template',
+          text: template.name || 'Template',
+          url: template.fileUrl,
+        });
+      } else {
+        await copyTemplateLink(template);
+      }
+    } catch {
+      addToast('Unable to share template link.', 'error');
+    }
+  };
+
+  const downloadTemplate = (template: Template) => {
+    if (!template.fileUrl) return;
+    const link = document.createElement('a');
+    link.href = template.fileUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.download = template.name || 'template';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
   const truncateText = (text?: string, max = 90) => {
     const clean = cleanProjectDescription(text).replace(/\s+/g, ' ').trim();
     if (!clean) return '—';
@@ -279,22 +349,44 @@ export const FormDetails: React.FC = () => {
   if (!formConfig) return <div style={{ textAlign: 'center', padding: '64px', color: 'var(--danger)' }}><h1>Form Not Found</h1></div>;
 
   const currentStageTemplates = templates.filter(t => t.stageId === activeStageTab);
+  const summaryText = `${projects.length} projects from ${formConfig.accessBatch} batch for ${formConfig.accessBranch} branch`;
+  const hasTimeline = Boolean(timelineConfig);
+  const hasTemplates = templates.length > 0;
+  const hasMeetings = Boolean(meetingConfig);
+  const primaryAction = !hasTimeline ? { label: 'Stage Calendar', open: () => setIsTimelineModalOpen(true) }
+    : !hasTemplates ? { label: 'Stage Templates', open: () => setIsStageTemplatesOpen(true) }
+    : !hasMeetings ? { label: 'Meeting Sections', open: () => setIsMeetingPanelOpen(true) }
+    : { label: 'Stage Configuration', open: () => setIsTimelineModalOpen(true) };
+  const secondaryActions = [
+    { label: 'Stage Calendar', open: () => setIsTimelineModalOpen(true) },
+    { label: 'Stage Templates', open: () => setIsStageTemplatesOpen(true) },
+    { label: 'Meeting Sections', open: () => setIsMeetingPanelOpen(true) },
+  ];
 
   return (
     <div>
-      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0 }}> Viewing config for <strong>{formConfig.accessBranch} Batch {formConfig.accessBatch}</strong>.</h1>
-        
-        <div style={{ display: 'flex', gap: '12px' }}>
-            <Button variant="outline" onClick={() => setIsTimelineModalOpen(true)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Calendar size={16} /> Stage Calendar
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0 }}>{formConfig.accessBranch} / {formConfig.accessBatch}</h1>
+          <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: '14px' }}>{summaryText}</div>
+        </div>
+
+        <div style={{ position: 'relative', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <Button variant="primary" onClick={primaryAction.open} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {primaryAction.label}
             </Button>
-            <Button variant="outline" onClick={() => setIsMeetingPanelOpen(true)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Video size={16} /> Meeting Sessions
+            <Button variant="outline" onClick={() => setDropdownOpen((v) => !v)} style={{ padding: '8px 12px', display: 'flex', alignItems: 'center' }}>
+                <ChevronDown size={16} />
             </Button>
-            <Button variant="primary" onClick={() => setIsStageTemplatesOpen(true)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FileText size={16} /> Stage Templates
-            </Button>
+            {dropdownOpen && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: 12, minWidth: 220, boxShadow: '0 12px 32px rgba(0,0,0,0.12)', zIndex: 20, overflow: 'hidden' }}>
+                {secondaryActions.map((action) => (
+                  <button key={action.label} type="button" onClick={() => { setDropdownOpen(false); action.open(); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '12px 16px', border: 'none', background: 'transparent', cursor: 'pointer' }}>
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            )}
         </div>
       </div>
 
@@ -305,7 +397,6 @@ export const FormDetails: React.FC = () => {
             <div style={{ position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 10, padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <h2 style={{ margin: 0, fontSize: '20px' }}>Stage Requirements / Templates</h2>
-                  <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>Upload reference templates that students should follow.</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setIsTemplateModalOpen(true)}>
@@ -384,9 +475,14 @@ export const FormDetails: React.FC = () => {
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
-                        <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={<Eye size={14} />} onClick={() => setPreviewFileUrl({ url: getPreviewUrl(template.fileUrl), name: template.name })}>Preview</Button>
-                        <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={template.sourceType === 'LINK' ? <ExternalLink size={14} /> : <Upload size={14} style={{ transform: 'rotate(180deg)' }} />} onClick={() => window.open(template.fileUrl, '_blank')}>
-                          {template.sourceType === 'LINK' ? 'Open' : 'Download'}
+                        <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={<Eye size={14} />} onClick={() => openTemplateView(template)}>
+                          View
+                        </Button>
+                        <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={<FileText size={14} />} onClick={() => setPreviewTemplate(template)}>
+                          View Config
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => downloadTemplate(template)} style={{ color: 'var(--text-secondary)' }}>
+                          <Download size={14} />
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => handleDeleteTemplate(template.id)} style={{ color: '#ef4444', borderColor: '#fee2e2', backgroundColor: '#fef2f2' }}><Trash2 size={14} /></Button>
                       </div>
@@ -401,13 +497,6 @@ export const FormDetails: React.FC = () => {
 
       {/* PROJECT MANAGEMENT TABLE */}
       <Card elevation={1} style={{ padding: '0', overflow: 'hidden' }}>
-        <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '18px' }}>All Projects ({projects.length})</h2>
-            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>View and manage all projects created from this form.</p>
-          </div>
-        </div>
-
         <div style={{ overflowX: 'auto' }}>
           <table className="admin-projects-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'fixed' }}>
             <thead style={{ backgroundColor: 'var(--surface-hover)', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -602,15 +691,74 @@ export const FormDetails: React.FC = () => {
       )}
 
       {/* FILE PREVIEW OVERLAY */}
-      {previewFileUrl && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', zIndex: 1050 }} onClick={() => setPreviewFileUrl(null)}>
-          <div style={{ width: 'min(960px, 96vw)', height: 'min(80vh, 720px)', backgroundColor: 'var(--surface)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
-              <div style={{ fontWeight: 600 }}>{previewFileUrl.name}</div>
-              <Button size="sm" variant="outline" onClick={() => setPreviewFileUrl(null)}>Close</Button>
+      {previewFile && (
+        <div
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', zIndex: 1050 }}
+          onClick={() => setPreviewFile(null)}
+        >
+          <div
+            style={{ width: 'min(1100px, 96vw)', height: 'min(82vh, 760px)', backgroundColor: 'var(--surface)', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid var(--border-color)', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '16px' }}>{previewFile.name}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{inferTemplateFormat(previewFile.template)} preview</div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <Button size="sm" variant="outline" onClick={() => downloadTemplate(previewFile.template)} leftIcon={<Download size={14} />}>
+                  Download
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => copyTemplateLink(previewFile.template)} leftIcon={<Copy size={14} />}>
+                  Copy Link
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => shareTemplate(previewFile.template)} leftIcon={<Share2 size={14} />}>
+                  Share
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+                  Close
+                </Button>
+              </div>
             </div>
-            <iframe title={previewFileUrl.name} src={previewFileUrl.url} style={{ width: '100%', height: '100%', border: 'none' }} />
+            <div style={{ flex: 1, minHeight: 0, backgroundColor: previewFile.template.type === 'TXT' ? '#1e1e1e' : 'var(--background)' }}>
+              {inferTemplateFormat(previewFile.template) === 'ZIP' ? (
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px', textAlign: 'center' }}>
+                  <Card elevation={1} style={{ maxWidth: '420px', padding: '24px' }}>
+                    <FileText size={36} style={{ marginBottom: '12px', color: 'var(--primary)' }} />
+                    <h3 style={{ margin: '0 0 8px' }}>ZIP archive preview</h3>
+                    <p style={{ margin: 0, color: 'var(--text-secondary)' }}>Folder contents can be reviewed after download.</p>
+                  </Card>
+                </div>
+              ) : inferTemplateFormat(previewFile.template) === 'TXT' ? (
+                <iframe title={previewFile.name} src={previewFile.url} style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#1e1e1e' }} />
+              ) : (
+                <iframe title={previewFile.name} src={previewFile.url} style={{ width: '100%', height: '100%', border: 'none' }} />
+              )}
+            </div>
           </div>
+        </div>
+      )}
+
+      {previewTemplate && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', zIndex: 1060 }} onClick={() => setPreviewTemplate(null)}>
+          <Card elevation={2} style={{ width: 'min(760px, 94vw)', maxHeight: '82vh', overflow: 'auto', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '20px' }}>View Config</h2>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Template details and metadata</div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setPreviewTemplate(null)}>
+                Close
+              </Button>
+            </div>
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <div><strong>Name:</strong> {previewTemplate.name}</div>
+              <div><strong>Target Format:</strong> {inferTemplateFormat(previewTemplate)}</div>
+              <div><strong>Description:</strong> {previewTemplate.description || '—'}</div>
+              <div><strong>Drive Link:</strong> {previewTemplate.fileUrl ? previewTemplate.fileUrl : '—'}</div>
+              <div><strong>Created:</strong> {previewTemplate.createdAt ? new Date(previewTemplate.createdAt).toLocaleString() : '—'}</div>
+            </div>
+          </Card>
         </div>
       )}
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button, Input } from '../../components';
 import { api } from '../../services/api';
 import { useToastStore } from '../../utils/toastStore';
-import { Calendar, Video, MapPin, X, Clock, RefreshCw, GripVertical, Coffee } from 'lucide-react';
+import { Calendar, Video, MapPin, X, Clock, RefreshCw, GripVertical, Coffee, Users, Plus, Mail } from 'lucide-react';
 import { isValidMeetingLink, normalizeMeetingLink } from '../../utils/meetingLinks';
 
 interface SequenceItem {
@@ -24,6 +24,9 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
     const [stage, setStage] = useState('SYNOPSIS');
     const [stageDate, setStageDate] = useState('');
     const [mode, setMode] = useState<'ONLINE' | 'OFFLINE'>('ONLINE');
+    const [guests, setGuests] = useState<string[]>([]);
+    const [guestDraft, setGuestDraft] = useState('');
+    const [availableSupervisors, setAvailableSupervisors] = useState<any[]>([]);
     const [formData, setFormData] = useState({
         meetingDate: '',
         startTime: '09:00',
@@ -34,6 +37,7 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
 
     const [sequence, setSequence] = useState<SequenceItem[]>([]);
     const [slots, setSlots] = useState<any[]>([]);
+    const [existingSlots, setExistingSlots] = useState<any[]>([]);
     
     // Drag and drop state
     const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
@@ -41,6 +45,8 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
     useEffect(() => {
         fetchProjects();
         fetchStageDate();
+        api.get('/supervisors').then((res) => setAvailableSupervisors(res.data || [])).catch(() => setAvailableSupervisors([]));
+        api.get('/admin/meetings').then((res) => setExistingSlots((res.data || []).filter((m: any) => m.formId === formId && m.stage === stage))).catch(() => setExistingSlots([]));
     }, [formId, stage]);
 
     const fetchStageDate = async () => {
@@ -144,14 +150,17 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
         setSlots(newSlots);
     };
 
+    const overlaps = (startA: string, endA: string, startB: string, endB: string) => {
+        const aStart = startA.localeCompare(endB);
+        const aEnd = endA.localeCompare(startB);
+        return aStart < 0 && aEnd > 0;
+    };
+
     const handleAddBreak = () => {
         const breakDuration = prompt("Enter break duration (minutes)", "30");
         if (breakDuration) {
-            setSequence([...sequence, { 
-                id: 'break_' + Date.now(), 
-                type: 'BREAK', 
-                durationMinutes: parseInt(breakDuration) 
-            }]);
+            const duration = Math.max(5, parseInt(breakDuration) || 30);
+            setSequence([...sequence, { id: 'break_' + Date.now(), type: 'BREAK', durationMinutes: duration }]);
         }
     };
 
@@ -189,11 +198,25 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
         if (slots.length === 0) {
             return addToast('No projects available to schedule.', 'error');
         }
+        const projectSlots = slots.filter(s => s.type === 'PROJECT');
+        for (let i = 0; i < projectSlots.length; i += 1) {
+            for (let j = i + 1; j < projectSlots.length; j += 1) {
+                if (overlaps(projectSlots[i].startTime, projectSlots[i].endTime, projectSlots[j].startTime, projectSlots[j].endTime)) {
+                    return addToast('Schedule contains overlapping time slots. Please adjust the duration or gap.', 'error');
+                }
+            }
+        }
+        if (guests.some((g) => !g.includes('@'))) {
+            return addToast('Guest emails must be valid email addresses.', 'error');
+        }
 
         setIsLoading(true);
         try {
             const meetingSlots = slots.filter(s => s.type === 'PROJECT');
             const lastSlot = meetingSlots[meetingSlots.length - 1];
+            if (lastSlot && existingSlots.some((slot: any) => slot.meetingDate === formData.meetingDate && overlaps(`${meetingSlots[0].startTime}:00`, `${lastSlot.endTime}:00`, slot.meetingTime, slot.endTime))) {
+                return addToast('This schedule overlaps with an existing session on the same date.', 'error');
+            }
             const payload = {
                 formId,
                 stage,
@@ -209,6 +232,7 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
                     meetingTime: `${slot.startTime}:00`,
                     endTime: `${slot.endTime}:00`,
                 })),
+                guests,
             };
 
             await api.post('/admin/meetings/custom-schedule', payload, { timeout: 60000 });
@@ -224,7 +248,7 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
 
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
-            <div style={{ background: 'white', borderRadius: '12px', width: '1000px', maxWidth: '95vw', height: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
+            <div style={{ background: 'white', borderRadius: '12px', width: '1180px', maxWidth: '98vw', height: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
                 
                 <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -255,6 +279,7 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
                                     <option value="PROGRESS2">Progress 2</option>
                                     <option value="FINAL">Final Submission</option>
                                 </select>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Auto-selected from the current batch timeline when available.</div>
                             </div>
 
                             <Input label="Meeting Date" type="date" value={formData.meetingDate} onChange={(e: any) => setFormData({...formData, meetingDate: e.target.value})} />
@@ -276,6 +301,36 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
                                 value={formData.locationOrLink}
                                 onChange={(e: any) => setFormData({...formData, locationOrLink: e.target.value})}
                             />
+
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 600 }}>Add Guests</label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input value={guestDraft} onChange={(e) => setGuestDraft(e.target.value)} placeholder="supervisor@college.edu" style={{ flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
+                                    <Button type="button" variant="outline" onClick={() => {
+                                        const value = guestDraft.trim().toLowerCase();
+                                        if (!value) return;
+                                        setGuests((prev) => Array.from(new Set([...prev, value])));
+                                        setGuestDraft('');
+                                    }}><Plus size={16} /></Button>
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
+                                    {availableSupervisors.slice(0, 6).map((sup) => (
+                                        <button key={sup.supervisorId} type="button" onClick={() => setGuests((prev) => Array.from(new Set([...prev, sup.mail]))) } style={{ border: '1px solid var(--border-color)', background: 'white', borderRadius: 999, padding: '6px 10px', fontSize: '12px' }}>
+                                            {sup.name}
+                                        </button>
+                                    ))}
+                                </div>
+                                {guests.length > 0 && (
+                                    <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                        {guests.map((g) => (
+                                            <span key={g} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#eff6ff', color: '#1d4ed8', padding: '6px 10px', borderRadius: 999, fontSize: '12px' }}>
+                                                <Mail size={12} /> {g}
+                                                <button type="button" onClick={() => setGuests((prev) => prev.filter((x) => x !== g))} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
 
                             <div style={{ marginTop: '16px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -335,9 +390,9 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({ fo
                                     }}
                                 >
                                     <GripVertical size={16} color="var(--text-disabled)" />
-                                    <div style={{ width: '100px', fontSize: '13px', fontWeight: 600, color: item.type === 'BREAK' ? '#D97706' : 'var(--primary-color)' }}>
-                                        {slots[idx]?.startTime} - {slots[idx]?.endTime}
-                                    </div>
+                                        <div style={{ width: '100px', fontSize: '13px', fontWeight: 600, color: item.type === 'BREAK' ? '#D97706' : 'var(--primary-color)' }}>
+                                            {slots[idx]?.startTime} - {slots[idx]?.endTime}
+                                        </div>
                                     <div style={{ flex: 1 }}>
                                         {item.type === 'PROJECT' ? (
                                             <>

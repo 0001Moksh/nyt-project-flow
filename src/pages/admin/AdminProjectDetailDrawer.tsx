@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Loader, ProjectTimeline } from '../../components';
 import { api } from '../../services/api';
-import { Users, X } from 'lucide-react';
+import { Users, X, Calendar, Video, MapPin, Link as LinkIcon } from 'lucide-react';
+import { isValidMeetingLink, openMeetingLink } from '../../utils/meetingLinks';
 
 const STAGE_LABELS: Record<string, string> = {
   SYNOPSIS: 'Synopsis',
@@ -32,6 +33,7 @@ interface AdminProjectDetailDrawerProps {
 export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> = ({ projectId, onClose }) => {
   const [project, setProject] = useState<any | null>(null);
   const [supervisorName, setSupervisorName] = useState<string>('Unassigned');
+  const [meetings, setMeetings] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -51,6 +53,7 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
           api.get('/students').catch(() => ({ data: [] })),
           api.get('/supervisors').catch(() => ({ data: [] })),
         ]);
+        const meetingsRes = await api.get(`/supervisor/meetings/project/${projectId}`).catch(() => ({ data: [] }));
 
         if (cancelled) return;
         const p = projRes.data;
@@ -81,6 +84,7 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
 
         const supervisor = (supervisorsRes.data || []).find((s: any) => s.supervisorId === p.supervisorId);
         setSupervisorName(supervisor?.name || 'Unassigned');
+        setMeetings(meetingsRes.data || []);
         setProject({
           ...p,
           team,
@@ -108,7 +112,7 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
     project?.createdAt ||
     null;
 
-  return (
+    return (
     <div
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'flex-end', zIndex: 950 }}
       onClick={onClose}
@@ -148,6 +152,47 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
           ) : (
             <>
               <ProjectTimeline project={project} />
+
+              <div>
+                <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Calendar size={16} color="var(--primary)" /> Meeting Details
+                </h4>
+                <div style={{ display: 'grid', gap: '12px' }}>
+                  {meetings.length === 0 ? (
+                    <div style={{ padding: '12px', color: 'var(--text-disabled)', fontSize: '13px' }}>No meetings scheduled for this project.</div>
+                  ) : meetings.slice().sort((a, b) => {
+                    const aKey = `${a.meetingDate || ''} ${a.meetingTime || ''}`;
+                    const bKey = `${b.meetingDate || ''} ${b.meetingTime || ''}`;
+                    return aKey.localeCompare(bKey);
+                  }).map((meeting: any) => {
+                    const link = meeting.locationOrLink || meeting.meetingLink || '';
+                    const isOnline = String(meeting.mode || '').toUpperCase() === 'ONLINE' || isValidMeetingLink(link);
+                    return (
+                      <div key={meeting.meetingId || `${meeting.stage}|${meeting.meetingDate}|${meeting.meetingTime}`} style={{ border: '1px solid var(--border-color)', borderRadius: '10px', padding: '14px', backgroundColor: 'var(--surface-hover)', display: 'grid', gap: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                          <div style={{ fontWeight: 700 }}>{meeting.stage || 'Stage'} - {meeting.mode || 'Offline'}</div>
+                          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                            {meeting.meetingDate ? new Date(meeting.meetingDate).toLocaleDateString() : 'Date TBD'} {meeting.meetingTime ? ` • ${String(meeting.meetingTime).substring(0, 5)}` : ''}
+                            {meeting.endTime ? ` - ${String(meeting.endTime).substring(0, 5)}` : ''}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                          {isOnline ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Video size={14} /> Online</span>
+                          ) : (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><MapPin size={14} /> Offline</span>
+                          )}
+                          {link && (
+                            <button type="button" onClick={() => openMeetingLink(link)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', border: 'none', background: 'transparent', color: 'var(--primary)', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
+                              <LinkIcon size={14} /> Open Link
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
               <div>
                 <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>

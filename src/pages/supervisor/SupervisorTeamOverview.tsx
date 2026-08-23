@@ -156,7 +156,6 @@ export const SupervisorTeamOverview: React.FC = () => {
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
                     <ProjectTimeline project={project} />
-
                     <ReferenceTemplatesCard formId={project?.formId} currentStage={project?.stageStatus} title="Form Reference Templates" />
 
                     {/* Official / Project Meetings — includes batch slots + per-team reschedules for THIS project only */}
