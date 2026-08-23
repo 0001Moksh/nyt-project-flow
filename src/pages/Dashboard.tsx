@@ -9,7 +9,7 @@ import { isValidMeetingLink, openMeetingLink } from '../utils/meetingLinks';
 import { cleanProjectDescription } from '../utils/projectDescription';
 
 export const Dashboard: React.FC = () => {
-    const { user, isAuthenticated } = useAuthStore();
+    const { user, isAuthenticated, isInitialized } = useAuthStore();
     const navigate = useNavigate();
     const addToast = useToastStore(state => state.addToast);
 
@@ -28,16 +28,19 @@ export const Dashboard: React.FC = () => {
     const [openMeeting, setOpenMeeting] = useState<any | null>(null);
 
     useEffect(() => {
+        if (!isInitialized) {
+            return;
+        }
         if (!isAuthenticated) {
             navigate('/login');
         } else if (user?.role === 'ADMIN') {
             navigate('/admin/dashboard');
         } else if (user?.role === 'SUPERVISOR') {
             navigate('/supervisor/dashboard');
-        } else {
+        } else if (user?.role === 'STUDENT') {
             fetchData();
         }
-    }, [isAuthenticated, user?.role, navigate]);
+    }, [isAuthenticated, isInitialized, user?.role, navigate]);
 
     const fetchData = async () => {
         setIsLoading(true);

@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Card, Button, Input } from './index';
 import { api } from '../services/api';
 import { useToastStore } from '../utils/toastStore';
 import { useAuthStore } from '../utils/authStore';
-import { UploadCloud, Link as LinkIcon, FileText, CheckCircle, XCircle, Users } from 'lucide-react';
-import type { FormAttachment } from '../services/adminService';
+import { UploadCloud, Link as LinkIcon, Eye, Copy, Download, ChevronDown, FileText, ExternalLink, BadgeAlert } from 'lucide-react';
+import type { FormAttachment, Template } from '../services/adminService';
 import { getPreviewUrl } from '../utils/filePreview';
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
@@ -17,6 +17,59 @@ const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
   }
 };
 
+const STAGE_ALIASES: Record<string, string[]> = {
+  SYNOPSIS: ['SYNOPSIS', 'SYNOPSIS STAGE', 'SYNOPSIS_DRAFT'],
+  PROGRESS1: ['PROGRESS1', 'PROGRESS 1', 'PROGRESS-1', 'P1'],
+  PROGRESS2: ['PROGRESS2', 'PROGRESS 2', 'PROGRESS-2', 'P2'],
+  FINAL: ['FINAL', 'FINAL SUBMISSION', 'FINAL-STAGE'],
+  ALL: ['ALL', 'GENERAL']
+};
+
+const normalizeStage = (stage?: string | null) =>
+  String(stage || 'GENERAL').trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toUpperCase();
+
+const matchesStage = (fileStage?: string | null, activeStage?: string | null) => {
+  const fileValue = normalizeStage(fileStage);
+  const activeValue = normalizeStage(activeStage);
+  if (!activeValue) return fileValue === 'ALL' || fileValue === 'GENERAL';
+  const aliases = STAGE_ALIASES[activeValue] || [activeValue];
+  return fileValue === 'ALL' || fileValue === 'GENERAL' || aliases.includes(fileValue);
+};
+
+const templateToAttachment = (template: Template): FormAttachment => ({
+  attachmentId: template.id,
+  fileName: template.name,
+  fileUrl: template.fileUrl,
+  uploadedAt: template.createdAt,
+  source: template.sourceType,
+  stage: template.stageId,
+});
+
+const PENDING_STATUSES = new Set([
+  'PENDING',
+  'PENDING_TEAM_APPROVAL',
+  'PENDING_SUPERVISOR_REVIEW',
+  'PENDING_ADMIN_REVIEW',
+]);
+
+const normalizeStatus = (value?: string | null) =>
+  String(value || '').trim().replace(/[\s-]+/g, '_').toUpperCase();
+
+const isPendingReviewStatus = (value?: string | null) => PENDING_STATUSES.has(normalizeStatus(value));
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+};
+
+const inferAttachmentFormat = (file?: FormAttachment | null) => {
+  if (!file) return '-';
+  const fileName = String(file.fileName || '').trim();
+  const extension = fileName.includes('.') ? fileName.split('.').pop() : '';
+  return extension ? extension.toUpperCase() : 'See template';
+};
+
 interface DeliverableUploaderProps {
   projectId: string;
   documentId: string;
@@ -26,525 +79,525 @@ interface DeliverableUploaderProps {
 }
 
 export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
-  projectId, documentId, currentStage, isLeader, onSuccess
+  projectId,
+  documentId,
+  currentStage,
+  isLeader,
+  onSuccess,
 }) => {
-  const [comment, setComment] = useState('');
-  const [reviewComment, setReviewComment] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [selectedStage, setSelectedStage] = useState(currentStage);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [driveLink, setDriveLink] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [existingSubmissions, setExistingSubmissions] = useState<any[]>([]);
-  const [team, setTeam] = useState<any>(null);
-  const [project, setProject] = useState<any>(null);
   const [referenceFiles, setReferenceFiles] = useState<FormAttachment[]>([]);
+  const [stageTemplates, setStageTemplates] = useState<FormAttachment[]>([]);
   const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
-  const [resolvedDocumentId, setResolvedDocumentId] = useState(documentId);
+  const [selectedTemplate, setSelectedTemplate] = useState<FormAttachment | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const addToast = useToastStore(state => state.addToast);
-  const user = useAuthStore(state => state.user);
+  const addToast = useToastStore((state) => state.addToast);
+  const user = useAuthStore((state) => state.user);
 
-  // Map Project 'stageStatus' enum to the correct Submission endpoint
-  const getEndpoint = () => {
-    switch (currentStage) {
+  const endpoint = useMemo(() => {
+    switch (selectedStage) {
       case 'SYNOPSIS': return '/submissions/synopsis';
       case 'PROGRESS1': return '/submissions/progress1';
       case 'PROGRESS2': return '/submissions/progress2';
       case 'FINAL': return '/submissions/final';
       default: return null;
     }
-  };
+  }, [selectedStage]);
+
+  useEffect(() => setSelectedStage(currentStage), [currentStage]);
 
   useEffect(() => {
-    setResolvedDocumentId(documentId);
-  }, [documentId]);
-
-  useEffect(() => {
-    const ensureDocument = async () => {
-      if (!projectId) return;
+    const load = async () => {
       try {
-        const { data } = await api.get(`/documents/by-project/${projectId}`);
-        if (data?.documentId) {
-          setResolvedDocumentId(data.documentId);
-          return;
-        }
-      } catch (err: any) {
-        if (err?.response?.status !== 404) {
-          return;
-        }
-      }
-
-      try {
-        const { data } = await api.post('/documents', { projectId });
-        if (data?.documentId) {
-          setResolvedDocumentId(data.documentId);
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    };
-
-    ensureDocument();
-  }, [projectId]);
-
-  useEffect(() => {
-    const fetchSubmissions = async () => {
-      const endpoint = getEndpoint();
-      if (!endpoint || !resolvedDocumentId) return;
-      try {
-        const { data } = await api.get(`${endpoint}/document/${resolvedDocumentId}`);
-        setExistingSubmissions(data || []);
-      } catch (err) {
-        console.error("No submissions found yet.");
-      }
-    };
-
-    const fetchProjectContext = async () => {
-      try {
-        const [projectRes, teamRes] = await Promise.all([
-          api.get(`/projects/${projectId}`),
-          api.get(`/teams`).catch(() => ({ data: [] }))
+        const projectRes = await api.get(`/projects/${projectId}`).catch(() => ({ data: null }));
+        const formId = projectRes.data?.formId;
+        const [formRes, templateRes, subRes] = await Promise.all([
+          formId ? api.get(`/forms/${formId}`).catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+          formId ? api.get(`/templates?form_id=${formId}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+          endpoint && documentId ? api.get(`${endpoint}/document/${documentId}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
         ]);
-        setProject(projectRes.data || null);
-        const thisTeam = (teamRes.data || []).find((item: any) => item.teamId === projectRes.data?.teamId);
-        setTeam(thisTeam || null);
-        if (projectRes.data?.formId) {
-          const formRes = await api.get(`/forms/${projectRes.data.formId}`).catch(() => ({ data: null }));
-          setReferenceFiles(parseReferenceFiles(formRes.data?.referenceFilesJson));
-        }
+        setReferenceFiles(parseReferenceFiles(formRes.data?.referenceFilesJson));
+        setStageTemplates((templateRes.data || []).map(templateToAttachment));
+        setSubmissions(subRes.data || []);
       } catch {
-        setProject(null);
-        setTeam(null);
+        setReferenceFiles([]);
+        setStageTemplates([]);
+        setSubmissions([]);
       }
     };
+    load();
+  }, [projectId, documentId, endpoint]);
 
-    fetchSubmissions();
-    fetchProjectContext();
-  }, [resolvedDocumentId, currentStage, projectId]);
+  const stageFiles = [...referenceFiles, ...stageTemplates].filter((file) =>
+    matchesStage(file.stage, selectedStage)
+  );
 
-  const latestSubmission = existingSubmissions[existingSubmissions.length - 1] || null;
-  const latestSubmissionId = latestSubmission ? latestSubmission[`${currentStage.toLowerCase()}Id`] : null;
-  const teamMemberIds = (() => {
-    try {
-      return team?.teamMemberArray ? JSON.parse(team.teamMemberArray) : [];
-    } catch {
-      return [];
+  useEffect(() => {
+    const first = stageFiles[0] || null;
+    if (!first) {
+      setSelectedTemplateId('');
+      setSelectedTemplate(null);
+      return;
     }
-  })();
-  const isTeamMember = Boolean(user?.id) && (isLeader || teamMemberIds.includes(user?.id));
-  const alreadyVoted = latestSubmission?.teamReviewJson
-    ? (() => {
-      try {
-        const votes = JSON.parse(latestSubmission.teamReviewJson || '[]');
-        return votes.some((vote: any) => vote.reviewerId === user?.id);
-      } catch {
-        return false;
-      }
-    })()
-    : false;
-  const canUploadRevision = isLeader && (!latestSubmission || ['REJECTED', 'REVISION'].includes((latestSubmission.status || '').toUpperCase()));
-  const canTeamReview = Boolean(latestSubmission && isTeamMember && !isLeader && !alreadyVoted && latestSubmission.teamReviewStatus !== 'APPROVED');
+    if (!stageFiles.some((f) => f.attachmentId === selectedTemplateId)) {
+      setSelectedTemplateId(first.attachmentId);
+    }
+    setSelectedTemplate(stageFiles.find((f) => f.attachmentId === selectedTemplateId) || first);
+  }, [stageFiles, selectedTemplateId]);
 
-  const matchesStage = (file: FormAttachment, stage?: string) => {
-    const value = (file.stage || 'GENERAL').toUpperCase();
-    if (!stage) return value === 'ALL' || value === 'GENERAL';
-    return value === 'ALL' || value === 'GENERAL' || value === stage.toUpperCase();
+  // Close custom dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const latestSubmission = submissions[submissions.length - 1] || null;
+  const selectedTemplateSubmission = useMemo(() => {
+    if (!selectedTemplate) return null;
+    const selectedName = String(selectedTemplate.fileName || '').trim().toLowerCase();
+    const selectedUrl = String(selectedTemplate.fileUrl || '').trim().toLowerCase();
+    return submissions
+      .slice()
+      .reverse()
+      .find((submission) => {
+        const submissionName = String(submission?.fileName || '').trim().toLowerCase();
+        const submissionComment = String(submission?.comment || '').toLowerCase();
+        const submissionUrl = String(submission?.fileUrl || '').trim().toLowerCase();
+        return (
+          (selectedName && submissionName === selectedName) ||
+          (selectedUrl && submissionUrl === selectedUrl) ||
+          (selectedName && submissionComment.includes(selectedName))
+        );
+      }) || null;
+  }, [selectedTemplate, submissions]);
+
+  const isSelectedTemplateUnderReview = isPendingReviewStatus(selectedTemplateSubmission?.status) || isPendingReviewStatus(selectedTemplateSubmission?.teamReviewStatus);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isLeader) return addToast('Only the team leader can submit documents.', 'error');
+    if (!selectedStage || !selectedTemplateId || !driveLink.trim()) {
+      addToast('Please choose stage, template, and drive link.', 'error');
+      return;
+    }
+    if (selectedTemplateSubmission && isPendingReviewStatus(selectedTemplateSubmission.status || selectedTemplateSubmission.teamReviewStatus)) {
+      addToast('This document has already been submitted and is currently under review.', 'error');
+      return;
+    }
+    if (!endpoint) {
+      addToast('Invalid stage selected.', 'error');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await api.post(endpoint, {
+        documentId,
+        comment: `Template: ${selectedTemplate?.fileName || selectedTemplateId}\nDrive Link: ${driveLink.trim()}`,
+        fileUrl: driveLink.trim(),
+        fileName: selectedTemplate?.fileName || 'Submission Link',
+      });
+      setDriveLink('');
+      addToast('Deliverable submitted successfully.', 'success');
+      const { data } = await api.get(`${endpoint}/document/${documentId}`).catch(() => ({ data: [] }));
+      setSubmissions(data || []);
+      onSuccess();
+    } catch (err: any) {
+      addToast(err.response?.data?.message || 'Failed to submit deliverable.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const stageFiles = referenceFiles.filter((file) => matchesStage(file, currentStage));
+  return (
+    <Card elevation={1} style={{ border: '1px solid var(--border-color)', padding: '16px' }}>
+      <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <UploadCloud size={18} color="var(--primary)" /> {currentStage} Deliverables
+      </h4>
 
-  const renderStageReferences = () => {
-    if (stageFiles.length === 0) return null;
-    return (
-      <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
-        <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <FileText size={18} color="var(--primary)" /> {currentStage} Reference Files
-        </h4>
-        <div style={{ display: 'grid', gap: '12px' }}>
-          {stageFiles.map((file) => (
-            <div
-              key={file.attachmentId}
+      {latestSubmission && (
+        <div
+          style={{
+            marginBottom: '12px',
+            padding: '12px',
+            borderRadius: '8px',
+            backgroundColor: 'var(--surface-hover)',
+            border: '1px solid var(--border-color)',
+          }}
+        >
+          Latest submission status: <strong>{latestSubmission.status || 'PENDING'}</strong>
+        </div>
+      )}
+
+      <form onSubmit={submit} style={{ display: 'grid', gap: '12px' }}>
+        {/* 1. Stage */}
+        <div>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+            1. Stage
+          </label>
+          <select
+            value={selectedStage}
+            onChange={(e) => setSelectedStage(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px',
+              borderRadius: '8px',
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            {['SYNOPSIS', 'PROGRESS1', 'PROGRESS2', 'FINAL'].map((stage) => (
+              <option key={stage} value={stage}>
+                {stage}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* 2. Document – custom dropdown (no external View, no document cards) */}
+        <div>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+            2. Document
+          </label>
+
+          <div ref={dropdownRef} style={{ position: 'relative' }}>
+            {/* Trigger */}
+            <button
+              type="button"
+              onClick={() => setDropdownOpen((v) => !v)}
               style={{
+                width: '100%',
                 display: 'flex',
-                justifyContent: 'space-between',
                 alignItems: 'center',
+                justifyContent: 'space-between',
                 gap: '12px',
                 padding: '12px 14px',
                 borderRadius: '8px',
                 border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--surface-hover)'
+                backgroundColor: 'var(--background)',
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontSize: '14px',
+                color: selectedTemplate ? 'var(--text-primary)' : 'var(--text-disabled)',
               }}
             >
-              <div>
-                <div style={{ fontWeight: 600, fontSize: '14px' }}>{file.fileName}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'Recently uploaded'}
-                </div>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => setPreviewFile(file)}>
-                Preview
-              </Button>
-            </div>
-          ))}
-        </div>
-      </Card>
-    );
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!file && !comment.trim()) {
-      addToast('Please attach a file or provide a link/comment', 'error');
-      return;
-    }
-
-    const endpoint = getEndpoint();
-    if (!endpoint) {
-      addToast('Invalid project stage for submission', 'error');
-      return;
-    }
-
-    if (!resolvedDocumentId) {
-      addToast('Document is not ready yet. Please try again in a moment.', 'error');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      let fileUrl = '';
-      let fileName = '';
-
-      // Step 1: Upload physical file to OneDrive Service if attached
-      if (file) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('projectId', projectId);
-        formData.append('stage', currentStage.toLowerCase());
-
-        addToast('Uploading to OneDrive...', 'info');
-        const uploadRes = await api.post('/files/upload', formData);
-
-        fileUrl = uploadRes.data.fileUrl;
-        fileName = uploadRes.data.fileName;
-      }
-
-      // Step 2: Lock submission into Database
-      await api.post(endpoint, {
-        documentId: resolvedDocumentId,
-        comment: comment,
-        fileUrl: fileUrl,
-        fileName: fileName
-      });
-
-      addToast(`${currentStage} Deliverable submitted successfully!`, 'success');
-      setComment('');
-      setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      onSuccess();
-
-      // Refresh local list
-      const { data } = await api.get(`${endpoint}/document/${resolvedDocumentId}`);
-      setExistingSubmissions(data || []);
-
-    } catch (err: any) {
-      console.error(err);
-      addToast(err.response?.data?.error || 'Failed to submit deliverable', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDeleteLatestSubmission = async () => {
-    if (!latestSubmissionId) return;
-    const endpoint = getEndpoint();
-    if (!endpoint) return;
-    const confirmed = window.confirm('Delete the latest submission? This cannot be undone.');
-    if (!confirmed) return;
-
-    try {
-      setIsSubmitting(true);
-      await api.delete(`${endpoint}/${latestSubmissionId}`);
-      addToast('Submission deleted successfully.', 'success');
-      const { data } = await api.get(`${endpoint}/document/${resolvedDocumentId}`);
-      setExistingSubmissions(data || []);
-      onSuccess();
-    } catch (err: any) {
-      addToast(err.response?.data?.message || 'Failed to delete submission', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleFileClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const submitTeamReview = async (approved: boolean) => {
-    if (!latestSubmissionId) return;
-    try {
-      setIsSubmitting(true);
-      await api.patch(`/submissions/${currentStage.toLowerCase()}/${latestSubmissionId}/team-review`, {
-        reviewerId: user?.id,
-        approved,
-        comment: reviewComment || ''
-      });
-      setReviewComment('');
-      addToast(approved ? 'Approval recorded.' : 'Rejection recorded.', 'success');
-      const endpoint = getEndpoint();
-      if (endpoint) {
-        const { data } = await api.get(`${endpoint}/document/${resolvedDocumentId}`);
-        setExistingSubmissions(data || []);
-      }
-      onSuccess();
-    } catch (err: any) {
-      addToast(err.response?.data?.message || 'Failed to submit review', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const hasSubmitted = existingSubmissions.length > 0;
-  const canDeleteSubmission = Boolean(
-    isLeader && latestSubmission && (latestSubmission.status || '').toUpperCase() !== 'APPROVED'
-  );
-
-  if (!isLeader && !hasSubmitted) {
-    return (
-      <div>
-        {previewFile && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              backgroundColor: 'rgba(15, 23, 42, 0.65)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '24px',
-              zIndex: 50
-            }}
-            onClick={() => setPreviewFile(null)}
-          >
-            <div
-              style={{
-                width: 'min(960px, 96vw)',
-                height: 'min(80vh, 720px)',
-                backgroundColor: 'var(--surface)',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                border: '1px solid var(--border-color)'
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
-                <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
-                <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
-                  Close
-                </Button>
-              </div>
-              <iframe
-                title={previewFile.fileName}
-                src={getPreviewUrl(previewFile.fileUrl)}
-                style={{ width: '100%', height: '100%', border: 'none' }}
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                <FileText size={16} style={{ flexShrink: 0, opacity: 0.7 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedTemplate ? selectedTemplate.fileName : 'Select a document…'}
+                </span>
+              </span>
+              <ChevronDown
+                size={16}
+                style={{
+                  flexShrink: 0,
+                  transition: 'transform 0.15s ease',
+                  transform: dropdownOpen ? 'rotate(180deg)' : 'none',
+                }}
               />
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+            </button>
 
-  if (canTeamReview && latestSubmission) {
-    return (
-      <div>
-        {renderStageReferences()}
-        <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
-          <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Users size={18} color="var(--primary)" /> {currentStage} Team Review
-          </h4>
-          <div style={{ padding: '12px', backgroundColor: 'var(--surface-hover)', borderRadius: '8px', marginBottom: '12px' }}>
-            <div style={{ fontWeight: 600, marginBottom: '6px' }}>Latest version: {latestSubmission.fileName || 'document'}</div>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Team review status: {latestSubmission.teamReviewStatus || 'PENDING'}
-            </div>
-          </div>
-          <Input
-            label="Review comment"
-            value={reviewComment}
-            onChange={(e) => setReviewComment(e.target.value)}
-            placeholder="Optional feedback for the leader"
-          />
-          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-            <Button type="button" variant="outline" onClick={() => submitTeamReview(false)} isLoading={isSubmitting} leftIcon={<XCircle size={16} />}>
-              Reject
-            </Button>
-            <Button type="button" onClick={() => submitTeamReview(true)} isLoading={isSubmitting} leftIcon={<CheckCircle size={16} />}>
-              Approve
-            </Button>
-          </div>
-        </Card>
-        {previewFile && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              backgroundColor: 'rgba(15, 23, 42, 0.65)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '24px',
-              zIndex: 50
-            }}
-            onClick={() => setPreviewFile(null)}
-          >
-            <div
-              style={{
-                width: 'min(960px, 96vw)',
-                height: 'min(80vh, 720px)',
-                backgroundColor: 'var(--surface)',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                border: '1px solid var(--border-color)'
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
-                <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
-                <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
-                  Close
-                </Button>
-              </div>
-              <iframe
-                title={previewFile.fileName}
-                src={getPreviewUrl(previewFile.fileUrl)}
-                style={{ width: '100%', height: '100%', border: 'none' }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+            {/* Options popover */}
+            {dropdownOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  left: 0,
+                  right: 0,
+                  backgroundColor: 'var(--surface)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '10px',
+                  boxShadow: '0 12px 32px rgba(0,0,0,0.12)',
+                  zIndex: 30,
+                  maxHeight: '260px',
+                  overflowY: 'auto',
+                }}
+              >
+                {stageFiles.length === 0 ? (
+                  <div
+                    style={{
+                      padding: '16px',
+                      fontSize: '13px',
+                      color: 'var(--text-disabled)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    No templates available for this stage
+                  </div>
+                ) : (
+                  stageFiles.map((tpl) => {
+                    const matchingSubmission = submissions
+                      .slice()
+                      .reverse()
+                      .find((submission) => {
+                        const submissionName = String(submission?.fileName || '').trim().toLowerCase();
+                        const submissionComment = String(submission?.comment || '').toLowerCase();
+                        const templateName = String(tpl.fileName || '').trim().toLowerCase();
+                        const templateUrl = String(tpl.fileUrl || '').trim().toLowerCase();
+                        return (
+                          (templateName && submissionName === templateName) ||
+                          (templateUrl && String(submission?.fileUrl || '').trim().toLowerCase() === templateUrl) ||
+                          (templateName && submissionComment.includes(templateName))
+                        );
+                      }) || null;
+                    const isLocked = isPendingReviewStatus(matchingSubmission?.status) || isPendingReviewStatus(matchingSubmission?.teamReviewStatus);
 
-  return (
-    <div>
-      {renderStageReferences()}
-      <Card elevation={1} style={{ marginTop: '16px', border: '1px solid var(--border-color)' }}>
-        <h4 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <UploadCloud size={18} color="var(--primary)" />
-          {currentStage} Deliverables
-        </h4>
+                    return (
+                      <div
+                        key={tpl.attachmentId}
+                        role="option"
+                        aria-disabled={isLocked}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                          padding: '12px 14px',
+                          cursor: isLocked ? 'not-allowed' : 'pointer',
+                          backgroundColor:
+                            selectedTemplateId === tpl.attachmentId
+                              ? 'var(--primary-glow)'
+                              : 'transparent',
+                          borderBottom: '1px solid var(--border-color)',
+                          opacity: isLocked ? 0.72 : 1,
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isLocked && selectedTemplateId !== tpl.attachmentId) {
+                            e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            selectedTemplateId === tpl.attachmentId
+                              ? 'var(--primary-glow)'
+                              : 'transparent';
+                        }}
+                        onClick={() => {
+                          if (isLocked) {
+                            addToast('This document has already been submitted and is currently under review.', 'error');
+                            return;
+                          }
+                          setSelectedTemplateId(tpl.attachmentId);
+                          setDropdownOpen(false);
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                          <FileText size={16} style={{ flexShrink: 0, opacity: 0.65 }} />
+                          <span style={{ fontSize: '14px', fontWeight: selectedTemplateId === tpl.attachmentId ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {tpl.fileName}
+                          </span>
+                          {isLocked && (
+                            <span style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: '999px', flexShrink: 0 }}>
+                              Under Review
+                            </span>
+                          )}
+                        </div>
 
-        {hasSubmitted && !canUploadRevision ? (
-          <div style={{ padding: '12px', backgroundColor: 'var(--success-20)', borderRadius: '6px', borderLeft: '4px solid var(--success)', color: 'var(--text-primary)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <strong>{latestSubmission?.teamReviewStatus === 'APPROVED' ? 'Document Approved by Team' : 'Document Submitted for Review'}</strong>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                {existingSubmissions[0]?.fileUrl && (
-                  <a href={existingSubmissions[0].fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    View Attached File <FileText size={14} />
-                  </a>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewFile(tpl);
+                            setIsPreviewOpen(true);
+                            setDropdownOpen(false);
+                          }}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface)', fontSize: '12px', fontWeight: 600, color: 'var(--primary)', cursor: 'pointer', flexShrink: 0 }}
+                        >
+                          <Eye size={13} />
+                          View
+                        </button>
+                      </div>
+                    );
+                  })
                 )}
-                {canDeleteSubmission && (
-                  <Button size="sm" variant="outline" onClick={handleDeleteLatestSubmission} isLoading={isSubmitting}>
-                    Delete
-                  </Button>
-                )}
-              </div>
-            </div>
-            <br />
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              {latestSubmission?.status === 'REVISION'
-                ? 'Supervisor requested changes. Upload a revised version when ready.'
-                : 'The submission is in the review pipeline.'}
-            </span>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {canDeleteSubmission && latestSubmission && (
-              <div style={{ padding: '10px 12px', backgroundColor: 'var(--surface-hover)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  Latest submission: {latestSubmission.fileName || 'document'}
-                </div>
-                <Button size="sm" variant="outline" onClick={handleDeleteLatestSubmission} isLoading={isSubmitting}>
-                  Delete
-                </Button>
               </div>
             )}
+          </div>
+        </div>
 
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '16px', border: '1px dashed var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--surface-hover)', cursor: 'pointer' }} onClick={handleFileClick}>
-              <input
-                type="file"
-                ref={fileInputRef}
-                style={{ display: 'none' }}
-                onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
-              />
-              <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                <FileText size={20} color={file ? 'var(--primary)' : 'var(--text-secondary)'} />
-              </div>
-              <div>
-                <h5 style={{ margin: '0 0 4px', fontSize: '14px', color: file ? 'var(--primary)' : 'var(--text-primary)' }}>
-                  {file ? file.name : 'Click to attach project file (PDF, DOCX, ZIP)'}
-                </h5>
-                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-disabled)' }}>
-                  {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : 'Max size 50MB. Uploads securely to OneDrive.'}
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-              <div style={{ flex: 1 }}>
-                <Input
-                  label="Additional Links or Comments (Optional)"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="https://github.com/... or specific notes for your supervisor."
-                  leftIcon={<LinkIcon size={16} />}
-                />
-              </div>
-              <Button type="submit" isLoading={isSubmitting}>Submit Deliverable</Button>
-            </div>
-          </form>
+        {isSelectedTemplateUnderReview && (
+          <div
+            style={{
+              padding: '12px 14px',
+              borderRadius: '10px',
+              border: '1px solid #f59e0b',
+              backgroundColor: '#fffbeb',
+              color: '#92400e',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+            }}
+          >
+            <BadgeAlert size={16} />
+            <span>This document has already been submitted and is currently under review.</span>
+          </div>
         )}
-      </Card>
-      {previewFile && (
+
+        {/* 3. Drive Link */}
+        <div>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+            3. Drive Link
+          </label>
+          <Input
+            value={driveLink}
+            onChange={(e) => setDriveLink(e.target.value)}
+            placeholder="Paste Google Drive submission link here"
+            leftIcon={<LinkIcon size={16} />}
+          />
+        </div>
+
+        <Button type="submit" isLoading={isSubmitting} disabled={isSelectedTemplateUnderReview}>
+          Submit Deliverable
+        </Button>
+      </form>
+
+      {/* Preview modal */}
+      {previewFile && isPreviewOpen && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            zIndex: 1400,
+            backgroundColor: 'rgba(15,23,42,0.65)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: '24px',
-            zIndex: 50
           }}
-          onClick={() => setPreviewFile(null)}
+          onClick={() => {
+            setPreviewFile(null);
+            setIsPreviewOpen(false);
+          }}
         >
           <div
             style={{
-              width: 'min(960px, 96vw)',
-              height: 'min(80vh, 720px)',
+              width: 'min(1240px, 98vw)',
+              height: 'min(84vh, 820px)',
               backgroundColor: 'var(--surface)',
-              borderRadius: '12px',
+              borderRadius: '16px',
               overflow: 'hidden',
-              border: '1px solid var(--border-color)'
+              border: '1px solid var(--border-color)',
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1.2fr) minmax(340px, 0.8fr)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
-              <div style={{ fontWeight: 600 }}>{previewFile.fileName}</div>
-              <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
-                Close
-              </Button>
+            <div style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--background)' }}>
+              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, fontSize: '16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewFile.fileName}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Document preview</div>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+                  Close
+                </Button>
+              </div>
+              <iframe
+                title={previewFile.fileName}
+                src={getPreviewUrl(previewFile.fileUrl)}
+                style={{ width: '100%', height: '100%', border: 'none', flex: 1, minHeight: 0, backgroundColor: '#fff' }}
+              />
             </div>
-            <iframe
-              title={previewFile.fileName}
-              src={getPreviewUrl(previewFile.fileUrl)}
-              style={{ width: '100%', height: '100%', border: 'none' }}
-            />
+
+            <div style={{ minWidth: 0, minHeight: 0, borderLeft: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ padding: '18px 18px 14px', borderBottom: '1px solid var(--border-color)', background: 'linear-gradient(180deg, #fff 0%, #f8fafc 100%)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', fontWeight: 700 }}>Template Metadata</div>
+                    <h3 style={{ margin: '6px 0 4px', fontSize: '20px', lineHeight: 1.25 }}>{previewFile.fileName}</h3>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      {selectedTemplate?.stage ? `Target stage: ${selectedTemplate.stage}` : 'Target stage: —'}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '6px 10px', borderRadius: '999px', backgroundColor: '#e0f2fe', color: '#0369a1' }}>
+                    {selectedTemplate?.source === 'LINK' ? 'Drive Link' : 'Uploaded File'}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ padding: '18px', overflowY: 'auto', display: 'grid', gap: '14px' }}>
+                <div style={{ padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-hover)' }}>
+                  <div style={{ display: 'grid', gap: '12px' }}>
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '4px' }}>Template Name</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600 }}>{previewFile.fileName}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '4px' }}>Target Stage Name</div>
+                      <div style={{ fontSize: '14px' }}>{selectedTemplate?.stage || '—'}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '4px' }}>Required File Format</div>
+                      <div style={{ fontSize: '14px' }}>{inferAttachmentFormat(selectedTemplate)}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '4px' }}>Creation Date / Created Timestamp</div>
+                      <div style={{ fontSize: '14px' }}>{formatDateTime(previewFile.uploadedAt)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--background)' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '6px' }}>Description & Submission Guidelines</div>
+                  <div style={{ fontSize: '14px', lineHeight: 1.7, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
+                    {selectedTemplate?.fileName
+                      ? `Follow the instructions attached to ${selectedTemplate.fileName}. Submit the correct file type, keep naming consistent with the template, and verify the drive link is accessible to reviewers.`
+                      : 'No description available.'}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(previewFile.fileUrl, '_blank', 'noopener,noreferrer')}
+                    leftIcon={<Download size={14} />}
+                  >
+                    Download
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(previewFile.fileUrl);
+                        addToast('Link copied to clipboard.', 'success');
+                      } catch {
+                        addToast('Unable to copy link.', 'error');
+                      }
+                    }}
+                    leftIcon={<Copy size={14} />}
+                  >
+                    Copy Link
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(previewFile.fileUrl, '_blank', 'noopener,noreferrer')}
+                    leftIcon={<ExternalLink size={14} />}
+                  >
+                    Direct Drive Link
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 };
+
+export default DeliverableUploader;

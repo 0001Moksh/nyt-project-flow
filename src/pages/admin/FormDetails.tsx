@@ -51,6 +51,7 @@ export const FormDetails: React.FC = () => {
   const [templateInputMode, setTemplateInputMode] = useState<'upload' | 'link'>('upload');
   const [tName, setTName] = useState('');
   const [tDesc, setTDesc] = useState('');
+  const [tAllowedFormat, setTAllowedFormat] = useState('PDF');
   const [tFile, setTFile] = useState<File | null>(null);
   const [tLinkUrl, setTLinkUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -188,7 +189,7 @@ export const FormDetails: React.FC = () => {
           setIsUploading(false);
           return;
         }
-        await adminService.uploadTemplate(formId, activeStageTab, tName, tDesc, tFile);
+        await adminService.uploadTemplate(formId, activeStageTab, tName, tDesc, tAllowedFormat, tFile);
       } else {
         if (!tLinkUrl.trim()) {
           addToast('Please provide a drive link.', 'error');
@@ -201,7 +202,7 @@ export const FormDetails: React.FC = () => {
           setIsUploading(false);
           return;
         }
-        await adminService.addTemplateLink(formId, activeStageTab, tName, tDesc, tLinkUrl);
+        await adminService.addTemplateLink(formId, activeStageTab, tName, tDesc, tAllowedFormat, tLinkUrl);
       }
 
       addToast('Template added successfully.', 'success');
@@ -236,6 +237,7 @@ export const FormDetails: React.FC = () => {
     setIsTemplateModalOpen(false);
     setTName('');
     setTDesc('');
+    setTAllowedFormat('PDF');
     setTFile(null);
     setTLinkUrl('');
     setTemplateInputMode('upload');
@@ -349,26 +351,32 @@ export const FormDetails: React.FC = () => {
   if (!formConfig) return <div style={{ textAlign: 'center', padding: '64px', color: 'var(--danger)' }}><h1>Form Not Found</h1></div>;
 
   const currentStageTemplates = templates.filter(t => t.stageId === activeStageTab);
-  const summaryText = `${projects.length} projects from ${formConfig.accessBatch} batch for ${formConfig.accessBranch} branch`;
+  const formatOptions = ['PDF', 'DOCS', 'ZIP', 'Python File (.py)', 'PPT', 'MD', 'Any / Other'];
+  const summaryText = `${projects.length} projects from ${formConfig.accessBatch} Batch for ${formConfig.accessBranch} Branch`;
   const hasTimeline = Boolean(timelineConfig);
   const hasTemplates = templates.length > 0;
   const hasMeetings = Boolean(meetingConfig);
-  const primaryAction = !hasTimeline ? { label: 'Stage Calendar', open: () => setIsTimelineModalOpen(true) }
-    : !hasTemplates ? { label: 'Stage Templates', open: () => setIsStageTemplatesOpen(true) }
-    : !hasMeetings ? { label: 'Meeting Sections', open: () => setIsMeetingPanelOpen(true) }
-    : { label: 'Stage Configuration', open: () => setIsTimelineModalOpen(true) };
+
+  // Dynamic primary action based on sequential setup progress
+  const primaryAction = !hasTimeline
+    ? { label: 'Stage Calendar', open: () => setIsTimelineModalOpen(true) }
+    : !hasTemplates
+      ? { label: 'Stage Templates', open: () => setIsStageTemplatesOpen(true) }
+      : !hasMeetings
+        ? { label: 'Meeting Sessions', open: () => setIsMeetingPanelOpen(true) }
+        : { label: 'Stage Calendar', open: () => setIsTimelineModalOpen(true) };
+
   const secondaryActions = [
     { label: 'Stage Calendar', open: () => setIsTimelineModalOpen(true) },
     { label: 'Stage Templates', open: () => setIsStageTemplatesOpen(true) },
-    { label: 'Meeting Sections', open: () => setIsMeetingPanelOpen(true) },
+    { label: 'Meeting Sessions', open: () => setIsMeetingPanelOpen(true) },
   ];
 
   return (
     <div>
       <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0 }}>{formConfig.accessBranch} / {formConfig.accessBatch}</h1>
-          <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: '14px' }}>{summaryText}</div>
+          <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0 }}>{summaryText}</h1>
         </div>
 
         <div style={{ position: 'relative', display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -399,9 +407,7 @@ export const FormDetails: React.FC = () => {
                   <h2 style={{ margin: 0, fontSize: '20px' }}>Stage Requirements / Templates</h2>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Button variant="primary" leftIcon={<Plus size={16} />} onClick={() => setIsTemplateModalOpen(true)}>
-                    Add Template
-                  </Button>
+                  {/* Top "+ Add Template" button removed */}
                   <button onClick={() => setIsStageTemplatesOpen(false)} style={{ background: 'var(--surface-hover)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
                     <X size={20} />
                   </button>
@@ -449,47 +455,86 @@ export const FormDetails: React.FC = () => {
             <div style={{ padding: '24px', flex: 1, backgroundColor: 'var(--background)' }}>
               <h3 style={{ fontSize: '15px', margin: '0 0 16px' }}>Templates for {getStageLabel(activeStageTab)}</h3>
 
-              {currentStageTemplates.length === 0 ? (
-                <div style={{ padding: '48px', textAlign: 'center', border: '2px dashed var(--border-color)', borderRadius: '12px', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)' }}>
-                  <FileText size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-                  <div>No templates added for this stage yet.</div>
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
-                  {currentStageTemplates.map(template => (
-                    <div key={template.id} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'var(--surface)' }}>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                        {template.type === 'PDF' ? <FileText color="#ef4444" size={32} /> :
-                          template.type === 'PPTX' || template.type === 'PPT' ? <Presentation color="#f97316" size={32} /> :
-                            template.type === 'DRIVE_LINK' ? <LinkIcon color="#10b981" size={32} /> :
-                              <File color="#3b82f6" size={32} />}
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <h4 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 600 }}>{template.name}</h4>
-                            <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'var(--surface-hover)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>{template.type}</span>
-                          </div>
-                          {template.description && <p style={{ margin: '0 0 8px', fontSize: '12px', color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{template.description}</p>}
-                          <div style={{ fontSize: '11px', color: 'var(--text-disabled)' }}>
-                            {template.sourceType === 'LINK' ? 'Added via link' : `Uploaded ${new Date(template.createdAt).toLocaleDateString()}`}
-                          </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                {currentStageTemplates.map(template => (
+                  <div key={template.id} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'var(--surface)' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      {template.type === 'PDF' ? <FileText color="#ef4444" size={32} /> :
+                        template.type === 'PPTX' || template.type === 'PPT' ? <Presentation color="#f97316" size={32} /> :
+                          template.type === 'DRIVE_LINK' ? <LinkIcon color="#10b981" size={32} /> :
+                            <File color="#3b82f6" size={32} />}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <h4 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 600 }}>{template.name}</h4>
+                      <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'var(--surface-hover)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>Allowed: {template.type}</span>
+                        </div>
+                        {template.description && <p style={{ margin: '0 0 8px', fontSize: '12px', color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{template.description}</p>}
+                        <div style={{ fontSize: '11px', color: 'var(--text-disabled)' }}>
+                          {template.sourceType === 'LINK' ? 'Added via link' : `Uploaded ${new Date(template.createdAt).toLocaleDateString()}`}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
-                        <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={<Eye size={14} />} onClick={() => openTemplateView(template)}>
-                          View
-                        </Button>
-                        <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={<FileText size={14} />} onClick={() => setPreviewTemplate(template)}>
-                          View Config
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => downloadTemplate(template)} style={{ color: 'var(--text-secondary)' }}>
-                          <Download size={14} />
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleDeleteTemplate(template.id)} style={{ color: '#ef4444', borderColor: '#fee2e2', backgroundColor: '#fef2f2' }}><Trash2 size={14} /></Button>
-                      </div>
                     </div>
-                  ))}
+                    <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                      <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={<Eye size={14} />} onClick={() => openTemplateView(template)}>
+                        View
+                      </Button>
+                      <Button variant="outline" size="sm" style={{ flex: 1 }} leftIcon={<FileText size={14} />} onClick={() => setPreviewTemplate(template)}>
+                        View Config
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => downloadTemplate(template)} style={{ color: 'var(--text-secondary)' }}>
+                        <Download size={14} />
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleDeleteTemplate(template.id)} style={{ color: '#ef4444', borderColor: '#fee2e2', backgroundColor: '#fef2f2' }}><Trash2 size={14} /></Button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Inline dashed "Add Template" placeholder card */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setIsTemplateModalOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsTemplateModalOpen(true);
+                    }
+                  }}
+                  style={{
+                    border: '2px dashed var(--border-color)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    minHeight: '160px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    backgroundColor: 'var(--surface-hover)',
+                    cursor: 'pointer',
+                    color: 'var(--text-secondary)',
+                    transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--primary-glow)';
+                    e.currentTarget.style.borderColor = 'var(--primary)';
+                    e.currentTarget.style.color = 'var(--primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
+                    e.currentTarget.style.borderColor = 'var(--border-color)';
+                    e.currentTarget.style.color = 'var(--text-secondary)';
+                  }}
+                >
+                  <Plus size={28} strokeWidth={2} />
+                  <div style={{ fontSize: '14px', fontWeight: 600, textAlign: 'center' }}>
+                    Add Template
+                  </div>
+                  <div style={{ fontSize: '12px', opacity: 0.8, textAlign: 'center' }}>
+                    for {getStageLabel(activeStageTab)}
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
         </div>
@@ -595,15 +640,26 @@ export const FormDetails: React.FC = () => {
 
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '20px' }}>
               <div
-                onClick={() => setTemplateInputMode('upload')}
-                style={{ padding: '12px 24px', cursor: 'pointer', borderBottom: templateInputMode === 'upload' ? '2px solid var(--primary)' : '2px solid transparent', color: templateInputMode === 'upload' ? 'var(--primary)' : 'var(--text-secondary)', fontWeight: templateInputMode === 'upload' ? 600 : 400, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Upload size={16} /> Upload File
-              </div>
-              <div
                 onClick={() => setTemplateInputMode('link')}
                 style={{ padding: '12px 24px', cursor: 'pointer', borderBottom: templateInputMode === 'link' ? '2px solid var(--primary)' : '2px solid transparent', color: templateInputMode === 'link' ? 'var(--primary)' : 'var(--text-secondary)', fontWeight: templateInputMode === 'link' ? 600 : 400, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <LinkIcon size={16} /> Add Drive Link
               </div>
+              <div
+                onClick={() => setTemplateInputMode('upload')}
+                style={{ padding: '12px 24px', cursor: 'pointer', borderBottom: templateInputMode === 'upload' ? '2px solid var(--primary)' : '2px solid transparent', color: templateInputMode === 'upload' ? 'var(--primary)' : 'var(--text-secondary)', fontWeight: templateInputMode === 'upload' ? 600 : 400, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Upload size={16} /> Upload File
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Allowed Format *</label>
+              <select
+                value={tAllowedFormat}
+                onChange={(e) => setTAllowedFormat(e.target.value)}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--background)' }}
+              >
+                {formatOptions.map((format) => <option key={format} value={format}>{format}</option>)}
+              </select>
             </div>
 
             {templateInputMode === 'upload' ? (

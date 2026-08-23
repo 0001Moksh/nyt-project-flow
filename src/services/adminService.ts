@@ -115,12 +115,13 @@ export const adminService = {
     return response.data;
   },
 
-  uploadTemplate: async (formId: string, stageId: string, name: string, description: string, file: File): Promise<Template> => {
+  uploadTemplate: async (formId: string, stageId: string, name: string, description: string, allowedFormat: string, file: File): Promise<Template> => {
     const formData = new FormData();
     formData.append('formId', formId);
     formData.append('stageId', stageId);
     formData.append('name', name);
     if (description) formData.append('description', description);
+    formData.append('allowedFormat', allowedFormat);
     formData.append('file', file);
 
     const response = await api.post<Template>('/templates/upload', formData, {
@@ -129,9 +130,9 @@ export const adminService = {
     return response.data;
   },
 
-  addTemplateLink: async (formId: string, stageId: string, name: string, description: string, fileUrl: string): Promise<Template> => {
+  addTemplateLink: async (formId: string, stageId: string, name: string, description: string, allowedFormat: string, fileUrl: string): Promise<Template> => {
     const response = await api.post<Template>('/templates/link', {
-      formId, stageId, name, description, fileUrl
+      formId, stageId, name, description, allowedFormat, fileUrl
     });
     return response.data;
   },

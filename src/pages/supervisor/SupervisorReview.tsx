@@ -30,6 +30,7 @@ export const SupervisorReview: React.FC = () => {
     const [activeSub, setActiveSub] = useState<any>(null);
     const [templates, setTemplates] = useState<any[]>([]);
     const [previewFile, setPreviewFile] = useState<{fileName: string, fileUrl: string} | null>(null);
+    const activeTemplate = templates.find((t) => t.stageId === activeStage || t.stageId === 'GENERAL' || t.stageId === 'ALL') || null;
     
     // Grading Form State
     const [score, setScore] = useState('');
@@ -80,7 +81,8 @@ export const SupervisorReview: React.FC = () => {
 
     const handleEvaluation = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!score) return addToast("Score is required", "error");
+        if (decision === 'APPROVE' && !score) return addToast("Score is required", "error");
+        if (!feedback.trim()) return addToast("Feedback is required", "error");
         
         setIsSubmitting(true);
         try {
@@ -94,8 +96,9 @@ export const SupervisorReview: React.FC = () => {
             if (activeSub) {
                 const ep = activeStage.toLowerCase();
                 const existingComment = activeSub.comment ? `${activeSub.comment}\n\n` : '';
+                const approved = decision === 'APPROVE';
                 await api.patch(`/submissions/${ep}/${activeSub[`${ep}Id`] || activeSub.finalId || activeSub.synopsisId}/supervisor-review`, {
-                    approved: decision === 'APPROVE',
+                    approved,
                     comment: `${existingComment}SUPERVISOR FEEDBACK: ${feedback}`,
                     supervisorId: project.supervisorId
                 });
@@ -245,6 +248,25 @@ export const SupervisorReview: React.FC = () => {
                         <CheckCircle size={20} color="var(--primary)" /> Supervisor Evaluation
                     </h3>
 
+                    {activeSub && (
+                        <div style={{ padding: '14px', border: '1px solid var(--border-color)', borderRadius: '12px', backgroundColor: 'var(--surface-hover)', marginBottom: '18px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '4px' }}>
+                                Document uploaded by {activeSub.leaderId || 'team'}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                                {activeSub.fileName || 'Submission'} · {activeStage}
+                            </div>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => activeSubOriginalUrl && setPreviewFile({ fileName: activeSub.fileName || 'Submission', fileUrl: activeSubOriginalUrl })}
+                                disabled={!activeSubOriginalUrl}
+                            >
+                                Review Deliverable
+                            </Button>
+                        </div>
+                    )}
+
                     {project[`${activeStage.toLowerCase()}Score`] && !isGradingMode ? (
                         <div style={{ padding: '24px', backgroundColor: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0', textAlign: 'center' }}>
                             <div style={{ color: '#16a34a', fontWeight: 700, marginBottom: '8px' }}>EVALUATION COMPLETED</div>
@@ -260,7 +282,7 @@ export const SupervisorReview: React.FC = () => {
                                     Approve
                                 </Button>
                                 <Button type="button" variant={decision === 'REJECT' ? 'primary' : 'outline'} onClick={() => setDecision('REJECT')} leftIcon={<ThumbsDown size={16} />} style={{ flex: 1 }}>
-                                    Request Changes
+                                    Request to Change
                                 </Button>
                             </div>
 
@@ -281,11 +303,11 @@ export const SupervisorReview: React.FC = () => {
                                     </div>
 
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Overall Feedback to Team</label>
-                                        <textarea 
-                                            rows={6} 
-                                            required 
-                                            value={feedback} 
+                                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Overall Feedback to Team</label>
+                                <textarea 
+                                    rows={6} 
+                                    required 
+                                    value={feedback} 
                                             onChange={e => setFeedback(e.target.value)}
                                             placeholder="Provide detailed feedback on the submission. What went well? What needs rework?"
                                             style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', resize: 'vertical', fontFamily: 'inherit' }}
@@ -309,7 +331,7 @@ export const SupervisorReview: React.FC = () => {
                             )}
 
                             <Button type="submit" disabled={!decision} isLoading={isSubmitting} size="lg" style={{ marginTop: '8px', width: '100%' }}>
-                                {decision === 'APPROVE' ? 'Confirm Approval' : decision === 'REJECT' ? 'Send Back for Revision' : 'Select a decision'}
+                                {decision === 'APPROVE' ? 'Approve' : decision === 'REJECT' ? 'Request to Change' : 'Select a decision'}
                             </Button>
                         </form>
                     )}

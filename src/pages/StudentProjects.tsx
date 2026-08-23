@@ -1,13 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '../utils/authStore';
 import { Card, Button, Loader, ProjectTimeline } from '../components';
 import { useNavigate } from 'react-router-dom';
-import { Users, CheckCircle, User, Briefcase, FolderKanban, History, Video, MapPin, Calendar, Clock } from 'lucide-react';
+import { Users, CheckCircle, User, Briefcase, FolderKanban, History, Video, MapPin, Calendar, Clock, FileText, ShieldCheck, ThumbsUp, ThumbsDown, AlertTriangle } from 'lucide-react';
 import { api } from '../services/api';
 import type { FormAttachment, FormResponse, Template } from '../services/adminService';
 import { getPreviewUrl } from '../utils/filePreview';
 import { isValidMeetingLink, openMeetingLink } from '../utils/meetingLinks';
 import { cleanProjectDescription } from '../utils/projectDescription';
+import { DeliverableUploader } from '../components/DeliverableUploader';
 
 const STAGE_LABELS: Record<string, string> = {
     SYNOPSIS: 'Synopsis',
@@ -36,7 +37,49 @@ const templateToAttachment = (template: Template): FormAttachment => ({
 });
 
 const getStageLabel = (stage?: string) =>
-    STAGE_LABELS[String(stage || '').toUpperCase()] || stage || '—';
+    STAGE_LABELS[String(stage || '').toUpperCase()] || stage || '?';
+
+const stageEndpoint = (stage?: string) => {
+    switch (String(stage || '').toUpperCase()) {
+        case 'SYNOPSIS': return 'synopsis';
+        case 'PROGRESS1': return 'progress1';
+        case 'PROGRESS2': return 'progress2';
+        case 'FINAL': return 'final';
+        default: return null;
+    }
+};
+
+const getSubmissionStatusLabel = (sub?: any) => {
+    const status = String(sub?.status || sub?.teamReviewStatus || 'PENDING').toUpperCase();
+    if (status === 'APPROVED') return 'Approved';
+    if (status === 'REJECTED' || status === 'REVISION') return 'Team Revision Needed';
+    if (status.includes('SUPERVISOR')) return 'Under Supervisor Review';
+    return 'Pending Team Approval';
+};
+
+const getReviewerLabel = (sub?: any) => {
+    const status = String(sub?.status || sub?.teamReviewStatus || 'PENDING').toUpperCase();
+    if (status === 'APPROVED') return 'Admin';
+    if (status === 'REJECTED' || status === 'REVISION') return 'Team Members';
+    if (status.includes('SUPERVISOR')) return 'Supervisor';
+    return 'Team Members';
+};
+
+const formatDateTime = (value?: string | null) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+};
+
+const parseTeamVotes = (json?: string | null) => {
+    if (!json) return [];
+    try {
+        const parsed = JSON.parse(json);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
 
 /** Compact info cards — no aspect-ratio (avoids grid overlap in narrow columns). */
 const compactCardStyle: React.CSSProperties = {
@@ -54,7 +97,7 @@ const compactCardStyle: React.CSSProperties = {
 };
 
 export const StudentProjects: React.FC = () => {
-    const { user, isAuthenticated } = useAuthStore();
+    const { user, isAuthenticated, isInitialized } = useAuthStore();
     const navigate = useNavigate();
 
     const [isLoading, setIsLoading] = useState(true);
@@ -66,21 +109,49 @@ export const StudentProjects: React.FC = () => {
     const [formConfig, setFormConfig] = useState<FormResponse | null>(null);
     const [templates, setTemplates] = useState<Template[]>([]);
     const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
+    const [isUploadOpen, setIsUploadOpen] = useState(false);
+    const [teamMembers, setTeamMembers] = useState<any[]>([]);
+    const [submissionsByStage, setSubmissionsByStage] = useState<Record<string, any[]>>({});
+    const [processingReviewId, setProcessingReviewId] = useState<string | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
+
+    // ✅ All hooks must be called unconditionally before any early returns
+    const submissionRows = useMemo(
+        () =>
+            Object.entries(submissionsByStage)
+                .flatMap(([ep, subs]) =>
+                    (subs || []).map((sub: any) => ({
+                        ...sub,
+                        _stageKey: ep,
+                        _stageLabel: getStageLabel(ep.toUpperCase()),
+                    }))
+                )
+                .sort(
+                    (a, b) =>
+                        new Date(b.uploadedAt || 0).getTime() -
+                        new Date(a.uploadedAt || 0).getTime()
+                ),
+        [submissionsByStage]
+    );
 
     useEffect(() => {
+        if (!isInitialized) {
+            return;
+        }
         if (!isAuthenticated) {
             navigate('/login');
         } else if (user?.role === 'ADMIN') {
             navigate('/admin/dashboard');
         } else if (user?.role === 'SUPERVISOR') {
             navigate('/supervisor/dashboard');
-        } else {
+        } else if (user?.role === 'STUDENT') {
             fetchData();
         }
-    }, [isAuthenticated, user?.role, navigate]);
+    }, [isAuthenticated, isInitialized, user?.role, navigate]);
 
     const fetchData = async () => {
         setIsLoading(true);
+        setLoadError(null);
         try {
             if (!user) return;
 
@@ -111,7 +182,7 @@ export const StudentProjects: React.FC = () => {
                 if (!teamInfo || !projInfo) continue;
 
                 if (joined.includes(user.id) || teamInfo.leaderId === user.id) {
-                    myProject = projInfo;
+                    myProject = { ...projInfo, leaderId: teamInfo.leaderId };
                     myLeader = allStudents.find((s: any) => s.studentId === teamInfo.leaderId);
 
                     const joinedCards = joined.map((id: string) => {
@@ -130,6 +201,7 @@ export const StudentProjects: React.FC = () => {
 
             setProject(myProject);
             setMembers(myMembersGrid.filter(m => m && m.name));
+            setTeamMembers(myMembersGrid.filter((m: any) => m && m.name));
             setSupervisor(mySupervisor);
 
             if (myProject) {
@@ -151,26 +223,50 @@ export const StudentProjects: React.FC = () => {
                 const templatesRes = await api.get(`/templates?form_id=${myProject.formId}`).catch(() => ({ data: [] }));
                 setTemplates(templatesRes.data || []);
 
+                const stages = ['synopsis', 'progress1', 'progress2', 'final'];
+                const subMap: Record<string, any[]> = {};
+                await Promise.all(stages.map(async (stage) => {
+                    const res = await api.get(`/submissions/${stage}/document/${myProject.documentId}`).catch(() => ({ data: [] }));
+                    subMap[stage] = res.data || [];
+                }));
+                setSubmissionsByStage(subMap);
+
                 const meetingsRes = await api.get(`/supervisor/meetings/project/${myProject.projectId}`).catch(() => ({ data: [] }));
                 setMeetings(meetingsRes.data || []);
             }
 
         } catch (err) {
             console.error(err);
+            setLoadError('We could not load your project data right now.');
         } finally {
             setIsLoading(false);
         }
     };
 
-    if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', marginTop: '100px' }}><Loader size="lg" /></div>;
+    // ---------- Early returns only after all hooks ----------
+    if (isLoading) {
+        return (
+            <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '14px', textAlign: 'center' }}>
+                <Loader size="lg" />
+                <div style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: 600 }}>
+                    Loading your project workspace...
+                </div>
+            </div>
+        );
+    }
 
     if (!project) {
         return (
             <div style={{ maxWidth: '1000px', margin: '0 auto', textAlign: 'center', paddingTop: '64px' }}>
                 <FolderKanban size={64} style={{ color: 'var(--text-disabled)', margin: '0 auto 24px' }} />
                 <h2 style={{ fontSize: '24px', color: 'var(--text-primary)', marginBottom: '16px' }}>No Active Project</h2>
-                <p style={{ color: 'var(--text-secondary)', marginBottom: '32px' }}>You have not been formally enrolled in any projects yet or your team has not been finalized.</p>
-                <Button variant="primary" onClick={() => navigate('/dashboard')}>Go to Team Formation</Button>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '32px' }}>
+                    {loadError || 'You have not been formally enrolled in any projects yet or your team has not been finalized.'}
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <Button variant="primary" onClick={() => navigate('/dashboard')}>Go to Team Formation</Button>
+                    <Button variant="outline" onClick={fetchData}>Retry</Button>
+                </div>
             </div>
         );
     }
@@ -187,9 +283,21 @@ export const StudentProjects: React.FC = () => {
     };
 
     const stageFiles = referenceFiles.filter((file) => matchesStage(file, project?.stageStatus));
+
+    const activeTeamSubmission = submissionRows[0] || null;
+    const activeTeamStageEndpoint = activeTeamSubmission?._stageKey;
+    const isTeamRevision = ['REJECTED', 'REVISION'].includes(String(activeTeamSubmission?.status || '').toUpperCase());
+    const isUnderSupervisor = String(activeTeamSubmission?.status || '').toUpperCase().includes('APPROVED');
+    const showPeerApproval = teamMembers.length > 1 && Boolean(activeTeamSubmission && activeTeamStageEndpoint);
+    const activeTeamSubmissionId = activeTeamSubmission ? (activeTeamSubmission[`${activeTeamStageEndpoint}Id`] || activeTeamSubmission.id) : null;
+    const activeTeamReviewer = activeTeamSubmission?.leaderId || project?.leaderId || 'Team Leader';
+    const activeTeamVotes = parseTeamVotes(activeTeamSubmission?.teamReviewJson);
+    const myTeamVote = activeTeamVotes.find((vote: any) => vote.reviewerId === user?.id);
+    const peerItemTimestamp = myTeamVote?.reviewedAt ? formatDateTime(myTeamVote.reviewedAt) : null;
     const cleanDescription = cleanProjectDescription(project.projectDescription);
     const officialMeetings = meetings.filter((m) => m.sessionId);
     const casualMeetings = meetings.filter((m) => !m.sessionId);
+    const isLeader = Boolean(project?.leaderId && user?.id && project.leaderId === user.id);
 
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -209,6 +317,7 @@ export const StudentProjects: React.FC = () => {
                             <h2 style={{ fontSize: '26px', margin: 0, color: 'var(--text-primary)', fontWeight: 800, lineHeight: 1.25 }}>
                                 {project.projectTitle}
                             </h2>
+                            
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#b45309', backgroundColor: '#fffbeb', border: '1px solid #fde68a', padding: '6px 12px', borderRadius: '999px', flexShrink: 0 }}>
                                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b' }} />
                                 {getStageLabel(project.stageStatus)}
@@ -218,10 +327,153 @@ export const StudentProjects: React.FC = () => {
                         <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>
                             {cleanDescription || 'No detailed description provided for this project yet.'}
                         </p>
+                        {isLeader && (
+                            <Button style={{ width: '100%', marginTop: '12px' }} variant="outline" onClick={() => setIsUploadOpen(true)}>
+                                Upload Documents
+                            </Button>
+                        )}
                     </Card>
 
                     <ProjectTimeline project={project} hideWhenUnconfigured />
 
+                    <Card elevation={1} style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'white' }}>
+                        <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <FileText size={18} color="var(--primary)" /> Deliverables Tracking
+                        </h3>
+                        <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
+                                <thead>
+                                    <tr style={{ backgroundColor: 'var(--surface-hover)', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                                        <th style={{ padding: '12px', textAlign: 'left' }}>Document Name</th>
+                                        <th style={{ padding: '12px', textAlign: 'left' }}>View Deliverable</th>
+                                        <th style={{ padding: '12px', textAlign: 'left' }}>Stage</th>
+                                        <th style={{ padding: '12px', textAlign: 'left' }}>Submitted At</th>
+                                        <th style={{ padding: '12px', textAlign: 'left' }}>Status</th>
+                                        <th style={{ padding: '12px', textAlign: 'left' }}>Current Reviewer</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {submissionRows.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} style={{ padding: '18px', color: 'var(--text-disabled)' }}>No submissions yet.</td>
+                                        </tr>
+                                    ) : (
+                                        submissionRows.map((sub) => (
+                                            <tr key={sub._stageKey + (sub[`${sub._stageKey}Id`] || sub.id)} style={{ borderTop: '1px solid var(--border-color)' }}>
+                                                <td style={{ padding: '12px', fontWeight: 600 }}>{sub.fileName || 'Submission'}</td>
+                                                <td style={{ padding: '12px' }}>{sub.fileUrl ? <a href={sub.fileUrl} target="_blank" rel="noreferrer">Open</a> : '?'}</td>
+                                                <td style={{ padding: '12px' }}>{sub._stageLabel}</td>
+                                                <td style={{ padding: '12px' }}>{new Date(sub.uploadedAt).toLocaleString()}</td>
+                                                <td style={{ padding: '12px' }}>{getSubmissionStatusLabel(sub)}</td>
+                                                <td style={{ padding: '12px' }}>{getReviewerLabel(sub)}</td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </Card>
+
+                    {showPeerApproval && (
+                        <Card elevation={1} style={{ padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'white' }}>
+                            <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <ShieldCheck size={18} color="var(--primary)" /> Peer Approval
+                            </h3>
+                            <div style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>
+                                Deliverable uploaded by {activeTeamReviewer} is waiting for peer approval before supervisor review.
+                            </div>
+                            <div style={{ display: 'grid', gap: '14px' }}>
+                                <div style={{ padding: '14px', border: '1px solid var(--border-color)', borderRadius: '10px', backgroundColor: 'var(--surface-hover)' }}>
+                                    <div style={{ fontWeight: 700, marginBottom: '6px' }}>{activeTeamSubmission?.fileName || 'Submission'}</div>
+                                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                        Stage: <strong>{activeTeamSubmission?._stageLabel || getStageLabel(project.stageStatus)}</strong>
+                                    </div>
+                                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                                        Submitted at: <strong>{formatDateTime(activeTeamSubmission?.uploadedAt)}</strong>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => activeTeamSubmission?.fileUrl && setPreviewFile({
+                                                attachmentId: activeTeamSubmissionId || activeTeamSubmission.fileName || 'submission',
+                                                fileName: activeTeamSubmission.fileName || 'Submission',
+                                                fileUrl: activeTeamSubmission.fileUrl,
+                                            })}
+                                            leftIcon={<FileText size={14} />}
+                                            >
+                                                View Deliverable
+                                            </Button>
+                                        {myTeamVote ? (
+                                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '999px', backgroundColor: myTeamVote.approved ? '#dcfce7' : '#fee2e2', color: myTeamVote.approved ? '#166534' : '#b91c1c', fontSize: '12px', fontWeight: 700 }}>
+                                                {myTeamVote.approved ? 'You accepted this document' : 'You rejected this document'}
+                                                {peerItemTimestamp ? ` on ${peerItemTimestamp}` : ''}
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={async () => {
+                                                        if (!activeTeamSubmission || !activeTeamSubmissionId || !activeTeamStageEndpoint) return;
+                                                        setProcessingReviewId(user?.id || 'vote');
+                                                        try {
+                                                            await api.patch(
+                                                                `/submissions/${activeTeamStageEndpoint}/${activeTeamSubmissionId}/team-review`,
+                                                                { reviewerId: user?.id, approved: true, comment: '' }
+                                                            );
+                                                            fetchData();
+                                                        } finally {
+                                                            setProcessingReviewId(null);
+                                                        }
+                                                    }}
+                                                    isLoading={processingReviewId === (user?.id || 'vote')}
+                                                    leftIcon={<ThumbsUp size={14} />}
+                                                >
+                                                    ✔ Accept
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={async () => {
+                                                        if (!activeTeamSubmission || !activeTeamSubmissionId || !activeTeamStageEndpoint) return;
+                                                        setProcessingReviewId(user?.id || 'vote');
+                                                        try {
+                                                            await api.patch(
+                                                                `/submissions/${activeTeamStageEndpoint}/${activeTeamSubmissionId}/team-review`,
+                                                                {
+                                                                    reviewerId: user?.id,
+                                                                    approved: false,
+                                                                    comment: 'Changes requested by the team.',
+                                                                }
+                                                            );
+                                                            fetchData();
+                                                        } finally {
+                                                            setProcessingReviewId(null);
+                                                        }
+                                                    }}
+                                                    isLoading={processingReviewId === (user?.id || 'vote')}
+                                                    leftIcon={<ThumbsDown size={14} />}
+                                                >
+                                                    ✖ Reject
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            {isTeamRevision && (
+                                <div style={{ marginTop: '12px', color: '#b91c1c', backgroundColor: '#fef2f2', padding: '12px', borderRadius: '10px' }}>
+                                    Changes requested: A team member requested revisions on this document.
+                                </div>
+                            )}
+                            {isUnderSupervisor && (
+                                <div style={{ marginTop: '12px', color: '#075985', backgroundColor: '#ecfeff', padding: '12px', borderRadius: '10px' }}>
+                                    This deliverable is under supervisor review.
+                                </div>
+                            )}
+                        </Card>
+                    )}
                 </div>
 
                 {/* Right column: supervisor + compact square cards */}
@@ -234,7 +486,7 @@ export const StudentProjects: React.FC = () => {
                         {supervisor ? (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                                 <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold', marginBottom: '12px', border: '3px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
-                                    {supervisor.name.charAt(0).toUpperCase()}
+                                    {(supervisor.name || 'S').charAt(0).toUpperCase()}
                                 </div>
                                 <h4 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 700 }}>{supervisor.name}</h4>
                                 <p style={{ margin: '0 0 12px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>{supervisor.department || supervisor.branch || 'Department'}</p>
@@ -277,7 +529,7 @@ export const StudentProjects: React.FC = () => {
                                 {members.map((member, idx) => (
                                     <div key={member.studentId || idx} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                                         <div style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0, backgroundColor: member.isLeader ? 'var(--primary-glow)' : 'var(--surface-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '13px', color: member.isLeader ? 'var(--primary)' : 'var(--text-secondary)' }}>
-                                            {member.name.charAt(0)}
+                                            {(member.name || '?').charAt(0)}
                                         </div>
                                         <div style={{ minWidth: 0 }}>
                                             <div style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
@@ -461,6 +713,27 @@ export const StudentProjects: React.FC = () => {
                             title={previewFile.fileName}
                             src={getPreviewUrl(previewFile.fileUrl)}
                             style={{ width: '100%', height: '100%', border: 'none' }}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {isUploadOpen && project && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 1200, backgroundColor: 'rgba(15, 23, 42, 0.58)', display: 'flex', justifyContent: 'flex-end' }} onClick={() => setIsUploadOpen(false)}>
+                    <div style={{ width: 'min(860px, 96vw)', height: '100%', backgroundColor: 'var(--surface)', overflowY: 'auto', boxShadow: '-8px 0 30px rgba(0,0,0,0.15)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <div>
+                                <h2 style={{ margin: 0 }}>Submit Stage Documents</h2>
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Leader-only submission workspace for {project.projectTitle}</div>
+                            </div>
+                            <Button variant="outline" onClick={() => setIsUploadOpen(false)}>Close</Button>
+                        </div>
+                        <DeliverableUploader
+                            projectId={project.projectId}
+                            documentId={project.documentId}
+                            currentStage={String(project.stageStatus || 'SYNOPSIS')}
+                            isLeader={Boolean(isLeader)}
+                            onSuccess={fetchData}
                         />
                     </div>
                 </div>
