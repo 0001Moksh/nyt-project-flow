@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Loader, ProjectTimeline } from '../../components';
 import { api } from '../../services/api';
@@ -6,15 +6,14 @@ import {
   Calendar,
   Users,
   MessageSquare,
-  FileText,
-  Star,
-  AlertTriangle,
-  FileCheck,
   MapPin,
   Video,
   CheckCircle,
   Clock,
   Pencil,
+  FileText,
+  Download,
+  AlertCircle,
 } from 'lucide-react';
 import { ScheduleMeetingModal } from './ScheduleMeetingModal';
 import { ExecuteMeetingModal } from './ExecuteMeetingModal';
@@ -22,6 +21,8 @@ import { RescheduleMeetingModal } from './RescheduleMeetingModal';
 import type { FormAttachment, FormResponse } from '../../services/adminService';
 import { getPreviewUrl } from '../../utils/filePreview';
 import { isValidMeetingLink, openMeetingLink } from '../../utils/meetingLinks';
+import { useToastStore } from '../../utils/toastStore';
+import { useAuthStore } from '../../utils/authStore';
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
   if (!json) return [];
@@ -46,11 +47,115 @@ export const SupervisorTeamOverview: React.FC = () => {
   const [meetings, setMeetings] = useState<any[]>([]);
   const [formConfig, setFormConfig] = useState<FormResponse | null>(null);
   const [previewFile, setPreviewFile] = useState<FormAttachment | null>(null);
+  const [submissions, setSubmissions] = useState<any[]>([]);
 
   // Modal state
   const [isScheduling, setIsScheduling] = useState(false);
   const [executingMeetingId, setExecutingMeetingId] = useState<string | null>(null);
   const [rescheduleMeeting, setRescheduleMeeting] = useState<any | null>(null);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [pendingSubmission, setPendingSubmission] = useState<any>(null);
+  const [feedbackText, setFeedbackText] = useState('');
+
+  const addToast = useToastStore(state => state.addToast);
+
+  // Filter submissions for "Last Submission" (100% peer approved, pending supervisor review)
+  // Helper to check if submission is pending supervisor review
+  const isPendingSupervisorReview = (submission: any) => {
+    const status = String(submission?.status || '').toUpperCase();
+    const teamReviewStatus = String(submission?.teamReviewStatus || '').toUpperCase();
+    return status === 'PENDING_SUPERVISOR_REVIEW' || teamReviewStatus === 'PENDING_SUPERVISOR_REVIEW';
+  };
+
+  // Helper to check if team has fully approved a submission
+  // Returns true if all team members have approved (based on teamReviewJson)
+  const isTeamFullyApproved = (submission: any, teamSize: number) => {
+    if (!teamSize || teamSize <= 1) return false; // No team review needed for single member
+    try {
+      const teamReviewJson = submission?.teamReviewJson;
+      if (!teamReviewJson) return false;
+      const votes = JSON.parse(teamReviewJson);
+      if (!Array.isArray(votes)) return false;
+      const approvedVotes = votes.filter((v: any) => v.approved === true).length;
+      return approvedVotes === teamSize;
+    } catch {
+      return false;
+    }
+  };
+
+  const lastSubmission = useMemo(() => {
+    // Find submissions that are pending supervisor review
+    // This includes both the 'status' and 'teamReviewStatus' fields
+    return submissions.find((s: any) => {
+      const status = String(s.status || '').toUpperCase();
+      const teamReviewStatus = String(s.teamReviewStatus || '').toUpperCase();
+      const isSupervisorPending = status === 'PENDING_SUPERVISOR_REVIEW' || teamReviewStatus === 'PENDING_SUPERVISOR_REVIEW';
+
+      // Also check if team fully approved but status not updated yet
+      const isTeamFullyApproved = s?.teamReviewJson ? (() => {
+        try {
+          const votes = JSON.parse(s.teamReviewJson);
+          if (!Array.isArray(votes)) return false;
+          const approvedVotes = votes.filter((v: any) => v.approved === true).length;
+          // Assume team size of 3 if not available (typical team size)
+          return approvedVotes >= 3;
+        } catch {
+          return false;
+        }
+      })() : false;
+
+      return isSupervisorPending || isTeamFullyApproved;
+    });
+  }, [submissions]);
+
+  // Get team size for approval tracking
+  const teamSize = members.length;
+
+  // Filter submissions for "Deliverables Tracking" (supervisor approved)
+  const approvedDeliverables = useMemo(() => {
+    return submissions
+      .filter((s: any) => s.status === 'APPROVED')
+      .sort((a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  }, [submissions]);
+
+  const [activeStage, setActiveStage] = useState('SYNOPSIS');
+
+  const handleRequestChanges = (submission: any) => {
+    setPendingSubmission(submission);
+    setFeedbackText('');
+    setFeedbackModalOpen(true);
+  };
+
+  const handleApprove = async (submission: any) => {
+    try {
+      const stage = submission.stage?.toLowerCase() || 'synopsis';
+      await api.patch(`/submissions/${stage}/${submission[`${stage}Id`] || submission.finalId || submission.synopsisId || submission.progress1Id || submission.progress2Id}/approve`, {
+        supervisorId: useAuthStore.getState().user?.id
+      });
+      addToast('Deliverable approved successfully', 'success');
+      fetchData();
+    } catch (err: any) {
+      addToast(err.response?.data?.message || 'Failed to approve deliverable', 'error');
+    }
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackText.trim() || !pendingSubmission) return;
+    try {
+      const stage = pendingSubmission.stage?.toLowerCase() || 'synopsis';
+      await api.patch(`/submissions/${stage}/${pendingSubmission[`${stage}Id`] || pendingSubmission.finalId || pendingSubmission.synopsisId || pendingSubmission.progress1Id || pendingSubmission.progress2Id}/request-changes`, {
+        feedback: feedbackText,
+        supervisorId: useAuthStore.getState().user?.id
+      });
+      addToast('Feedback submitted successfully', 'success');
+      setFeedbackModalOpen(false);
+      setPendingSubmission(null);
+      setFeedbackText('');
+      fetchData();
+    } catch (err: any) {
+      addToast(err.response?.data?.message || 'Failed to submit feedback', 'error');
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -59,11 +164,12 @@ export const SupervisorTeamOverview: React.FC = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [projRes, teamsRes, teamMembersRes, stuRes] = await Promise.all([
+      const [projRes, teamsRes, teamMembersRes, stuRes, submissionsRes] = await Promise.all([
         api.get('/projects'),
         api.get('/teams'),
         api.get('/team-members'),
         api.get('/students'),
+        project?.documentId ? api.get(`/submissions/all/document/${project.documentId}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
       ]);
 
       // Support both teamId and accidental projectId in the route param
@@ -131,6 +237,7 @@ export const SupervisorTeamOverview: React.FC = () => {
         .filter((x: any) => x && x.studentId);
 
       setMembers(mems);
+      setSubmissions(submissionsRes.data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -493,102 +600,6 @@ export const SupervisorTeamOverview: React.FC = () => {
 
         {/* Right Sidebar */}
         <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
-          {/* Quick Actions */}
-          <Card
-            elevation={1}
-            style={{
-              borderRadius: '16px',
-              padding: '24px',
-              backgroundColor: '#f8fafc',
-              border: '1px solid var(--border-color)',
-            }}
-          >
-            <h4
-              style={{
-                margin: '0 0 18px',
-                fontSize: '13px',
-                fontWeight: 700,
-                color: 'var(--text-secondary)',
-                letterSpacing: '0.8px',
-                textTransform: 'uppercase',
-              }}
-            >
-              QUICK ACTIONS
-            </h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div
-                style={{
-                  padding: '14px 18px',
-                  backgroundColor: '#e0e7ff',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  color: '#3730a3',
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                }}
-              >
-                <FileText size={18} /> Request Review
-              </div>
-
-              <div
-                onClick={() => navigate(`/supervisor/submissions/${project.projectId}`)}
-                style={{
-                  padding: '14px 18px',
-                  backgroundColor: 'white',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                }}
-              >
-                <FileCheck size={18} color="var(--primary)" /> View All Submissions
-              </div>
-
-              <div
-                onClick={() =>
-                  navigate(`/supervisor/submissions/${project.projectId}?grade=true`)
-                }
-                style={{
-                  padding: '14px 18px',
-                  backgroundColor: 'white',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                }}
-              >
-                <Star size={18} color="#eab308" /> Issue Milestone Grade
-              </div>
-
-              <div
-                style={{
-                  padding: '14px 18px',
-                  backgroundColor: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  color: '#b91c1c',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  marginTop: '6px',
-                }}
-              >
-                <AlertTriangle size={18} /> Flag for Review
-              </div>
-            </div>
-          </Card>
-
           {/* Team Composition */}
           <Card
             elevation={1}
@@ -698,6 +709,241 @@ export const SupervisorTeamOverview: React.FC = () => {
               ENTER GROUP CHAT
             </div>
           </Card>
+
+          {/* Last Submission Card */}
+          <Card
+            elevation={1}
+            style={{
+              borderRadius: '16px',
+              overflow: 'hidden',
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            <div
+              style={{
+                padding: '20px 24px',
+                borderBottom: '1px solid var(--border-color)',
+                backgroundColor: '#fffbeb',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <h4
+                style={{
+                  margin: 0,
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: '#92400e',
+                  letterSpacing: '0.8px',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Last Submission
+              </h4>
+              {lastSubmission && (
+                <span style={{ fontSize: '11px', fontWeight: 600, backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '12px' }}>
+                  For Review
+                </span>
+              )}
+            </div>
+            <div style={{ padding: '24px' }}>
+              {lastSubmission ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div
+                    style={{
+                      padding: '16px',
+                      backgroundColor: 'var(--surface-hover)',
+                      borderRadius: '12px',
+                      border: '1px solid var(--border-color)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        marginBottom: '10px',
+                      }}
+                    >
+                      <FileText size={18} color="var(--primary)" />
+                      <span style={{ fontWeight: 600, fontSize: '14px' }}>{lastSubmission.fileName}</span>
+                      <span style={{ fontSize: '11px', backgroundColor: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '8px' }}>
+                        {lastSubmission.stage}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+                      Uploaded: {new Date(lastSubmission.uploadedAt).toLocaleDateString()}
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: '8px',
+                      }}
+                    >
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setPreviewFile({ fileName: lastSubmission.fileName, fileUrl: lastSubmission.fileUrl || '' })}
+                        style={{ flex: 1 }}
+                      >
+                        View Deliverable
+                      </Button>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}
+                  >
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => handleApprove(lastSubmission)}
+                      style={{ width: '100%' }}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRequestChanges(lastSubmission)}
+                      style={{ width: '100%', borderColor: '#dc2626', color: '#dc2626' }}
+                    >
+                      Request to Change
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '32px 16px',
+                    color: 'var(--text-disabled)',
+                  }}
+                >
+                  <AlertCircle size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                  <p style={{ fontSize: '14px' }}>No pending submissions for review</p>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Deliverables Tracking Card */}
+          <Card
+            elevation={1}
+            style={{
+              borderRadius: '16px',
+              overflow: 'hidden',
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            <div
+              style={{
+                padding: '20px 24px',
+                borderBottom: '1px solid var(--border-color)',
+                backgroundColor: '#f0fdf4',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <h4
+                style={{
+                  margin: 0,
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: '#166534',
+                  letterSpacing: '0.8px',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Deliverables Tracking
+              </h4>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }}>
+                {approvedDeliverables.length} Approved
+              </span>
+            </div>
+            <div style={{ padding: '24px' }}>
+              {approvedDeliverables.length === 0 ? (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '32px 16px',
+                    color: 'var(--text-disabled)',
+                  }}
+                >
+                  <FileText size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                  <p style={{ fontSize: '14px' }}>No approved deliverables yet</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {approvedDeliverables.map((del: any) => (
+                    <div
+                      key={del.submissionId}
+                      style={{
+                        padding: '14px',
+                        backgroundColor: 'var(--surface-hover)',
+                        borderRadius: '12px',
+                        border: '1px solid var(--border-color)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        <span style={{ fontSize: '13px', fontWeight: 600 }}>{del.fileName}</span>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            backgroundColor: '#dcfce7',
+                            color: '#15803d',
+                            padding: '2px 8px',
+                            borderRadius: '8px',
+                          }}
+                        >
+                          APPROVED
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          fontSize: '11.5px',
+                          color: 'var(--text-secondary)',
+                          marginBottom: '10px',
+                        }}
+                      >
+                        <span>{del.stage}</span>
+                        <span>{new Date(del.uploadedAt).toLocaleDateString()}</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setPreviewFile({
+                            fileName: del.fileName,
+                            fileUrl: del.fileUrl || '',
+                          })
+                        }
+                        style={{ width: '100%' }}
+                      >
+                        <Download size={12} style={{ marginRight: '6px' }} />
+                        View Deliverable
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
         </div>
       </div>
 
@@ -735,6 +981,84 @@ export const SupervisorTeamOverview: React.FC = () => {
             fetchData();
           }}
         />
+      )}
+
+      {/* Feedback Modal for "Request to Change" */}
+      {feedbackModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setFeedbackModalOpen(false)}
+        >
+          <div
+            style={{
+              background: 'white',
+              padding: '24px',
+              borderRadius: '12px',
+              width: '440px',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.16)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              style={{
+                marginTop: 0,
+                marginBottom: '16px',
+                fontSize: '18px',
+                fontWeight: 700,
+                color: '#dc2626',
+              }}
+            >
+              Request Changes
+            </h3>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+              Enter feedback for the team. They will need to make the requested changes and resubmit.
+            </p>
+            <div style={{ marginBottom: '20px' }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: 'var(--text-primary)',
+                }}
+              >
+                Required Changes / Comments
+              </label>
+              <textarea
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                placeholder="Specify what changes are required..."
+                rows={6}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  fontSize: '14px',
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <Button variant="outline" onClick={() => setFeedbackModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleSubmitFeedback} disabled={!feedbackText.trim()}>
+                Submit Feedback
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Preview Modal */}

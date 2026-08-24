@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { Loader, ProjectTimeline } from '../../components';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Loader, ProjectTimeline, Button } from '../../components';
 import { api } from '../../services/api';
-import { Users, X, Calendar, Video, MapPin, Link as LinkIcon } from 'lucide-react';
+import { Users, X, Calendar, Video, MapPin, Link as LinkIcon, FileText } from 'lucide-react';
 import { isValidMeetingLink, openMeetingLink } from '../../utils/meetingLinks';
+import { getPreviewUrl } from '../../utils/filePreview';
 
 const STAGE_LABELS: Record<string, string> = {
   SYNOPSIS: 'Synopsis',
@@ -34,7 +35,9 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
   const [project, setProject] = useState<any | null>(null);
   const [supervisorName, setSupervisorName] = useState<string>('Unassigned');
   const [meetings, setMeetings] = useState<any[]>([]);
+  const [submissions, setSubmissions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{fileName: string, fileUrl: string} | null>(null);
 
   useEffect(() => {
     if (!projectId) {
@@ -46,17 +49,19 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
     const load = async () => {
       setIsLoading(true);
       try {
-        const [projRes, teamsRes, teamMembersRes, studentsRes, supervisorsRes] = await Promise.all([
-          api.get(`/projects/${projectId}`),
+        const projRes = await api.get(`/projects/${projectId}`);
+        const p = projRes.data;
+
+        const [teamsRes, teamMembersRes, studentsRes, supervisorsRes, submissionsRes] = await Promise.all([
           api.get('/teams').catch(() => ({ data: [] })),
           api.get('/team-members').catch(() => ({ data: [] })),
           api.get('/students').catch(() => ({ data: [] })),
           api.get('/supervisors').catch(() => ({ data: [] })),
+          p.documentId ? api.get(`/submissions/all/document/${p.documentId}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
         ]);
         const meetingsRes = await api.get(`/supervisor/meetings/project/${projectId}`).catch(() => ({ data: [] }));
 
         if (cancelled) return;
-        const p = projRes.data;
         const team = (teamsRes.data || []).find((t: any) => t.teamId === p.teamId);
         const allStudents = studentsRes.data || [];
         let memberDetails: any[] = [];
@@ -85,6 +90,7 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
         const supervisor = (supervisorsRes.data || []).find((s: any) => s.supervisorId === p.supervisorId);
         setSupervisorName(supervisor?.name || 'Unassigned');
         setMeetings(meetingsRes.data || []);
+        setSubmissions(submissionsRes.data || []);
         setProject({
           ...p,
           team,
@@ -151,7 +157,163 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
             </div>
           ) : (
             <>
+              {/* Current Stage Badge and Deliverables Summary */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '16px 20px',
+                  backgroundColor: 'var(--surface-hover)',
+                  borderRadius: '12px',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      backgroundColor: 'var(--primary)',
+                      color: 'white',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {getStageLabel(project.stageStatus)}
+                  </div>
+                  <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                    Current Stage
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '14px',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    <FileText size={16} />
+                    <span>
+                      {submissions.length} submission{submissions.length !== 1 ? 's' : ''} uploaded
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <ProjectTimeline project={project} />
+
+              {/* Deliveries by Stage */}
+              {submissions.length > 0 && (
+                <div>
+                  <h4
+                    style={{
+                      fontSize: '16px',
+                      margin: '0 0 12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <FileText size={16} color="var(--primary)" /> Deliverables by Stage
+                  </h4>
+                  <div style={{ display: 'grid', gap: '12px' }}>
+                    {submissions.map((submission: any) => (
+                      <div
+                        key={submission.submissionId}
+                        style={{
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '10px',
+                          padding: '16px',
+                          backgroundColor: 'var(--surface-hover)',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            marginBottom: '12px',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: '8px',
+                                backgroundColor: '#e0f2fe',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#0369a1',
+                              }}
+                            >
+                              <FileText size={18} />
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '14px' }}>{submission.fileName}</div>
+                              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                {submission.stage} Submission
+                              </div>
+                            </div>
+                          </div>
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              backgroundColor:
+                                submission.status === 'APPROVED'
+                                  ? '#dcfce7'
+                                  : submission.status === 'REJECTED'
+                                  ? '#fee2e2'
+                                  : '#fef3c7',
+                              color:
+                                submission.status === 'APPROVED'
+                                  ? '#15803d'
+                                  : submission.status === 'REJECTED'
+                                  ? '#dc2626'
+                                  : '#d97706',
+                              padding: '4px 10px',
+                              borderRadius: '8px',
+                            }}
+                          >
+                            {submission.status}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            Uploaded: {new Date(submission.uploadedAt).toLocaleDateString()}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setPreviewFile({ fileName: submission.fileName, fileUrl: submission.fileUrl || '' })}
+                          >
+                            View Deliverable
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <h4 style={{ fontSize: '16px', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -227,6 +389,55 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
           )}
         </div>
       </div>
+
+      {/* Preview Modal */}
+      {previewFile && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            zIndex: 1000,
+          }}
+          onClick={() => setPreviewFile(null)}
+        >
+          <div
+            style={{
+              width: 'min(1000px, 96vw)',
+              height: 'min(85vh, 760px)',
+              backgroundColor: 'var(--surface)',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              border: '1px solid var(--border-color)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                padding: '14px 20px',
+                borderBottom: '1px solid var(--border-color)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ fontWeight: 600, fontSize: '15px' }}>{previewFile.fileName}</div>
+              <Button size="sm" variant="outline" onClick={() => setPreviewFile(null)}>
+                Close
+              </Button>
+            </div>
+            <iframe
+              title={previewFile.fileName}
+              src={getPreviewUrl(previewFile.fileUrl)}
+              style={{ width: '100%', height: 'calc(100% - 53px)', border: 'none' }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
