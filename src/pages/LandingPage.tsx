@@ -1,24 +1,81 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Lock, Activity, Brain, Users, ArrowRight, Play, X } from 'lucide-react';
+import {
+    ShieldCheck, Lock, Activity, Brain, Users, ArrowRight, Play, X,
+    Menu, CheckCircle2, Kanban, Calendar, BarChart3, Bell, FileText,
+    Sparkles, Zap, GitBranch, ChevronDown, MessageSquare, Clock,
+    Layers, Award, Building2
+} from 'lucide-react';
 import { api } from '../services/api';
 import '../styles/landing.css';
 import heroImg from '../assets/images/hero.png';
 import techImg from '../assets/images/tech.png';
 import dpgitmLogo from '../assets/images/dpgitm-logo.png';
 
+/* ---------------------------------------------------------------------- */
+/* Static content                                                          */
+/* ---------------------------------------------------------------------- */
+
+const NAV_LINKS = ['Features', 'AI Tools', 'Workflow', 'Roles', 'FAQ'];
+
+const DEMO_TABS = [
+    { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { key: 'kanban', label: 'Kanban', icon: Kanban },
+    { key: 'team', label: 'Team', icon: Users },
+    { key: 'ai', label: 'AI Assistant', icon: Sparkles },
+    { key: 'notifications', label: 'Notifications', icon: Bell },
+] as const;
+
+type DemoTabKey = typeof DEMO_TABS[number]['key'];
+
+const WORKFLOW_STEPS = [
+    { title: 'Create Project', desc: 'Define scope, team, and department in a guided setup.' },
+    { title: 'Assign & Plan', desc: 'Break work into tasks, set dependencies and milestones.' },
+    { title: 'Track Progress', desc: 'Kanban, calendar, and Gantt views stay in sync automatically.' },
+    { title: 'Review & Submit', desc: 'Supervisors review milestones and leave structured feedback.' },
+    { title: 'Deliver', desc: 'Final submission, sign-off, and archival in one click.' },
+];
+
+const FAQ_ITEMS = [
+    {
+        q: 'Do I need an account to explore the platform?',
+        a: 'No. Use "Explore Demo" to try the dashboard, Kanban board, and AI assistant on sample data with no login required.',
+    },
+    {
+        q: 'Who can register as a supervisor?',
+        a: 'Any faculty member of a listed department can request supervisor access. Requests are verified by OTP and approved by an admin.',
+    },
+    {
+        q: 'Is student and project data secure?',
+        a: 'All data is encrypted in transit and at rest, with role-based access control and full audit logs for every change.',
+    },
+    {
+        q: 'Can I export reports?',
+        a: 'Yes — analytics and project reports can be exported as PDF, Excel, or CSV directly from the reports panel.',
+    },
+];
+
+/* ---------------------------------------------------------------------- */
+
 export const LandingPage: React.FC = () => {
     const navigate = useNavigate();
     const [scrolled, setScrolled] = useState(false);
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [activeDemoTab, setActiveDemoTab] = useState<DemoTabKey>('dashboard');
+    const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
     useEffect(() => {
-        const handleScroll = () => {
-            setScrolled(window.scrollY > 50);
-        };
+        const handleScroll = () => setScrolled(window.scrollY > 50);
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
+    const scrollToSection = (id: string) => {
+        setMobileNavOpen(false);
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    /* ---------------- registration modal state (unchanged logic) ---------------- */
     const [departments, setDepartments] = useState<string[]>([]);
     const [showRegisterModal, setShowRegisterModal] = useState(false);
     const [regStep, setRegStep] = useState<1 | 2>(1);
@@ -53,7 +110,6 @@ export const LandingPage: React.FC = () => {
         setIsRegistering(true);
         try {
             await api.post('/otp/resend', { email: regData.mail, accountType: 'SUPERVISOR' });
-            // Move to OTP step on success
             setRegStep(2);
             alert("OTP sent to your email!");
         } catch (err: any) {
@@ -67,265 +123,601 @@ export const LandingPage: React.FC = () => {
         e.preventDefault();
         setIsRegistering(true);
         try {
-            // 1. Verify OTP
             await api.post('/otp/verify', { email: regData.mail, code: regData.otp, accountType: 'SUPERVISOR' });
-            
-            // 2. Submit the registration request (no password)
             await api.post('/requests', {
                 supervisorName: regData.supervisorName,
                 department: regData.department,
                 mail: regData.mail,
                 phoneNumber: regData.phoneNumber
             });
-            
             alert("Registration successful! Your request has been sent to the Admin for approval.");
             setShowRegisterModal(false);
             setRegStep(1);
             setRegData({ supervisorName: '', department: '', mail: '', phoneNumber: '', otp: '' });
         } catch (err: any) {
-             alert(err.response?.data?.message || err.message || "OTP Verification failed.");
+            alert(err.response?.data?.message || err.message || "OTP Verification failed.");
         } finally {
-             setIsRegistering(false);
+            setIsRegistering(false);
         }
     };
 
     return (
         <div className="landing-container">
 
-            {/* Hero Section */}
-            <section className="hero-wrapper">
-                <div className="hero-content animate-fade-in-up delay-100">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '24px' }}>
-                        <img src={dpgitmLogo} alt="DPGITM logo" style={{ width: '64px', height: '64px', objectFit: 'contain' }} />
-                        <div>
-                            <div style={{ fontSize: '1.05rem', color: '#143d7d', fontWeight: 800 }}>DPGITM</div>
-                            <div style={{ fontSize: '0.9rem', color: '#5b6475', fontWeight: 600 }}>Project Management System</div>
-                        </div>
-                    </div>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: '#F0F4FF', color: '#0A2B73', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
-                        <Brain size={16} /> AI-Powered Academic Environment
-                    </div>
-                    <h1 className="heading-xl">
-                        DPGITM Project Management System
-                    </h1>
-                    <p className="subtitle delay-200">
-                        Manage teams, submissions, supervisor reviews, meetings, and milestone timelines from one structured academic workspace.
-                    </p>
-                    <div style={{ display: 'flex', gap: '16px' }} className="animate-fade-in-up delay-300">
-                        <button className="btn btn-primary" onClick={() => navigate('/login')} style={{ padding: '16px 32px', fontSize: '1.1rem' }}>
-                            Login via Secure Link <ArrowRight size={20} style={{ marginLeft: '8px' }} />
-                        </button>
-                        <button className="btn btn-outline" onClick={() => setShowRegisterModal(true)} style={{ padding: '16px 32px', fontSize: '1.1rem', borderColor: '#CCC' }}>
+            {/* ============================== NAVBAR ============================== */}
+            <nav className={`dpg-navbar ${scrolled ? 'is-scrolled' : ''}`}>
+                <div className="dpg-navbar-inner">
+                    <button className="dpg-nav-brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                        <img src={dpgitmLogo} alt="DPGITM logo" />
+                        <span className="dpg-nav-brand-text">DPGITM&nbsp;PMS</span>
+                    </button>
+
+                    <ul className="dpg-nav-links">
+                        {NAV_LINKS.map(link => (
+                            <li key={link}>
+                                <button onClick={() => scrollToSection(link.toLowerCase().replace(' ', '-'))}>{link}</button>
+                            </li>
+                        ))}
+                    </ul>
+
+                    <div className="dpg-nav-actions">
+                        <button className="btn btn-outline btn-sm" onClick={() => setShowRegisterModal(true)}>
                             Register as Supervisor
                         </button>
+                        <button className="btn btn-primary btn-sm" onClick={() => navigate('/login')}>
+                            Login <ArrowRight size={16} />
+                        </button>
+                        <button className="dpg-nav-toggle" onClick={() => setMobileNavOpen(o => !o)} aria-label="Toggle menu">
+                            {mobileNavOpen ? <X size={20} /> : <Menu size={20} />}
+                        </button>
                     </div>
                 </div>
-                <div className="hero-visual animate-fade-in-up delay-400">
-                    {/* Decorative elements */}
-                    <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(10,43,115,0.1) 0%, rgba(255,255,255,0) 70%)', zIndex: -1, borderRadius: '50%' }} className="animate-float" />
-                    <img src={heroImg} alt="AI Dashboard Mockup" className="hero-image" />
-                    <div className="glass-panel animate-float delay-200" style={{ position: 'absolute', bottom: '-20px', left: '-40px', padding: '16px 24px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <div style={{ background: '#E6F4EA', color: '#137333', padding: '8px', borderRadius: '50%' }}><Play size={16} fill="currentColor" /></div>
+
+                <div className={`dpg-nav-mobile ${mobileNavOpen ? 'is-open' : ''}`}>
+                    {NAV_LINKS.map(link => (
+                        <button key={link} onClick={() => scrollToSection(link.toLowerCase().replace(' ', '-'))}>{link}</button>
+                    ))}
+                    <button className="btn btn-outline btn-block" onClick={() => setShowRegisterModal(true)}>
+                        Register as Supervisor
+                    </button>
+                    <button className="btn btn-primary btn-block" onClick={() => navigate('/login')}>
+                        Login <ArrowRight size={16} />
+                    </button>
+                </div>
+            </nav>
+
+            {/* ============================== HERO ============================== */}
+            <section className="hero-wrapper">
+                <div className="hero-content animate-fade-in-up delay-100">
+                    <div className="hero-brand-row">
+                        <img src={dpgitmLogo} alt="DPGITM logo" />
                         <div>
-                            <div style={{ fontSize: '0.85rem', color: '#555' }}>Active AI Agent</div>
-                            <div style={{ fontWeight: 600, color: '#1A1A1A' }}>Data processed in <span style={{ color: '#0A2B73' }}>1.2s</span></div>
+                            <div className="hero-brand-name">DPGITM</div>
+                            <div className="hero-brand-tag">Project Management System</div>
+                        </div>
+                    </div>
+
+                    <span className="eyebrow"><Brain size={16} /> AI-Powered Academic Environment</span>
+
+                    <h1 className="heading-xl" style={{ marginTop: '16px' }}>
+                        Plan Better. Execute Faster. Deliver Smarter.
+                    </h1>
+
+                    <p className="subtitle">
+                        Manage teams, submissions, supervisor reviews, meetings, and milestone
+                        timelines from one structured academic workspace — built for DPGITM.
+                    </p>
+
+                    <div className="hero-cta-group">
+                        <button className="btn btn-primary" onClick={() => navigate('/login')}>
+                            Login via Secure Link <ArrowRight size={20} />
+                        </button>
+                        <button className="btn btn-outline" onClick={() => scrollToSection('features')}>
+                            <Play size={18} /> Explore Demo
+                        </button>
+                    </div>
+                </div>
+
+                <div className="hero-visual animate-fade-in-up delay-200">
+                    <div className="hero-blob" />
+                    <img src={heroImg} alt="Product preview" className="hero-image animate-float" />
+                    <div className="hero-floating-card glass-panel">
+                        <div className="hero-floating-icon"><CheckCircle2 size={18} /></div>
+                        <div>
+                            <div className="hero-floating-label">Milestone completed</div>
+                            <div className="hero-floating-value">Phase 2 <span>· 82%</span></div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* Badges */}
-            <section className="badges-banner">
+            {/* ========================= TRUST / QUICK FACTS ========================= */}
+            <div className="badges-banner">
                 <div className="badge-item">
-                    <div className="badge-icon"><ShieldCheck size={24} /></div>
+                    <div className="badge-icon"><ShieldCheck size={22} /></div>
                     <div>
-                        <div style={{ fontSize: '0.85rem', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Strict Role Access</div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 400, color: '#888' }}>RBAC for Admin, Supervisor, Student</div>
+                        <div className="badge-title">Secure by design</div>
+                        <div className="badge-desc">Encrypted OTP-verified access</div>
                     </div>
                 </div>
-                <div style={{ width: '1px', background: '#E0E0E0', height: '40px' }} className="nav-links" />
                 <div className="badge-item">
-                    <div className="badge-icon"><Lock size={24} /></div>
+                    <div className="badge-icon"><Activity size={22} /></div>
                     <div>
-                        <div style={{ fontSize: '0.85rem', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OTP-Secure Login</div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 400, color: '#888' }}>MFA layer via email verification</div>
+                        <div className="badge-title">Live tracking</div>
+                        <div className="badge-desc">Real-time project health</div>
                     </div>
                 </div>
-                <div style={{ width: '1px', background: '#E0E0E0', height: '40px' }} className="nav-links" />
                 <div className="badge-item">
-                    <div className="badge-icon"><Activity size={24} /></div>
+                    <div className="badge-icon"><Brain size={22} /></div>
                     <div>
-                        <div style={{ fontSize: '0.85rem', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Real-Time Tracking</div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 400, color: '#888' }}>Live STOMP sockets for updates</div>
+                        <div className="badge-title">AI assisted</div>
+                        <div className="badge-desc">Summaries, risk & reports</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* ========================= INTERACTIVE PRODUCT TOUR ========================= */}
+            <section id="ai-tools" className="demo-section">
+                <div className="demo-header">
+                    <span className="eyebrow" style={{ background: 'rgba(255,255,255,0.1)', color: '#dbe2f7' }}>
+                        <Sparkles size={16} /> Product Tour
+                    </span>
+                    <h2 className="heading-lg" style={{ marginTop: '14px' }}>See it in action</h2>
+                    <p className="subtitle">
+                        A single workspace for dashboards, boards, teams, and an AI assistant that
+                        actually knows your projects.
+                    </p>
+                </div>
+
+                <div className="demo-shell glass-panel" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                    <div className="demo-tabs">
+                        {DEMO_TABS.map(tab => {
+                            const Icon = tab.icon;
+                            return (
+                                <button
+                                    key={tab.key}
+                                    className={`demo-tab ${activeDemoTab === tab.key ? 'is-active' : ''}`}
+                                    onClick={() => setActiveDemoTab(tab.key)}
+                                >
+                                    <Icon size={16} /> {tab.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <div className="demo-panel">
+                        {activeDemoTab === 'dashboard' && (
+                            <>
+                                <div className="demo-stat-row">
+                                    <div className="demo-stat-card">
+                                        <div className="demo-stat-label">Active Projects</div>
+                                        <div className="demo-stat-value">24</div>
+                                    </div>
+                                    <div className="demo-stat-card">
+                                        <div className="demo-stat-label">Tasks Completed</div>
+                                        <div className="demo-stat-value">312</div>
+                                    </div>
+                                    <div className="demo-stat-card">
+                                        <div className="demo-stat-label">Teams</div>
+                                        <div className="demo-stat-value">18</div>
+                                    </div>
+                                    <div className="demo-stat-card">
+                                        <div className="demo-stat-label">On-Time Rate</div>
+                                        <div className="demo-stat-value">91%</div>
+                                    </div>
+                                </div>
+                                <div className="demo-project">
+                                    <div className="demo-project-row">
+                                        <span>Project Alpha — Final Year Capstone</span>
+                                        <span>82%</span>
+                                    </div>
+                                    <div className="demo-progress-track">
+                                        <div className="demo-progress-fill" style={{ width: '82%' }} />
+                                    </div>
+                                </div>
+                                <div className="demo-project">
+                                    <div className="demo-project-row">
+                                        <span>MCF Integration Tool</span>
+                                        <span>64%</span>
+                                    </div>
+                                    <div className="demo-progress-track">
+                                        <div className="demo-progress-fill is-amber" style={{ width: '64%' }} />
+                                    </div>
+                                </div>
+                                <div className="demo-project">
+                                    <div className="demo-project-row">
+                                        <span>AI Chatbot Research</span>
+                                        <span>97%</span>
+                                    </div>
+                                    <div className="demo-progress-track">
+                                        <div className="demo-progress-fill is-green" style={{ width: '97%' }} />
+                                    </div>
+                                </div>
+                                <p className="demo-panel-caption">Sample data shown — no account required.</p>
+                            </>
+                        )}
+
+                        {activeDemoTab === 'kanban' && (
+                            <>
+                                <div className="demo-stat-row">
+                                    {['To Do', 'In Progress', 'Review', 'Done'].map((col, i) => (
+                                        <div className="demo-stat-card" key={col}>
+                                            <div className="demo-stat-label">{col}</div>
+                                            <div className="demo-stat-value">{[5, 3, 2, 9][i]}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="demo-panel-caption">Drag-and-drop cards move instantly across every view — Kanban, list, and calendar stay in sync.</p>
+                            </>
+                        )}
+
+                        {activeDemoTab === 'team' && (
+                            <div className="demo-team-card">
+                                <div className="demo-team-header">
+                                    <div className="demo-avatars">
+                                        <div className="demo-avatar">MB</div>
+                                        <div className="demo-avatar">RS</div>
+                                        <div className="demo-avatar">AK</div>
+                                        <div className="demo-avatar">+4</div>
+                                    </div>
+                                    <span className="demo-tag">Dept: CSE — AIML</span>
+                                </div>
+                                <div className="demo-tags">
+                                    <span className="demo-tag">Supervisor: Dr. Verma</span>
+                                    <span className="demo-tag">7 members</span>
+                                    <span className="demo-tag">3 active sprints</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeDemoTab === 'ai' && (
+                            <div className="demo-chat">
+                                <div className="demo-chat-bubble is-user">What's the status of Project Alpha?</div>
+                                <div className="demo-chat-bubble is-ai">
+                                    Project Alpha is 82% complete and on track for its deadline.
+                                    <ul>
+                                        <li>2 tasks are overdue in the "Testing" phase</li>
+                                        <li>Next milestone: Final Review, due in 6 days</li>
+                                        <li>Recommended: reassign 1 overdue task to balance workload</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeDemoTab === 'notifications' && (
+                            <div className="demo-notif-list">
+                                <div className="demo-notif">
+                                    <div className="demo-notif-icon"><Bell size={16} /></div>
+                                    <div>
+                                        <div className="demo-notif-text">Rahul completed "API integration testing"</div>
+                                        <div className="demo-notif-time">2 minutes ago</div>
+                                    </div>
+                                </div>
+                                <div className="demo-notif">
+                                    <div className="demo-notif-icon"><Clock size={16} /></div>
+                                    <div>
+                                        <div className="demo-notif-text">Milestone "Phase 2 Review" is due tomorrow</div>
+                                        <div className="demo-notif-time">1 hour ago</div>
+                                    </div>
+                                </div>
+                                <div className="demo-notif">
+                                    <div className="demo-notif-icon"><MessageSquare size={16} /></div>
+                                    <div>
+                                        <div className="demo-notif-text">Dr. Verma commented on "MCF Integration Tool"</div>
+                                        <div className="demo-notif-time">3 hours ago</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </section>
 
-            {/* Features Base */}
-            <section id="features" className="section-wrapper" style={{ background: '#FFF' }}>
-                <div style={{ textAlign: 'center', maxWidth: '800px', margin: '0 auto' }}>
-                    <h2 className="heading-lg">Intelligent Academic Infrastructure</h2>
-                    <p className="subtitle">Leveraging predictive analytics and structured workflows to drive academic excellence.</p>
-                </div>
+            {/* ============================== FEATURES ============================== */}
+            <section id="features" className="section-wrapper">
+                <span className="eyebrow">Core Platform</span>
+                <h2 className="heading-lg" style={{ marginTop: '14px' }}>Everything a project needs, in one place</h2>
+                <p className="subtitle" style={{ margin: '0' }}>
+                    From task boards to supervisor sign-off, every stage of a project lives inside
+                    a single structured workspace.
+                </p>
 
                 <div className="feature-grid">
-                    {/* Card 1 */}
-                    <div className="glass-card feature-card" style={{ gridColumn: 'span 2', flexDirection: 'row', alignItems: 'center', padding: '0' }}>
-                        <div style={{ flex: 1, padding: '48px' }}>
-                            <div style={{ width: '48px', height: '48px', background: '#F0F4FF', color: '#0A2B73', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-                                <Activity size={24} />
-                            </div>
-                            <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '16px', color: '#1A1A1A' }}>AI & Predictive Analytics</h3>
-                            <p style={{ color: '#555', lineHeight: '1.6', fontSize: '1.1rem' }}>
-                                Our RAG-based AI identities project risks before they occur, analyzing synopsis drafts and progress consistency to ensure timely success.
+                    <div className="glass-card feature-card-large">
+                        <div className="feature-card-text">
+                            <div className="feature-icon"><Kanban size={24} /></div>
+                            <div className="feature-title">Kanban, List & Gantt views</div>
+                            <p className="feature-desc">
+                                Switch between drag-and-drop boards, flat task lists, and dependency-aware
+                                Gantt charts — all reading from the same live project data.
                             </p>
                         </div>
-                        <div style={{ flex: 1, height: '100%', minHeight: '300px', background: 'linear-gradient(135deg, #ECF2FF 0%, #FFFFFF 100%)', position: 'relative', overflow: 'hidden' }}>
-                            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '200%', height: '200%', background: 'radial-gradient(circle, rgba(10,43,115,0.05) 0%, rgba(255,255,255,0) 70%)' }}></div>
-                            <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' viewBox=\'0 0 20 20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'%230a2b73\' fill-opacity=\'0.05\' fill-rule=\'evenodd\'%3E%3Ccircle cx=\'3\' cy=\'3\' r=\'3\'/%3E%3C/g%3E%3C/svg%3E")' }}></div>
-                            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-                                <Brain size={80} color="#0A2B73" style={{ opacity: 0.1 }} />
-                            </div>
+                        <div className="feature-card-art">
+                            <img src={techImg} alt="Board preview" style={{ width: '80%', borderRadius: '12px', boxShadow: 'var(--dpg-shadow-md)' }} />
                         </div>
                     </div>
 
-                    {/* Card 2 */}
-                    <div className="glass-card feature-card" id="workflow">
-                        <div style={{ background: '#0A2B73', color: '#FFF', padding: '32px', borderRadius: '16px', height: '100%' }}>
-                            <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '24px' }}>4-Stage Academic Workflow</h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                {['Synopsis Approval', 'Progress Review 1', 'Progress Review 2', 'Final Submission'].map((stage, i) => (
-                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.1)', padding: '12px 16px', borderRadius: '8px' }}>
-                                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#FFF', color: '#0A2B73', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem' }}>0{i + 1}</div>
-                                        <div style={{ fontWeight: 500 }}>{stage}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                    <div className="glass-card feature-card">
+                        <div className="feature-icon is-green"><Calendar size={22} /></div>
+                        <div className="feature-title">Calendar & Milestones</div>
+                        <p className="feature-desc">See deadlines, meetings, and milestone checkpoints at a glance.</p>
                     </div>
 
-                    {/* Card 3 */}
-                    <div className="glass-card feature-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                        <div>
-                            <div style={{ width: '48px', height: '48px', background: '#F0F4FF', color: '#0A2B73', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-                                <Users size={24} />
-                            </div>
-                            <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '16px', color: '#1A1A1A' }}>Smart Team Formation</h3>
-                            <p style={{ color: '#555', lineHeight: '1.6', marginBottom: '24px' }}>
-                                Automated matching based on student skills, interest clusters, and supervisor expertise.
-                            </p>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                            {[1, 2, 3].map(i => (
-                                <div key={i} style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#E0E7FF', border: '2px solid #FFF', marginLeft: i > 1 ? '-12px' : 0, zIndex: 4 - i, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0A2B73' }}>
-                                    <Users size={16} />
-                                </div>
-                            ))}
-                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#0A2B73', border: '2px solid #FFF', marginLeft: '-12px', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontSize: '0.8rem', fontWeight: 'bold' }}>+5</div>
+                    <div className="glass-card feature-card">
+                        <div className="feature-icon is-amber"><Users size={22} /></div>
+                        <div className="feature-title">Team Collaboration</div>
+                        <p className="feature-desc">Comments, mentions, and file sharing keep every discussion in context.</p>
+                    </div>
+
+                    <div className="feature-card-dark">
+                        <div className="feature-icon-on-dark"><Bell size={22} /></div>
+                        <div className="feature-title">Real-Time Notifications</div>
+                        <p className="feature-desc" style={{ color: '#b6c8f2' }}>
+                            Task updates, mentions, and deadline alerts land instantly — no refresh needed.
+                        </p>
+                    </div>
+
+                    <div className="glass-card feature-card">
+                        <div className="feature-icon"><GitBranch size={22} /></div>
+                        <div className="feature-title">Task Dependencies</div>
+                        <p className="feature-desc">Chain tasks together so blocked work is always visible before it becomes a delay.</p>
+                        <div className="avatar-stack">
+                            <div className="avatar-chip">A</div>
+                            <div className="avatar-chip">B</div>
+                            <div className="avatar-chip">C</div>
+                            <div className="avatar-chip is-more">+5</div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* Institution Breakdown */}
-            <section id="institution" className="section-wrapper" style={{ background: '#F8F9FA' }}>
-                <div style={{ textAlign: 'center', marginBottom: '64px' }}>
-                    <h2 className="heading-lg">Tailored for the Institution</h2>
-                    <p className="subtitle">Specific interfaces designed for each academic pillar.</p>
-                </div>
-
-                <div className="glass-card" style={{ display: 'flex', background: '#FFF' }}>
-                    <div style={{ flex: 1, padding: '48px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                        <div>
-                            <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0A2B73', marginBottom: '8px' }}>Centralized Governance</h4>
-                            <p style={{ color: '#666', lineHeight: '1.5' }}>Manage department-wide deadlines, faculty workloads, and batch-wise progress from a single authoritative dashboard.</p>
-                        </div>
-                        <div style={{ height: '1px', background: '#EEE' }} />
-                        <div>
-                            <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1A1A1A', marginBottom: '8px' }}>Security & Compliance</h4>
-                            <p style={{ color: '#666', lineHeight: '1.5' }}>Role-based access control ensures student data privacy while maintaining complete audit trails for accreditation.</p>
-                        </div>
-                        <div style={{ height: '1px', background: '#EEE' }} />
-                        <div>
-                            <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1A1A1A', marginBottom: '8px' }}>Resource Optimization</h4>
-                            <p style={{ color: '#666', lineHeight: '1.5' }}>AI-driven insights highlight underperforming batches and resource bottlenecks before they impact graduation rates.</p>
-                        </div>
-                    </div>
-                    <div style={{ flex: 1, background: '#E0E7FF' }}>
-                        <img src={techImg} alt="Modern University Tech" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                </div>
-            </section>
-
-            {/* Call to Action */}
-            <section style={{ padding: '100px 5%', background: '#0A2B73', color: '#FFF', textAlign: 'center' }}>
-                <h2 style={{ fontSize: '4rem', fontWeight: 800, marginBottom: '24px', letterSpacing: '-0.02em' }}>Ready to elevate your department?</h2>
-                <p style={{ fontSize: '1.2rem', color: '#B6C8F2', maxWidth: '600px', margin: '0 auto 48px', lineHeight: '1.6' }}>
-                    Bring faculty, students, and administrators into one reliable workflow for final year project execution.
+            {/* ============================== AI FEATURES ============================== */}
+            <section className="section-wrapper">
+                <span className="eyebrow" style={{ background: 'var(--dpg-amber-100)', color: 'var(--dpg-amber-700)' }}>
+                    <Sparkles size={16} /> AI Features
+                </span>
+                <h2 className="heading-lg" style={{ marginTop: '14px' }}>An assistant that already knows your project</h2>
+                <p className="subtitle" style={{ margin: 0 }}>
+                    Ask questions, generate tasks, and catch risk before it becomes a missed deadline.
                 </p>
-                <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-                    <button className="btn btn-white" style={{ padding: '16px 32px', fontSize: '1.1rem' }}>Request Institution Demo</button>
-                    <button className="btn btn-outline" style={{ padding: '16px 32px', fontSize: '1.1rem', color: '#FFF', borderColor: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)' }}>Institutional Contact</button>
+
+                <div className="feature-grid">
+                    <div className="glass-card feature-card">
+                        <div className="feature-icon is-amber"><MessageSquare size={22} /></div>
+                        <div className="feature-title">AI Project Assistant</div>
+                        <p className="feature-desc">Ask "What's the status of Project Alpha?" and get a grounded, sourced answer.</p>
+                    </div>
+                    <div className="glass-card feature-card">
+                        <div className="feature-icon is-amber"><Zap size={22} /></div>
+                        <div className="feature-title">AI Task Generator</div>
+                        <p className="feature-desc">Turn a one-line prompt into a structured, assignable task list.</p>
+                    </div>
+                    <div className="glass-card feature-card">
+                        <div className="feature-icon is-amber"><Activity size={22} /></div>
+                        <div className="feature-title">Risk Detection</div>
+                        <p className="feature-desc">Delayed or at-risk tasks are flagged automatically, before deadlines slip.</p>
+                    </div>
+                    <div className="glass-card feature-card">
+                        <div className="feature-icon is-amber"><FileText size={22} /></div>
+                        <div className="feature-title">Auto Reports</div>
+                        <p className="feature-desc">Weekly and monthly summaries generate themselves — export in one click.</p>
+                    </div>
                 </div>
             </section>
 
-            {/* Footer */}
-            <footer style={{ padding: '32px 5%', background: '#051A49', color: '#889BCE', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                <div>
-                    <p style={{ fontSize: '0.78rem' }}>Powered by - Nexyug Tech</p>
+            {/* ============================== WORKFLOW ============================== */}
+            <section id="workflow" className="section-wrapper workflow-section">
+                <span className="eyebrow">How it works</span>
+                <h2 className="heading-lg" style={{ marginTop: '14px' }}>From kickoff to sign-off</h2>
+                <p className="subtitle" style={{ margin: 0 }}>Five stages, one continuous workspace.</p>
+
+                <div className="workflow-grid">
+                    {WORKFLOW_STEPS.map((step, i) => (
+                        <div className="workflow-step" key={step.title}>
+                            <div className="workflow-dot">{i + 1}</div>
+                            <div className="workflow-step-title">{step.title}</div>
+                            <div className="workflow-step-desc">{step.desc}</div>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* ============================== INSTITUTION ============================== */}
+            <section className="section-wrapper">
+                <div className="glass-card institution-card">
+                    <div className="institution-text">
+                        <span className="eyebrow"><Building2 size={16} /> Built for DPGITM</span>
+                        <h2 className="heading-lg" style={{ margin: 0 }}>Made for academic project cycles</h2>
+
+                        <div>
+                            <div className="institution-item-title">Structured supervisor review</div>
+                            <p className="institution-item-desc">Every submission routes to the right supervisor, with OTP-verified registration and admin approval.</p>
+                        </div>
+                        <div className="institution-divider" />
+                        <div>
+                            <div className="institution-item-title">Department-aware</div>
+                            <p className="institution-item-desc">Departments, branches, and teams are modeled the way the institute actually runs.</p>
+                        </div>
+                        <div className="institution-divider" />
+                        <div>
+                            <div className="institution-item-title">Audit-ready</div>
+                            <p className="institution-item-desc">Every change is logged — who did what, and when.</p>
+                        </div>
+                    </div>
+                    <div className="institution-image-col">
+                        <img src={techImg} alt="Institution preview" />
+                    </div>
+                </div>
+            </section>
+
+            {/* ============================== ROLES ============================== */}
+            <section id="roles" className="section-wrapper">
+                <span className="eyebrow">Built for every role</span>
+                <h2 className="heading-lg" style={{ marginTop: '14px' }}>One platform, three perspectives</h2>
+                <p className="subtitle" style={{ margin: 0 }}>Admins, supervisors, and students each get exactly what they need.</p>
+
+                <div className="roles-grid">
+                    <div className="glass-card role-card">
+                        <div className="role-badge admin"><ShieldCheck size={22} /></div>
+                        <div className="role-title">Admin</div>
+                        <p className="role-desc">Full oversight of departments, supervisors, and platform-wide analytics.</p>
+                        <ul className="role-list">
+                            <li><CheckCircle2 size={16} /> Approve supervisor requests</li>
+                            <li><CheckCircle2 size={16} /> Manage roles & permissions</li>
+                            <li><CheckCircle2 size={16} /> View audit logs</li>
+                        </ul>
+                    </div>
+                    <div className="glass-card role-card">
+                        <div className="role-badge supervisor"><Award size={22} /></div>
+                        <div className="role-title">Supervisor</div>
+                        <p className="role-desc">Review milestones, leave feedback, and track every team under your guidance.</p>
+                        <ul className="role-list">
+                            <li><CheckCircle2 size={16} /> Review submissions</li>
+                            <li><CheckCircle2 size={16} /> Track team progress</li>
+                            <li><CheckCircle2 size={16} /> Schedule meetings</li>
+                        </ul>
+                    </div>
+                    <div className="glass-card role-card">
+                        <div className="role-badge student"><Layers size={22} /></div>
+                        <div className="role-title">Student</div>
+                        <p className="role-desc">Manage tasks, submit milestones, and collaborate with your team in real time.</p>
+                        <ul className="role-list">
+                            <li><CheckCircle2 size={16} /> Kanban & task tracking</li>
+                            <li><CheckCircle2 size={16} /> Submit deliverables</li>
+                            <li><CheckCircle2 size={16} /> Chat with your team</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            {/* ============================== SECURITY ============================== */}
+            <section className="section-wrapper">
+                <div className="feature-grid">
+                    <div className="feature-card-dark">
+                        <div className="feature-icon-on-dark"><Lock size={22} /></div>
+                        <div className="feature-title">Encrypted Access</div>
+                        <p className="feature-desc" style={{ color: '#b6c8f2' }}>OTP verification and encrypted storage protect every account.</p>
+                    </div>
+                    <div className="feature-card-dark">
+                        <div className="feature-icon-on-dark"><ShieldCheck size={22} /></div>
+                        <div className="feature-title">Role-Based Access</div>
+                        <p className="feature-desc" style={{ color: '#b6c8f2' }}>Admins, supervisors, and students each see exactly what they should.</p>
+                    </div>
+                    <div className="feature-card-dark">
+                        <div className="feature-icon-on-dark"><Activity size={22} /></div>
+                        <div className="feature-title">Full Audit Trail</div>
+                        <p className="feature-desc" style={{ color: '#b6c8f2' }}>Every change is timestamped and traceable, end to end.</p>
+                    </div>
+                </div>
+            </section>
+
+            {/* ============================== FAQ ============================== */}
+            <section id="faq" className="section-wrapper faq-section">
+                <span className="eyebrow">FAQ</span>
+                <h2 className="heading-lg" style={{ marginTop: '14px' }}>Frequently asked questions</h2>
+
+                <div className="faq-list">
+                    {FAQ_ITEMS.map((item, i) => (
+                        <div className={`faq-item ${openFaqIndex === i ? 'is-open' : ''}`} key={item.q}>
+                            <button className="faq-question" onClick={() => setOpenFaqIndex(openFaqIndex === i ? null : i)}>
+                                {item.q}
+                                <ChevronDown size={18} />
+                            </button>
+                            <div className="faq-answer">
+                                <p>{item.a}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* ============================== FINAL CTA ============================== */}
+            <section className="cta-section">
+                <h2 className="cta-heading">Your next project starts here.</h2>
+                <p className="cta-sub">
+                    Log in with your DPGITM credentials, or register as a supervisor to get started.
+                </p>
+                <div className="cta-actions">
+                    <button className="btn btn-white" onClick={() => navigate('/login')}>
+                        Login via Secure Link <ArrowRight size={20} />
+                    </button>
+                    <button className="btn btn-outline" style={{ borderColor: 'rgba(255,255,255,0.3)', color: '#fff' }} onClick={() => setShowRegisterModal(true)}>
+                        Register as Supervisor
+                    </button>
+                </div>
+            </section>
+
+            {/* ============================== FOOTER ============================== */}
+            <footer className="landing-footer">
+                <div className="footer-inner">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <img src={dpgitmLogo} alt="DPGITM logo" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
+                        <span style={{ fontWeight: 700, color: '#fff' }}>DPGITM PMS</span>
+                    </div>
+                    <ul className="footer-links">
+                        <li><button onClick={() => scrollToSection('features')}>Features</button></li>
+                        <li><button onClick={() => scrollToSection('ai-tools')}>AI Tools</button></li>
+                        <li><button onClick={() => scrollToSection('roles')}>Roles</button></li>
+                        <li><button onClick={() => scrollToSection('faq')}>FAQ</button></li>
+                    </ul>
+                    <div className="footer-credit">Powered by — Nexyug Tech</div>
                 </div>
             </footer>
 
-            {/* SUPERVISOR REGISTRATION MODAL */}
+            {/* ============================== SUPERVISOR REGISTRATION MODAL ============================== */}
             {showRegisterModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(4px)' }}>
-                    <div className="glass-card" style={{ width: '90%', maxWidth: '500px', background: '#FFF', padding: '32px', position: 'relative', borderRadius: '16px' }}>
-                        <button onClick={() => { setShowRegisterModal(false); setRegStep(1); }} style={{ position: 'absolute', top: '24px', right: '24px', background: 'none', border: 'none', cursor: 'pointer', color: '#888' }}>
+                <div className="modal-overlay">
+                    <div className="modal-card glass-card">
+                        <button
+                            className="modal-close"
+                            onClick={() => { setShowRegisterModal(false); setRegStep(1); }}
+                            aria-label="Close"
+                        >
                             <X size={24} />
                         </button>
-                        
-                        <h2 style={{ fontSize: '1.8rem', fontWeight: 700, margin: '0 0 8px', color: '#1A1A1A' }}>Supervisor Registration</h2>
-                        <p style={{ color: '#666', marginBottom: '24px' }}>
+
+                        <h2 className="modal-title">Supervisor Registration</h2>
+                        <p className="modal-desc">
                             {regStep === 1 ? 'Enter your details to generate an OTP profile.' : 'Enter the OTP sent to your email to confirm registration.'}
                         </p>
 
                         {regStep === 1 ? (
-                            <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Full Name</label>
-                                    <input required name="supervisorName" value={regData.supervisorName} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem' }} />
+                            <form onSubmit={handleSendOtp}>
+                                <div className="form-field">
+                                    <label>Full Name</label>
+                                    <input required name="supervisorName" value={regData.supervisorName} onChange={handleRegChange} />
                                 </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Department</label>
-                                    <select required name="department" value={regData.department} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem', backgroundColor: 'white' }}>
+                                <div className="form-field">
+                                    <label>Department</label>
+                                    <select required name="department" value={regData.department} onChange={handleRegChange}>
                                         <option value="" disabled>Select a department</option>
                                         {departments.map(dept => (
                                             <option key={dept} value={dept}>{dept}</option>
                                         ))}
                                     </select>
                                 </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Email</label>
-                                    <input required type="email" name="mail" value={regData.mail} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem' }} />
+                                <div className="form-field">
+                                    <label>Email</label>
+                                    <input required type="email" name="mail" value={regData.mail} onChange={handleRegChange} />
                                 </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>Phone Number</label>
-                                    <input required name="phoneNumber" value={regData.phoneNumber} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1rem' }} />
+                                <div className="form-field">
+                                    <label>Phone Number</label>
+                                    <input required name="phoneNumber" value={regData.phoneNumber} onChange={handleRegChange} />
                                 </div>
-                                <button type="submit" disabled={isRegistering} className="btn btn-primary" style={{ marginTop: '16px', padding: '14px', fontSize: '1.1rem', background: '#0A2B73', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                                <button type="submit" disabled={isRegistering} className="btn btn-primary btn-block" style={{ marginTop: '8px' }}>
                                     {isRegistering ? 'Sending OTP...' : 'Send OTP'}
                                 </button>
                             </form>
                         ) : (
-                            <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#333', marginBottom: '4px' }}>6-Digit OTP</label>
-                                    <input required type="text" maxLength={6} name="otp" value={regData.otp} onChange={handleRegChange} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '1.5rem', letterSpacing: '8px', textAlign: 'center' }} />
+                            <form onSubmit={handleVerifyOtp}>
+                                <div className="form-field">
+                                    <label>6-Digit OTP</label>
+                                    <input required type="text" maxLength={6} name="otp" value={regData.otp} onChange={handleRegChange} className="otp-input" />
                                 </div>
-                                <button type="submit" disabled={isRegistering} className="btn btn-primary" style={{ marginTop: '16px', padding: '14px', fontSize: '1.1rem', background: '#137333', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                                <button type="submit" disabled={isRegistering} className="btn btn-primary btn-block" style={{ marginTop: '8px', background: 'var(--dpg-green-700)' }}>
                                     {isRegistering ? 'Verifying...' : 'Verify & Submit'}
                                 </button>
-                                <button type="button" onClick={() => setRegStep(1)} style={{ background: 'none', border: 'none', color: '#0A2B73', fontWeight: 600, cursor: 'pointer', marginTop: '8px' }}>
+                                <button type="button" onClick={() => setRegStep(1)} className="btn btn-ghost btn-block">
                                     Go Back
                                 </button>
                             </form>
