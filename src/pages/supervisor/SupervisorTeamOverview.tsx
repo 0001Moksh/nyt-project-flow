@@ -64,7 +64,7 @@ export const SupervisorTeamOverview: React.FC = () => {
   const isPendingSupervisorReview = (submission: any) => {
     const status = String(submission?.status || '').toUpperCase();
     const teamReviewStatus = String(submission?.teamReviewStatus || '').toUpperCase();
-    return status === 'PENDING_SUPERVISOR_REVIEW' || teamReviewStatus === 'PENDING_SUPERVISOR_REVIEW';
+    return status === 'PENDING_SUPERVISOR_REVIEW' || teamReviewStatus === 'PENDING_SUPERVISOR_REVIEW' || teamReviewStatus === 'PENDING_SRVR';
   };
 
   // Helper to check if team has fully approved a submission
@@ -89,7 +89,7 @@ export const SupervisorTeamOverview: React.FC = () => {
     return submissions.find((s: any) => {
       const status = String(s.status || '').toUpperCase();
       const teamReviewStatus = String(s.teamReviewStatus || '').toUpperCase();
-      const isSupervisorPending = status === 'PENDING_SUPERVISOR_REVIEW' || teamReviewStatus === 'PENDING_SUPERVISOR_REVIEW';
+      const isSupervisorPending = status === 'PENDING_SUPERVISOR_REVIEW' || teamReviewStatus === 'PENDING_SUPERVISOR_REVIEW' || teamReviewStatus === 'PENDING_SRVR';
 
       // Also check if team fully approved but status not updated yet
       const isTeamFullyApproved = s?.teamReviewJson ? (() => {
@@ -129,8 +129,10 @@ export const SupervisorTeamOverview: React.FC = () => {
   const handleApprove = async (submission: any) => {
     try {
       const stage = submission.stage?.toLowerCase() || 'synopsis';
-      await api.patch(`/submissions/${stage}/${submission[`${stage}Id`] || submission.finalId || submission.synopsisId || submission.progress1Id || submission.progress2Id}/approve`, {
-        supervisorId: useAuthStore.getState().user?.id
+      await api.patch(`/submissions/${stage}/${submission[`${stage}Id`] || submission.finalId || submission.synopsisId || submission.progress1Id || submission.progress2Id}/supervisor-review`, {
+        supervisorId: useAuthStore.getState().user?.id,
+        approved: true,
+        marks: 0 // Will be updated in backend if needed
       });
       addToast('Deliverable approved successfully', 'success');
       fetchData();
@@ -143,9 +145,10 @@ export const SupervisorTeamOverview: React.FC = () => {
     if (!feedbackText.trim() || !pendingSubmission) return;
     try {
       const stage = pendingSubmission.stage?.toLowerCase() || 'synopsis';
-      await api.patch(`/submissions/${stage}/${pendingSubmission[`${stage}Id`] || pendingSubmission.finalId || pendingSubmission.synopsisId || pendingSubmission.progress1Id || pendingSubmission.progress2Id}/request-changes`, {
-        feedback: feedbackText,
-        supervisorId: useAuthStore.getState().user?.id
+      await api.patch(`/submissions/${stage}/${pendingSubmission[`${stage}Id`] || pendingSubmission.finalId || pendingSubmission.synopsisId || pendingSubmission.progress1Id || pendingSubmission.progress2Id}/supervisor-review`, {
+        supervisorId: useAuthStore.getState().user?.id,
+        approved: false,
+        comment: feedbackText
       });
       addToast('Feedback submitted successfully', 'success');
       setFeedbackModalOpen(false);
@@ -164,12 +167,11 @@ export const SupervisorTeamOverview: React.FC = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [projRes, teamsRes, teamMembersRes, stuRes, submissionsRes] = await Promise.all([
+      const [projRes, teamsRes, teamMembersRes, stuRes] = await Promise.all([
         api.get('/projects'),
         api.get('/teams'),
         api.get('/team-members'),
         api.get('/students'),
-        project?.documentId ? api.get(`/submissions/all/document/${project.documentId}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
       ]);
 
       // Support both teamId and accidental projectId in the route param
@@ -186,6 +188,22 @@ export const SupervisorTeamOverview: React.FC = () => {
 
       setProject(thisProject || null);
       setTeamInfo(thisTeam || thisTeamMembers || null);
+
+      // Fetch submissions from all stages
+      let allSubmissions: any[] = [];
+      if (thisProject?.documentId) {
+        try {
+          const stages = ['synopsis', 'progress1', 'progress2', 'final'];
+          const submissionPromises = stages.map((stage) =>
+            api.get(`/submissions/${stage}/document/${thisProject.documentId}`).catch(() => ({ data: [] }))
+          );
+          const results = await Promise.all(submissionPromises);
+          allSubmissions = results.flatMap((res) => res.data || []);
+        } catch (err) {
+          console.error("Failed to fetch submissions:", err);
+        }
+      }
+      setSubmissions(allSubmissions);
 
       if (thisProject?.projectId) {
         try {
@@ -237,7 +255,6 @@ export const SupervisorTeamOverview: React.FC = () => {
         .filter((x: any) => x && x.studentId);
 
       setMembers(mems);
-      setSubmissions(submissionsRes.data || []);
     } catch (err) {
       console.error(err);
     } finally {
