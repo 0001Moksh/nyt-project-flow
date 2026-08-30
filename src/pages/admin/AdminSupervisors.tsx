@@ -47,6 +47,8 @@ const STATUS_OPTIONS = [
 ];
 
 const MENU_Z = 5000;
+/** Modals must sit above table sticky header + column/filter menus */
+const MODAL_Z = 10000;
 
 export const AdminSupervisors: React.FC = () => {
     const [supervisors, setSupervisors] = useState<any[]>([]);
@@ -949,7 +951,7 @@ export const AdminSupervisors: React.FC = () => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        zIndex: 1000,
+                        zIndex: MODAL_Z,
                     }}
                 >
                     <Card elevation={2} style={{ width: 480, backgroundColor: 'var(--surface)', borderRadius: 12, padding: 20 }}>
@@ -1109,7 +1111,7 @@ export const AdminSupervisors: React.FC = () => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        zIndex: 1000,
+                        zIndex: MODAL_Z,
                     }}
                 >
                     <Card elevation={2} style={{ width: 400, backgroundColor: 'var(--surface)', borderRadius: 12, padding: 20 }}>
@@ -1177,7 +1179,7 @@ export const AdminSupervisors: React.FC = () => {
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        zIndex: 1100,
+                        zIndex: MODAL_Z,
                     }}
                 >
                     <Card style={{ width: 520, padding: 20 }}>
@@ -1197,7 +1199,7 @@ export const AdminSupervisors: React.FC = () => {
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        zIndex: 1100,
+                        zIndex: MODAL_Z,
                     }}
                 >
                     <Card style={{ width: 560, padding: 20, maxHeight: '80vh', overflow: 'auto' }}>

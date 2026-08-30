@@ -42,6 +42,8 @@ const STATUS_OPTIONS = [
 
 /** Header menus (filter / + columns) always above scrolling body */
 const MENU_Z = 5000;
+/** Modals must sit above table sticky header + menus */
+const MODAL_Z = 10000;
 
 export const AdminStudents: React.FC = () => {
     const [students, setStudents] = useState<any[]>([]);
@@ -992,7 +994,7 @@ export const AdminStudents: React.FC = () => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        zIndex: 1000,
+                        zIndex: MODAL_Z,
                     }}
                 >
                     <Card elevation={2} style={{ width: 480, backgroundColor: 'var(--surface)', borderRadius: 12, padding: 20 }}>
@@ -1152,7 +1154,7 @@ export const AdminStudents: React.FC = () => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        zIndex: 1000,
+                        zIndex: MODAL_Z,
                     }}
                 >
                     <Card elevation={2} style={{ width: 480, backgroundColor: 'var(--surface)', borderRadius: 12, padding: 20 }}>
@@ -1306,7 +1308,7 @@ export const AdminStudents: React.FC = () => {
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        zIndex: 1100,
+                        zIndex: MODAL_Z,
                     }}
                 >
                     <Card style={{ width: 480, padding: 20 }}>
