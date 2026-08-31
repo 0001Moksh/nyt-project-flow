@@ -8,6 +8,7 @@ import { useAuthStore } from '../utils/authStore';
 import { useToastStore } from '../utils/toastStore';
 import { CheckCircle, Check, X, Search, ArrowLeft, Mail, ArrowRight, Paperclip, Users } from 'lucide-react';
 import { getPreviewUrl } from '../utils/filePreview';
+import { calculateAcademicProgress } from '../utils/studentAcademicUtils';
 
 const parseReferenceFiles = (json?: string | null): FormAttachment[] => {
   if (!json) return [];
@@ -37,7 +38,7 @@ export const Enrollment: React.FC = () => {
   const [teamSize, setTeamSize] = useState('3-4 Members');
   const [searchQuery, setSearchQuery] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [invitedMembers, setInvitedMembers] = useState<{ mail: string, name: string }[]>([]);
+  const [invitedMembers, setInvitedMembers] = useState<{ mail: string; name: string; rollNo?: string; branch?: string; batch?: string }[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -536,7 +537,7 @@ export const Enrollment: React.FC = () => {
                                 if (isSelected) {
                                   setInvitedMembers(invitedMembers.filter(m => m.mail !== s.mail));
                                 } else {
-                                  setInvitedMembers([...invitedMembers, { mail: s.mail, name: s.name }]);
+                                  setInvitedMembers([...invitedMembers, { mail: s.mail, name: s.name, rollNo: s.rollNo, branch: s.branch, batch: s.batch }]);
                                 }
                               }}
                               style={{ 
@@ -601,22 +602,33 @@ export const Enrollment: React.FC = () => {
                 </div>
 
                 {/* INVITED Cards */}
-                {invitedMembers.map((member, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#fdfdfd' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--surface-hover)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}>
-                        {member.name.charAt(0).toUpperCase()}
+                {invitedMembers.map((member, idx) => {
+                  const progress = calculateAcademicProgress(member.rollNo);
+                  const detailItems = [
+                    member.branch || formConfig?.accessBranch,
+                    member.rollNo,
+                    progress?.yearName,
+                    progress?.semesterName,
+                  ].filter(Boolean);
+                  const detailText = detailItems.length > 0 ? detailItems.join(' • ') : 'Invited Member';
+
+                  return (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px 16px', backgroundColor: '#fdfdfd' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--surface-hover)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}>
+                          {member.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: 600 }}>{member.name}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{detailText}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: 600 }}>{member.name}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>{formConfig.accessBranch} Year 3</div>
-                      </div>
+                      <button onClick={() => removeInvitedMember(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-disabled)', display: 'flex', alignItems: 'center' }}>
+                        <X size={16} />
+                      </button>
                     </div>
-                    <button onClick={() => removeInvitedMember(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-disabled)', display: 'flex', alignItems: 'center' }}>
-                      <X size={16} />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

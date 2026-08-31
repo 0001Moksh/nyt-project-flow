@@ -8,3 +8,4 @@ export * from './Sidebar';
 export * from './NotificationBell';
 export * from './ProjectTimeline';
 export * from './ReferenceTemplatesCard';
+export { DevaChatbot } from './DevaAIChat';

@@ -464,7 +464,7 @@ export const StudentProjects: React.FC = () => {
                             </div>
                             {isTeamRevision && (
                                 <div style={{ marginTop: '12px', color: '#b91c1c', backgroundColor: '#fef2f2', padding: '12px', borderRadius: '10px' }}>
-                                    Changes requested: A team member requested revisions on this document.
+                                    Changes requested: Supervisor requested revisions on this document.
                                 </div>
                             )}
                             {isUnderSupervisor && (

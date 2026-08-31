@@ -801,7 +801,7 @@ export const SupervisorTeamOverview: React.FC = () => {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setPreviewFile({ fileName: lastSubmission.fileName, fileUrl: lastSubmission.fileUrl || '' })}
+                        onClick={() => setPreviewFile({ attachmentId: (lastSubmission as any).attachmentId || lastSubmission.fileName, fileName: lastSubmission.fileName, fileUrl: lastSubmission.fileUrl || '' })}
                         style={{ flex: 1 }}
                       >
                         View Deliverable
@@ -946,6 +946,7 @@ export const SupervisorTeamOverview: React.FC = () => {
                         variant="outline"
                         onClick={() =>
                           setPreviewFile({
+                            attachmentId: (del as any).attachmentId || del.fileName,
                             fileName: del.fileName,
                             fileUrl: del.fileUrl || '',
                           })

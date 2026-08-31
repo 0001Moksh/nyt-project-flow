@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../utils/authStore';
-import { Button, Sidebar, NotificationBell } from './index';
+import { Button, Sidebar, NotificationBell, DevaChatbot } from './index';
 import { ToastContainer } from './Toast';
 import dpgitmLogo from '../assets/images/dpgitm-logo.png';
 
@@ -192,6 +192,7 @@ export const Layout: React.FC = () => {
             )}
 
             <ToastContainer />
+            <DevaChatbot userRole={user?.role} />
         </div>
     );
 };

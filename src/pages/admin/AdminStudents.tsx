@@ -3,12 +3,14 @@ import { Card, Button, Loader, Input } from '../../components';
 import { api } from '../../services/api';
 import {
     Download, Upload, UserPlus, AlertTriangle, X, CheckCircle, XCircle,
-    ChevronLeft, ChevronRight, Pencil, Plus, Search, Filter
+    ChevronLeft, ChevronRight, Pencil, Plus, Search, Filter, RotateCw, Eye, Trash2
 } from 'lucide-react';
 import { useToastStore } from '../../utils/toastStore';
 import { AdminProjectDetailDrawer } from './AdminProjectDetailDrawer';
+import { calculateAcademicProgress } from '../../utils/studentAcademicUtils';
+import { useColumnPersistence } from '../../utils/columnPersistence';
 
-type ColumnKey = 'student' | 'branch' | 'batch' | 'project' | 'email' | 'skills' | 'status';
+type ColumnKey = 'student' | 'rollNo' | 'year' | 'semester' | 'branch' | 'batch' | 'project' | 'email' | 'skills' | 'status' | 'action';
 
 type ColumnDef = {
     key: ColumnKey;
@@ -20,12 +22,16 @@ type ColumnDef = {
 
 const ALL_COLUMNS: ColumnDef[] = [
     { key: 'student', label: 'Student details', section: 'main', defaultVisible: true },
+    { key: 'rollNo', label: 'Roll Number', section: 'main', defaultVisible: true },
+    { key: 'year', label: 'Year', section: 'main', defaultVisible: true },
+    { key: 'semester', label: 'Semester', section: 'main', defaultVisible: true },
     { key: 'branch', label: 'Branch', section: 'main', defaultVisible: true, filterable: true },
     { key: 'batch', label: 'Batch', section: 'main', defaultVisible: false, filterable: true },
     { key: 'project', label: 'Project Name', section: 'main', defaultVisible: true },
     { key: 'email', label: 'Email (Mail)', section: 'main', defaultVisible: true },
     { key: 'status', label: 'Status', section: 'main', defaultVisible: true, filterable: true },
     { key: 'skills', label: 'Skills', section: 'other', defaultVisible: false },
+    { key: 'action', label: 'Action', section: 'other', defaultVisible: true },
 ];
 
 const DEFAULT_VISIBLE = ALL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key);
@@ -76,7 +82,7 @@ export const AdminStudents: React.FC = () => {
     const [studentSkillDraft, setStudentSkillDraft] = useState('');
     const [studentSkills, setStudentSkills] = useState<Record<string, string[]>>({});
 
-    const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(DEFAULT_VISIBLE);
+    const { visibleColumns, setVisibleColumns } = useColumnPersistence('table_cols_admin_students', DEFAULT_VISIBLE as string[]) as { visibleColumns: ColumnKey[]; setVisibleColumns: React.Dispatch<React.SetStateAction<ColumnKey[]>> };
     const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(DEFAULT_ORDER);
     const [isColumnPickerOpen, setIsColumnPickerOpen] = useState(false);
     const columnPickerRef = useRef<HTMLDivElement>(null);
@@ -506,6 +512,28 @@ export const AdminStudents: React.FC = () => {
                         </div>
                     </td>
                 );
+            case 'rollNo':
+                return (
+                    <td key={key} style={{ padding: '12px 16px', color: 'var(--text-primary)', fontWeight: 600, fontSize: 13, backgroundColor: 'var(--surface)' }}>
+                        {student.rollNo || '—'}
+                    </td>
+                );
+            case 'year': {
+                const progress = calculateAcademicProgress(student.rollNo);
+                return (
+                    <td key={key} style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: 13, backgroundColor: 'var(--surface)' }}>
+                        {progress?.yearName || '—'}
+                    </td>
+                );
+            }
+            case 'semester': {
+                const progress = calculateAcademicProgress(student.rollNo);
+                return (
+                    <td key={key} style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: 13, backgroundColor: 'var(--surface)' }}>
+                        {progress?.semesterName || '—'}
+                    </td>
+                );
+            }
             case 'branch':
                 return (
                     <td key={key} style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: 13, backgroundColor: 'var(--surface)' }}>

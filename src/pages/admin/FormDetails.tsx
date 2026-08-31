@@ -362,9 +362,7 @@ export const FormDetails: React.FC = () => {
     ? { label: 'Stage Calendar', open: () => setIsTimelineModalOpen(true) }
     : !hasTemplates
       ? { label: 'Stage Templates', open: () => setIsStageTemplatesOpen(true) }
-      : !hasMeetings
-        ? { label: 'Meeting Sessions', open: () => setIsMeetingPanelOpen(true) }
-        : { label: 'Stage Calendar', open: () => setIsTimelineModalOpen(true) };
+      : { label: 'Meeting Sessions', open: () => setIsMeetingPanelOpen(true) };
 
   const secondaryActions = [
     { label: 'Stage Calendar', open: () => setIsTimelineModalOpen(true) },
@@ -374,27 +372,114 @@ export const FormDetails: React.FC = () => {
 
   return (
     <div>
+      {/* Backdrop overlay for click-outside dismissal */}
+      {dropdownOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.2)',
+            zIndex: 90,
+          }}
+          onClick={() => setDropdownOpen(false)}
+        />
+      )}
+
       <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', margin: 0 }}>{summaryText}</h1>
         </div>
 
-        <div style={{ position: 'relative', display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <Button variant="primary" onClick={primaryAction.open} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {primaryAction.label}
-            </Button>
-            <Button variant="outline" onClick={() => setDropdownOpen((v) => !v)} style={{ padding: '8px 12px', display: 'flex', alignItems: 'center' }}>
-                <ChevronDown size={16} />
-            </Button>
-            {dropdownOpen && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: 12, minWidth: 220, boxShadow: '0 12px 32px rgba(0,0,0,0.12)', zIndex: 20, overflow: 'hidden' }}>
-                {secondaryActions.map((action) => (
-                  <button key={action.label} type="button" onClick={() => { setDropdownOpen(false); action.open(); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '12px 16px', border: 'none', background: 'transparent', cursor: 'pointer' }}>
-                    {action.label}
-                  </button>
-                ))}
-              </div>
-            )}
+        <div style={{ position: 'relative', display: 'inline-flex', zIndex: 100 }}>
+          <button
+            type="button"
+            onClick={primaryAction.open}
+            style={{
+              backgroundColor: '#2563eb',
+              color: '#ffffff',
+              border: 'none',
+              padding: '10px 18px',
+              borderTopLeftRadius: '8px',
+              borderBottomLeftRadius: '8px',
+              fontWeight: 600,
+              fontSize: '14px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              borderRight: '1px solid rgba(255, 255, 255, 0.2)',
+              transition: 'background-color 0.15s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1d4ed8')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#2563eb')}
+          >
+            {primaryAction.label}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDropdownOpen((v) => !v)}
+            style={{
+              backgroundColor: '#2563eb',
+              color: '#ffffff',
+              border: 'none',
+              padding: '10px 12px',
+              borderTopRightRadius: '8px',
+              borderBottomRightRadius: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background-color 0.15s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1d4ed8')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#2563eb')}
+          >
+            <ChevronDown size={18} color="#ffffff" />
+          </button>
+          {dropdownOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                right: 0,
+                background: 'var(--surface, #ffffff)',
+                border: '1px solid var(--border-color, #e2e8f0)',
+                borderRadius: 10,
+                minWidth: 200,
+                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                zIndex: 101,
+                overflow: 'hidden',
+              }}
+            >
+              {secondaryActions.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    action.open();
+                  }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '12px 16px',
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    color: 'var(--text-primary, #1e293b)',
+                    fontWeight: 500,
+                    transition: 'background-color 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, #f8fafc)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Loader } from './components/Loader';
 import { useAuthStore } from './utils/authStore';
+import { QueryProvider } from './utils/QueryProvider';
 
 // Lazy Load Pages for Performance
 const Login = React.lazy(() => import('./pages/Login'));
@@ -14,6 +15,7 @@ const AdminRequests = React.lazy(() => import('./pages/admin/AdminRequests'));
 const AdminSupervisors = React.lazy(() => import('./pages/admin/AdminSupervisors'));
 const AdminStudents = React.lazy(() => import('./pages/admin/AdminStudents'));
 const AdminProjectsOverview = React.lazy(() => import('./pages/admin/AdminProjectsOverview'));
+const AdminProjectDetailView = React.lazy(() => import('./pages/admin/AdminProjectDetailView'));
 const AdminTasks = React.lazy(() => import('./pages/admin/AdminTasks'));
 const Enrollment = React.lazy(() => import('./pages/Enrollment'));
 const SupervisorDashboard = React.lazy(() => import('./pages/supervisor/SupervisorDashboard'));
@@ -34,9 +36,10 @@ const App: React.FC = () => {
   }, [initializeAuth]);
 
   return (
-    <Router>
-      <Suspense fallback={<Loader fullScreen size="lg" />}>
-        <Routes>
+    <QueryProvider>
+      <Router>
+        <Suspense fallback={<Loader fullScreen size="lg" />}>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<LandingPage />} />
           
@@ -52,6 +55,7 @@ const App: React.FC = () => {
             {/* Admin Routes */}
             <Route path="admin/dashboard" element={<AdminDashboard />} />
             <Route path="admin/projects" element={<AdminProjectsOverview />} />
+            <Route path="admin/projects/:id" element={<AdminProjectDetailView />} />
             <Route path="admin/tasks" element={<AdminTasks />} />
             <Route path="admin/requests" element={<AdminRequests />} />
             <Route path="admin/supervisors" element={<AdminSupervisors />} />
@@ -78,9 +82,10 @@ const App: React.FC = () => {
               </div>
             } />
           </Route>
-        </Routes>
-      </Suspense>
-    </Router>
+</Routes>
+        </Suspense>
+      </Router>
+    </QueryProvider>
   );
 };
 

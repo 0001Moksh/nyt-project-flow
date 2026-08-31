@@ -65,9 +65,16 @@ const formatDateTime = (value?: string | null) => {
 
 const inferAttachmentFormat = (file?: FormAttachment | null) => {
   if (!file) return '-';
+  const rawFormat = (file as any).allowedFormats || (file as any).format;
+  if (rawFormat && String(rawFormat).trim()) {
+    return String(rawFormat).toUpperCase();
+  }
   const fileName = String(file.fileName || '').trim();
   const extension = fileName.includes('.') ? fileName.split('.').pop() : '';
-  return extension ? extension.toUpperCase() : 'See template';
+  if (extension && !extension.includes(' ') && extension.length <= 5) {
+    return extension.toUpperCase();
+  }
+  return 'PDF, DOCX, ZIP';
 };
 
 interface DeliverableUploaderProps {
@@ -549,14 +556,14 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
                   </div>
                 </div>
 
-                <div style={{ padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--background)' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '6px' }}>Description & Submission Guidelines</div>
-                  <div style={{ fontSize: '14px', lineHeight: 1.7, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
-                    {selectedTemplate?.fileName
-                      ? `Follow the instructions attached to ${selectedTemplate.fileName}. Submit the correct file type, keep naming consistent with the template, and verify the drive link is accessible to reviewers.`
-                      : 'No description available.'}
+                {(selectedTemplate as any)?.description && String((selectedTemplate as any).description).trim().length > 0 && (
+                  <div style={{ padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--background)' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '6px' }}>Guidance</div>
+                    <div style={{ fontSize: '14px', lineHeight: 1.7, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
+                      {String((selectedTemplate as any).description).trim()}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div style={{ display: 'grid', gap: '10px' }}>
                   <Button

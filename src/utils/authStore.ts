@@ -36,11 +36,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       } else {
         localStorage.removeItem('mockSessionUser');
         localStorage.removeItem('userId');
+        localStorage.removeItem('userRole');
         set({ user: null, isAuthenticated: false, isInitialized: true });
       }
     } catch {
       localStorage.removeItem('mockSessionUser');
       localStorage.removeItem('userId');
+      localStorage.removeItem('userRole');
       set({ user: null, isAuthenticated: false, isInitialized: true });
     }
   },
@@ -48,12 +50,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: (userData: User) => {
     localStorage.setItem('mockSessionUser', JSON.stringify(userData));
     localStorage.setItem('userId', userData.id); // for API interceptor
+    localStorage.setItem('userRole', userData.role);
     set({ user: userData, isAuthenticated: true, isInitialized: true });
   },
 
   logout: () => {
     localStorage.removeItem('mockSessionUser');
     localStorage.removeItem('userId');
+    localStorage.removeItem('userRole');
     set({ user: null, isAuthenticated: false, isInitialized: true });
   },
 }));
