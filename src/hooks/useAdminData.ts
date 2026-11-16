@@ -6,12 +6,13 @@ export function useAdminProjects() {
   return useQuery({
     queryKey: queryKeys.projects,
     queryFn: async () => {
-      const [projRes, supRes, teamsRes, teamMembersRes, studentsRes] = await Promise.all([
-        api.get('/projects').catch(() => ({ data: [] })),
-        api.get('/supervisors').catch(() => ({ data: [] })),
-        api.get('/teams').catch(() => ({ data: [] })),
-        api.get('/team-members').catch(() => ({ data: [] })),
-        api.get('/students').catch(() => ({ data: [] })),
+      const [projRes, supRes, teamsRes, teamMembersRes, studentsRes, formsRes] = await Promise.all([
+        api.get('/projects'),
+        api.get('/supervisors'),
+        api.get('/teams'),
+        api.get('/team-members'),
+        api.get('/students'),
+        api.get('/forms'),
       ]);
 
       const allProjects = projRes.data || [];
@@ -19,6 +20,27 @@ export function useAdminProjects() {
       const allTeams = teamsRes.data || [];
       const allTeamMembers = teamMembersRes.data || [];
       const allStudents = studentsRes.data || [];
+      const teamsById = new Map<string, any>(allTeams.map((t: any) => [t.teamId, t]));
+      const membersByTeam = new Map<string, any>(allTeamMembers.map((t: any) => [t.teamId, t]));
+      const studentsById = new Map<string, any>(allStudents.map((s: any) => [s.studentId, s]));
+      const assignments = new Map<string, number>();
+      allProjects.forEach((p: any) => assignments.set(p.supervisorId, (assignments.get(p.supervisorId) || 0) + 1));
+      const customFieldLabels: string[] = Array.from(new Set<string>(
+        (formsRes.data || []).flatMap((form: any) => {
+          try {
+            const fields = JSON.parse(form.jsonOfFields || '[]');
+            return fields
+              .filter((field: any) => {
+                const label = String(field.label || '').trim();
+                const normalized = label.toLowerCase();
+                return label && !normalized.includes('project title') && !normalized.includes('project description');
+              })
+              .map((field: any) => String(field.label).trim());
+          } catch {
+            return [];
+          }
+        }) as string[]
+      ));
 
       const parseIdArray = (value?: string | null): string[] => {
         try {
@@ -31,15 +53,15 @@ export function useAdminProjects() {
 
       const sups = allSupervisors.map((sup: any) => ({
         ...sup,
-        assignedCount: allProjects.filter((p: any) => p.supervisorId === sup.supervisorId).length,
+        assignedCount: assignments.get(sup.supervisorId) || 0,
       }));
 
       const enriched = allProjects.map((p: any) => {
-        const team = allTeams.find((t: any) => t.teamId === p.teamId);
+        const team = teamsById.get(p.teamId);
         let memberDetails: any[] = [];
         let leaderName = '—';
         if (team) {
-          const memberStatus = allTeamMembers.find((tm: any) => tm.teamId === team.teamId);
+          const memberStatus = membersByTeam.get(team.teamId);
           const joinedIds = new Set(parseIdArray(memberStatus?.joinMemberArray));
           const pendingIds = new Set(parseIdArray(memberStatus?.notJoinMemberArray));
           const arr = Array.from(
@@ -50,20 +72,20 @@ export function useAdminProjects() {
             )
           );
           memberDetails = arr.map((sid: string) => {
-            const st = allStudents.find((s: any) => s.studentId === sid);
+            const st = studentsById.get(sid);
             return {
               ...(st || { studentId: sid, name: 'Unknown', mail: 'N/A' }),
               inviteStatus:
                 sid === team.leaderId ? 'LEADER' : pendingIds.has(sid) ? 'PENDING' : joinedIds.has(sid) ? 'APPROVED' : 'PENDING',
             };
           });
-          const leader = allStudents.find((s: any) => s.studentId === team.leaderId);
+          const leader = studentsById.get(team.leaderId);
           leaderName = leader?.name || '—';
         }
         return { ...p, team, memberDetails, leaderName };
       });
 
-      return { projects: enriched, supervisors: sups };
+      return { projects: enriched, supervisors: sups, customFieldLabels };
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,

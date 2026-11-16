@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Loader, Input, ProjectTimeline } from '../../components';
 import { api } from '../../services/api';
@@ -34,6 +34,7 @@ interface Project {
   meetingDate?: string;
   startTime?: string;
   endTime?: string;
+  customFieldsJson?: string;
   memberDetails?: ProjectMember[];
   team?: {
     leaderId?: string;
@@ -72,7 +73,8 @@ type ColumnKey =
   | 'stage'
   | 'meetingMode'
   | 'meetingSlot'
-  | 'action';
+  | 'action'
+  | `custom:${string}`;
 
 type ColumnDef = {
   key: ColumnKey;
@@ -133,12 +135,24 @@ export const AdminProjectsOverview: React.FC = () => {
     'table_cols_admin_projects',
     DEFAULT_VISIBLE
   );
-  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(DEFAULT_ORDER);
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('table_cols_admin_projects_order') || '[]');
+      const valid = Array.isArray(saved) ? saved.filter((key): key is ColumnKey => typeof key === 'string' && (DEFAULT_ORDER.includes(key as ColumnKey) || key.startsWith('custom:'))) : [];
+      return [...valid, ...DEFAULT_ORDER.filter((key) => !valid.includes(key))];
+    } catch {
+      return DEFAULT_ORDER;
+    }
+  });
   const [isColumnPickerOpen, setIsColumnPickerOpen] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement>(null);
 
   const [openHeaderFilter, setOpenHeaderFilter] = useState<ColumnKey | null>(null);
   const headerFilterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem('table_cols_admin_projects_order', JSON.stringify(columnOrder));
+  }, [columnOrder]);
 
   const [activeSupervisorRowId, setActiveSupervisorRowId] = useState<string | null>(null);
 
@@ -158,6 +172,19 @@ export const AdminProjectsOverview: React.FC = () => {
   const { data: adminData, isLoading, isFetching, refetch } = useAdminProjects();
   const projects: Project[] = adminData?.projects || [];
   const supervisors: Supervisor[] = adminData?.supervisors || [];
+  const dynamicColumns = useMemo<ColumnDef[]>(() => (adminData?.customFieldLabels || []).map((label) => ({
+    key: `custom:${label}` as ColumnKey,
+    label,
+    section: 'other',
+    defaultVisible: false,
+    width: '16%',
+  })), [adminData?.customFieldLabels]);
+  const allColumns = useMemo(() => [...ALL_COLUMNS, ...dynamicColumns], [dynamicColumns]);
+
+  useEffect(() => {
+    const dynamicKeys = dynamicColumns.map((column) => column.key);
+    setColumnOrder((current) => [...current, ...dynamicKeys.filter((key) => !current.includes(key))]);
+  }, [dynamicColumns]);
 
   const isTableRefreshing = isFetching;
 
@@ -358,7 +385,7 @@ export const AdminProjectsOverview: React.FC = () => {
   };
 
   const renderHeaderCell = (key: ColumnKey) => {
-    const col = ALL_COLUMNS.find((c) => c.key === key)!;
+    const col = allColumns.find((c) => c.key === key)!;
     const isDragOver = dragOverCol === key;
     const filterable = !!col.filterable;
     const active = isFilterActive(key);
@@ -472,6 +499,20 @@ export const AdminProjectsOverview: React.FC = () => {
   };
 
   const renderCell = (proj: Project, key: ColumnKey) => {
+    if (key.startsWith('custom:')) {
+      const label = key.slice('custom:'.length);
+      let value: unknown = null;
+      try {
+        value = JSON.parse(proj.customFieldsJson || '{}')[label];
+      } catch {
+        value = null;
+      }
+      return (
+        <td key={key} style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)', backgroundColor: 'var(--surface)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }} title={value == null ? '' : String(value)}>
+          {value == null || value === '' ? '—' : String(value)}
+        </td>
+      );
+    }
     const sup = supervisors.find((s) => s.supervisorId === proj.supervisorId);
     const isActiveRow = activeSupervisorRowId === proj.projectId;
 
@@ -711,8 +752,8 @@ export const AdminProjectsOverview: React.FC = () => {
     }
   };
 
-  const mainCols = ALL_COLUMNS.filter((c) => c.section === 'main');
-  const otherCols = ALL_COLUMNS.filter((c) => c.section === 'other');
+  const mainCols = allColumns.filter((c) => c.section === 'main');
+  const otherCols = allColumns.filter((c) => c.section === 'other');
 
   if (isLoading) {
     return (

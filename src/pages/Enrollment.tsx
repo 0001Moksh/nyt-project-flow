@@ -247,7 +247,15 @@ export const Enrollment: React.FC = () => {
         teamId: teamRes.teamId,
         formId: formId,
         projectTitle: projTitle,
-        projectDescription: projDescription || 'No description provided.'
+        projectDescription: projDescription || 'No description provided.',
+        customFieldsJson: JSON.stringify(Object.fromEntries(
+          fieldsConfig
+            .filter((field: any) => {
+              const label = String(field.label || '').toLowerCase();
+              return !label.includes('title') && !label.includes('description');
+            })
+            .map((field: any) => [field.label, answers[field.id] ?? null])
+        )),
       });
 
       setIsSuccess(true);
@@ -593,7 +601,14 @@ export const Enrollment: React.FC = () => {
                     </div>
                     <div>
                       <div style={{ fontSize: '14px', fontWeight: 600 }}>{user?.name} (You)</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-disabled)' }}>Team Lead</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: 2 }}>
+                        {[
+                          myStudentInfo?.branch,
+                          myStudentInfo?.rollNo,
+                          calculateAcademicProgress(myStudentInfo?.rollNo)?.yearName,
+                          calculateAcademicProgress(myStudentInfo?.rollNo)?.semesterName,
+                        ].filter(Boolean).join(' • ') || 'Team Lead'}
+                      </div>
                     </div>
                   </div>
                   <div style={{ width: '20px', height: '20px', borderRadius: '50%', backgroundColor: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

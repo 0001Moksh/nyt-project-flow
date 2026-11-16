@@ -52,6 +52,7 @@ const MENU_Z = 5000;
 const MODAL_Z = 10000;
 
 export const AdminStudents: React.FC = () => {
+    const addToast = useToastStore((state) => state.addToast);
     const [students, setStudents] = useState<any[]>([]);
     const [projectByStudentId, setProjectByStudentId] = useState<Record<string, { projectId: string; projectTitle: string }>>({});
     const [viewProjectId, setViewProjectId] = useState<string | null>(null);
@@ -81,9 +82,23 @@ export const AdminStudents: React.FC = () => {
     const [editingStudent, setEditingStudent] = useState<any | null>(null);
     const [studentSkillDraft, setStudentSkillDraft] = useState('');
     const [studentSkills, setStudentSkills] = useState<Record<string, string[]>>({});
+    const [viewStudent, setViewStudent] = useState<any | null>(null);
+    const [editRecord, setEditRecord] = useState<any | null>(null);
+    const [deleteCandidate, setDeleteCandidate] = useState<any | null>(null);
+    const [savingRecord, setSavingRecord] = useState(false);
+    const [deletingRecord, setDeletingRecord] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const { visibleColumns, setVisibleColumns } = useColumnPersistence('table_cols_admin_students', DEFAULT_VISIBLE as string[]) as { visibleColumns: ColumnKey[]; setVisibleColumns: React.Dispatch<React.SetStateAction<ColumnKey[]>> };
-    const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(DEFAULT_ORDER);
+    const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem('table_cols_admin_students_order') || '[]');
+            const valid = Array.isArray(saved) ? saved.filter((key): key is ColumnKey => DEFAULT_ORDER.includes(key)) : [];
+            return [...valid, ...DEFAULT_ORDER.filter((key) => !valid.includes(key))];
+        } catch {
+            return DEFAULT_ORDER;
+        }
+    });
     const [isColumnPickerOpen, setIsColumnPickerOpen] = useState(false);
     const columnPickerRef = useRef<HTMLDivElement>(null);
 
@@ -92,6 +107,10 @@ export const AdminStudents: React.FC = () => {
 
     const dragCol = useRef<ColumnKey | null>(null);
     const [dragOverCol, setDragOverCol] = useState<ColumnKey | null>(null);
+
+    useEffect(() => {
+        localStorage.setItem('table_cols_admin_students_order', JSON.stringify(columnOrder));
+    }, [columnOrder]);
 
     useEffect(() => {
         const fetchMeta = async () => {
@@ -127,8 +146,9 @@ export const AdminStudents: React.FC = () => {
         return () => clearTimeout(timeout);
     }, [page, size, searchQuery, filterStatus, filterBranch, filterBatch]);
 
-    const fetchData = async () => {
-        setIsLoading(true);
+    const fetchData = async (background = false) => {
+        if (background) setIsRefreshing(true);
+        else setIsLoading(true);
         try {
             const params = new URLSearchParams({
                 page: page.toString(),
@@ -187,6 +207,44 @@ export const AdminStudents: React.FC = () => {
             console.error(err);
         } finally {
             setIsLoading(false);
+            setIsRefreshing(false);
+        }
+    };
+
+    const saveStudentRecord = async () => {
+        if (!editRecord) return;
+        setSavingRecord(true);
+        try {
+            await api.put(`/students/${editRecord.id}`, {
+                name: editRecord.name,
+                mail: editRecord.mail,
+                rollNo: editRecord.rollNo,
+                branch: editRecord.branch,
+                batch: editRecord.batch,
+                enrollStatus: editRecord.status,
+            });
+            addToast('Student updated successfully.', 'success');
+            setEditRecord(null);
+            await fetchData(true);
+        } catch (error: any) {
+            addToast(error?.response?.data?.message || 'Unable to update student.', 'error');
+        } finally {
+            setSavingRecord(false);
+        }
+    };
+
+    const deleteStudentRecord = async () => {
+        if (!deleteCandidate) return;
+        setDeletingRecord(true);
+        try {
+            await api.delete(`/students/${deleteCandidate.id}`);
+            addToast('Student deleted successfully.', 'success');
+            setDeleteCandidate(null);
+            await fetchData(true);
+        } catch (error: any) {
+            addToast(error?.response?.data?.message || 'Unable to delete student.', 'error');
+        } finally {
+            setDeletingRecord(false);
         }
     };
 
@@ -650,6 +708,22 @@ export const AdminStudents: React.FC = () => {
                         </span>
                     </td>
                 );
+            case 'action':
+                return (
+                    <td key={key} style={{ padding: '12px 16px', backgroundColor: 'var(--surface)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Button size="sm" variant="outline" onClick={() => setViewStudent(student)} title="View student details" style={{ padding: 5, minWidth: 0 }}>
+                                <Eye size={14} />
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setEditRecord({ ...student })} title="Edit student" style={{ padding: 5, minWidth: 0 }}>
+                                <Pencil size={14} />
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setDeleteCandidate(student)} title="Delete student" style={{ padding: 5, minWidth: 0, color: 'var(--danger)' }}>
+                                <Trash2 size={14} />
+                            </Button>
+                        </div>
+                    </td>
+                );
             default:
                 return null;
         }
@@ -699,6 +773,16 @@ export const AdminStudents: React.FC = () => {
                 }}
             >
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchData(true)}
+                        disabled={isRefreshing}
+                        title="Refresh student table"
+                        style={{ width: 34, minWidth: 34, padding: 7 }}
+                    >
+                        <RotateCw size={15} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : undefined }} />
+                    </Button>
                     <Button variant="outline" size="sm" leftIcon={<Download size={15} />} onClick={exportReport}>
                         Export Report
                     </Button>
@@ -1321,6 +1405,81 @@ export const AdminStudents: React.FC = () => {
                                 </Button>
                             </div>
                         </form>
+                    </Card>
+                </div>
+            )}
+
+            {viewStudent && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', display: 'flex', justifyContent: 'flex-end', zIndex: MODAL_Z }} onMouseDown={() => setViewStudent(null)}>
+                    <div style={{ width: 'min(520px, 94vw)', height: '100%', background: 'var(--surface)', padding: 24, overflowY: 'auto', boxShadow: '-16px 0 40px rgba(15,23,42,0.18)' }} onMouseDown={(event) => event.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                            <h2 style={{ margin: 0, fontSize: 20 }}>Student Details</h2>
+                            <Button variant="outline" size="sm" onClick={() => setViewStudent(null)} style={{ padding: 6, minWidth: 0 }}><X size={16} /></Button>
+                        </div>
+                        {Object.entries({
+                            'Student ID': viewStudent.id,
+                            Name: viewStudent.name,
+                            'Roll Number': viewStudent.rollNo,
+                            Email: viewStudent.mail,
+                            Branch: viewStudent.branch,
+                            Batch: viewStudent.batch,
+                            Year: calculateAcademicProgress(viewStudent.rollNo)?.yearName,
+                            Semester: calculateAcademicProgress(viewStudent.rollNo)?.semesterName,
+                            Status: viewStudent.status,
+                            Project: viewStudent.project?.projectTitle || projectByStudentId[viewStudent.id]?.projectTitle,
+                            Skills: (studentSkills[viewStudent.id] || []).join(', '),
+                        }).map(([label, value]) => (
+                            <div key={label} style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 12, padding: '11px 0', borderBottom: '1px solid var(--border-color)' }}>
+                                <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{label}</span>
+                                <span style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, wordBreak: 'break-word' }}>{String(value || '—')}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {editRecord && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: MODAL_Z }} onMouseDown={() => !savingRecord && setEditRecord(null)}>
+                    <Card style={{ width: 'min(560px, 94vw)', padding: 22 }} onMouseDown={(event: React.MouseEvent) => event.stopPropagation()}>
+                        <h2 style={{ margin: '0 0 18px', fontSize: 20 }}>Edit Student</h2>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            {[
+                                ['name', 'Full Name', 'text'],
+                                ['rollNo', 'Roll Number', 'text'],
+                                ['mail', 'Email', 'email'],
+                                ['branch', 'Branch', 'text'],
+                                ['batch', 'Batch', 'text'],
+                            ].map(([field, label, type]) => (
+                                <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600 }}>
+                                    {label}
+                                    <input type={type} value={editRecord[field] || ''} onChange={(event) => setEditRecord((current: any) => ({ ...current, [field]: event.target.value }))} style={{ padding: '9px 11px', border: '1px solid var(--border-color)', borderRadius: 8, background: 'var(--background)' }} />
+                                </label>
+                            ))}
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600 }}>
+                                Status
+                                <select value={editRecord.status || 'ACTIVE'} onChange={(event) => setEditRecord((current: any) => ({ ...current, status: event.target.value }))} style={{ padding: '9px 11px', border: '1px solid var(--border-color)', borderRadius: 8, background: 'var(--background)' }}>
+                                    {STATUS_OPTIONS.filter((option) => option.value !== 'ALL').map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                                </select>
+                            </label>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+                            <Button variant="outline" onClick={() => setEditRecord(null)} disabled={savingRecord}>Cancel</Button>
+                            <Button variant="primary" onClick={saveStudentRecord} isLoading={savingRecord}>Save Changes</Button>
+                        </div>
+                    </Card>
+                </div>
+            )}
+
+            {deleteCandidate && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: MODAL_Z }} onMouseDown={() => !deletingRecord && setDeleteCandidate(null)}>
+                    <Card style={{ width: 'min(460px, 92vw)', padding: 24 }} onMouseDown={(event: React.MouseEvent) => event.stopPropagation()}>
+                        <AlertTriangle size={34} color="var(--danger)" />
+                        <h2 style={{ fontSize: 20, margin: '14px 0 8px' }}>Delete Student</h2>
+                        <p style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>Are you sure you want to delete this Student? <strong>{deleteCandidate.name}</strong>. This action is irreversible.</p>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+                            <Button variant="outline" onClick={() => setDeleteCandidate(null)} disabled={deletingRecord}>Cancel</Button>
+                            <Button variant="danger" onClick={deleteStudentRecord} isLoading={deletingRecord}>Confirm Delete</Button>
+                        </div>
                     </Card>
                 </div>
             )}

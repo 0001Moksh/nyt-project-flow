@@ -6,6 +6,8 @@ import { ArrowLeft, Users, Calendar, Video, MapPin, Link as LinkIcon, FileText, 
 import { calculateAcademicProgress } from '../../utils/studentAcademicUtils';
 import { cleanProjectDescription } from '../../utils/projectDescription';
 import { getPreviewUrl } from '../../utils/filePreview';
+import { useAuthStore } from '../../utils/authStore';
+import { useToastStore } from '../../utils/toastStore';
 
 const STAGE_LABELS: Record<string, string> = {
   SYNOPSIS: 'Synopsis',
@@ -28,6 +30,8 @@ const parseIdArray = (value?: string | null): string[] => {
 export const AdminProjectDetailView: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
+  const addToast = useToastStore((state) => state.addToast);
 
   const [project, setProject] = useState<any | null>(null);
   const [supervisorName, setSupervisorName] = useState<string>('Unassigned');
@@ -36,6 +40,11 @@ export const AdminProjectDetailView: React.FC = () => {
   const [stageTemplates, setStageTemplates] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [previewFile, setPreviewFile] = useState<{ fileName: string; fileUrl: string } | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<{ stage: string; submission: any } | null>(null);
+  const [reviewApproved, setReviewApproved] = useState(true);
+  const [reviewComment, setReviewComment] = useState('');
+  const [adminScore, setAdminScore] = useState('');
+  const [savingReview, setSavingReview] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -51,9 +60,15 @@ export const AdminProjectDetailView: React.FC = () => {
           api.get('/team-members').catch(() => ({ data: [] })),
           api.get('/students').catch(() => ({ data: [] })),
           api.get('/supervisors').catch(() => ({ data: [] })),
-          p.documentId ? api.get(`/submissions/all/document/${p.documentId}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+          p.documentId
+            ? Promise.all(STAGES.map(async (stage) => {
+                const endpoint = stage.toLowerCase();
+                const response = await api.get(`/submissions/${endpoint}/document/${p.documentId}`).catch(() => ({ data: [] }));
+                return (response.data || []).map((submission: any) => ({ ...submission, stage }));
+              })).then((groups) => ({ data: groups.flat() }))
+            : Promise.resolve({ data: [] }),
           api.get(`/supervisor/meetings/project/${projectId}`).catch(() => ({ data: [] })),
-          p.formId ? api.get(`/forms/${p.formId}`).catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+          p.formId ? api.get(`/templates?form_id=${p.formId}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
         ]);
 
         const team = (teamsRes.data || []).find((t: any) => t.teamId === p.teamId);
@@ -88,13 +103,7 @@ export const AdminProjectDetailView: React.FC = () => {
         setMeetings(meetingsRes.data || []);
         setSubmissions(submissionsRes.data || []);
 
-        if (templatesRes.data?.jsonOfTemplates) {
-          try {
-            setStageTemplates(JSON.parse(templatesRes.data.jsonOfTemplates));
-          } catch {
-            setStageTemplates([]);
-          }
-        }
+        setStageTemplates(Array.isArray(templatesRes.data) ? templatesRes.data : []);
 
         setProject({
           ...p,
@@ -111,6 +120,42 @@ export const AdminProjectDetailView: React.FC = () => {
 
     loadData();
   }, [projectId]);
+
+  const submitAdminReview = async () => {
+    if (!reviewTarget || !user?.id) return;
+    if (!reviewApproved && !reviewComment.trim()) {
+      addToast('A change-request comment is required.', 'error');
+      return;
+    }
+    if (reviewApproved && (adminScore === '' || Number(adminScore) < 0 || Number(adminScore) > 10)) {
+      addToast('Enter an admin score between 0 and 10.', 'error');
+      return;
+    }
+    const endpoint = reviewTarget.stage.toLowerCase();
+    const idField = endpoint === 'final' ? 'finalId' : `${endpoint}Id`;
+    const submissionId = reviewTarget.submission[idField] || reviewTarget.submission.id;
+    setSavingReview(true);
+    try {
+      const response = await api.patch(`/submissions/${endpoint}/${submissionId}/admin-review`, {
+        adminId: user.id,
+        approved: reviewApproved,
+        comment: reviewComment.trim() || null,
+        marks: reviewApproved ? adminScore : null,
+      });
+      setSubmissions((current) => current.map((submission) => {
+        const currentId = submission[idField] || submission.id;
+        return currentId === submissionId ? { ...submission, ...response.data, stage: reviewTarget.stage } : submission;
+      }));
+      addToast(reviewApproved ? 'Submission approved and scored.' : 'Changes requested from the team.', 'success');
+      setReviewTarget(null);
+      setReviewComment('');
+      setAdminScore('');
+    } catch (error: any) {
+      addToast(error?.response?.data?.message || 'Unable to save admin review.', 'error');
+    } finally {
+      setSavingReview(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -133,6 +178,15 @@ export const AdminProjectDetailView: React.FC = () => {
 
   // Calculate scores
   const getStageScores = (stageKey: string) => {
+    const stageRows = submissions.filter((submission) => submission.stage === stageKey);
+    const latest = stageRows[stageRows.length - 1];
+    if (latest?.supervisorScore != null || latest?.adminScore != null || latest?.finalStageScore != null) {
+      return {
+        supScore: latest.supervisorScore ?? null,
+        admScore: latest.adminScore ?? null,
+        avgScore: latest.finalStageScore != null ? Number(latest.finalStageScore).toFixed(1) : null,
+      };
+    }
     let supScore = null;
     let admScore = null;
     if (stageKey === 'SYNOPSIS') supScore = project.synopsisScore;
@@ -264,7 +318,7 @@ export const AdminProjectDetailView: React.FC = () => {
                   <div key={stageKey} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', backgroundColor: 'var(--surface)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                       <h4 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>{STAGE_LABELS[stageKey]}</h4>
-                      <span style={{ fontSize: '12px', padding: '4px 10px', borderRadius: '999px', fontWeight: 600, backgroundColor: latestSub?.status === 'APPROVED' ? '#dcfce7' : '#fef3c7', color: latestSub?.status === 'APPROVED' ? '#166534' : '#92400e' }}>
+                      <span style={{ fontSize: '12px', padding: '4px 10px', borderRadius: '999px', fontWeight: 600, backgroundColor: ['APPROVED', 'APPROVED_FINAL'].includes(latestSub?.status) ? '#dcfce7' : '#fef3c7', color: ['APPROVED', 'APPROVED_FINAL'].includes(latestSub?.status) ? '#166534' : '#92400e' }}>
                         {latestSub?.status || 'NOT_SUBMITTED'}
                       </span>
                     </div>
@@ -315,6 +369,13 @@ export const AdminProjectDetailView: React.FC = () => {
                         </strong>
                       </div>
                     </div>
+                    {latestSub?.status === 'PENDING_ADMIN_REVIEW' && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                        <Button size="sm" onClick={() => { setReviewTarget({ stage: stageKey, submission: latestSub }); setReviewApproved(true); setReviewComment(''); setAdminScore(''); }}>
+                          Review as Admin
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -370,6 +431,33 @@ export const AdminProjectDetailView: React.FC = () => {
       </div>
 
       {/* File Preview Modal */}
+      {reviewTarget && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onMouseDown={() => !savingReview && setReviewTarget(null)}>
+          <Card style={{ width: 'min(520px, 94vw)', padding: 24 }} onMouseDown={(event) => event.stopPropagation()}>
+            <h2 style={{ margin: '0 0 6px', fontSize: 20 }}>Admin Final Review</h2>
+            <p style={{ margin: '0 0 18px', color: 'var(--text-secondary)', fontSize: 13 }}>{STAGE_LABELS[reviewTarget.stage]} · {reviewTarget.submission.fileName || 'Submission'}</p>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+              <Button type="button" variant={reviewApproved ? 'primary' : 'outline'} onClick={() => setReviewApproved(true)} style={{ flex: 1 }}>Approve (Final)</Button>
+              <Button type="button" variant={!reviewApproved ? 'danger' : 'outline'} onClick={() => setReviewApproved(false)} style={{ flex: 1 }}>Request Changes</Button>
+            </div>
+            {reviewApproved && (
+              <label style={{ display: 'grid', gap: 6, marginBottom: 14, fontSize: 13, fontWeight: 650 }}>
+                Admin Score (0–10)
+                <input type="number" min="0" max="10" step="0.1" value={adminScore} onChange={(event) => setAdminScore(event.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border-color)' }} />
+              </label>
+            )}
+            <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 650 }}>
+              {reviewApproved ? 'Comment (optional)' : 'Required changes'}
+              <textarea rows={4} value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} style={{ padding: 12, borderRadius: 8, border: '1px solid var(--border-color)', resize: 'vertical', fontFamily: 'inherit' }} />
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+              <Button variant="outline" onClick={() => setReviewTarget(null)} disabled={savingReview}>Cancel</Button>
+              <Button variant={reviewApproved ? 'primary' : 'danger'} onClick={submitAdminReview} isLoading={savingReview}>{reviewApproved ? 'Approve Final' : 'Request Changes'}</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {previewFile && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }} onClick={() => setPreviewFile(null)}>
           <Card style={{ maxWidth: '800px', width: '100%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>

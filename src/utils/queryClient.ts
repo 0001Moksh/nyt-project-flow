@@ -8,7 +8,10 @@ export const queryClient = new QueryClient({
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
-      refetchOnMount: 'always',
+      // Fresh data is rendered directly when a view is revisited. Stale data is
+      // revalidated in the background by React Query without replacing it with a
+      // page-level loading state.
+      refetchOnMount: true,
     },
   },
 });

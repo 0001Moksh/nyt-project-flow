@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   PlusCircle, Trash2, ArrowLeft, Copy, CheckCircle, Link as LinkIcon,
   FolderKanban, Calendar, HelpCircle, Plus, X, GripVertical
+  , MoreVertical, Eye, Pencil, AlertTriangle
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
@@ -136,10 +137,57 @@ export const CreateForm: React.FC = () => {
   ]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successLink, setSuccessLink] = useState<string | null>(null);
+  const [openFormMenu, setOpenFormMenu] = useState<string | null>(null);
+  const [deleteFormCandidate, setDeleteFormCandidate] = useState<FormResponse | null>(null);
+  const [deletingForm, setDeletingForm] = useState(false);
+  const [editFormCandidate, setEditFormCandidate] = useState<FormResponse | null>(null);
+  const [savingForm, setSavingForm] = useState(false);
 
   const { user } = useAuthStore();
   const addToast = useToastStore((state) => state.addToast);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!openFormMenu) return;
+    const close = () => setOpenFormMenu(null);
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [openFormMenu]);
+
+  const handleDeleteForm = async () => {
+    if (!deleteFormCandidate) return;
+    setDeletingForm(true);
+    try {
+      await api.delete(`/forms/${deleteFormCandidate.formId}`);
+      setForms((current) => current.filter((form) => form.formId !== deleteFormCandidate.formId));
+      addToast('Form deleted successfully.', 'success');
+      setDeleteFormCandidate(null);
+    } catch (error: any) {
+      addToast(error?.response?.data?.message || 'Unable to delete form.', 'error');
+    } finally {
+      setDeletingForm(false);
+    }
+  };
+
+  const handleUpdateForm = async () => {
+    if (!editFormCandidate) return;
+    setSavingForm(true);
+    try {
+      const response = await api.put<FormResponse>(`/forms/${editFormCandidate.formId}`, {
+        accessBranch: editFormCandidate.accessBranch,
+        accessBatch: editFormCandidate.accessBatch,
+        jsonOfFields: editFormCandidate.jsonOfFields,
+        createdBy: user?.id,
+      });
+      setForms((current) => current.map((form) => form.formId === editFormCandidate.formId ? { ...form, ...response.data } : form));
+      addToast('Form updated successfully.', 'success');
+      setEditFormCandidate(null);
+    } catch (error: any) {
+      addToast(error?.response?.data?.message || 'Unable to update form.', 'error');
+    } finally {
+      setSavingForm(false);
+    }
+  };
 
   useEffect(() => {
     if (!isCreating) fetchForms();
@@ -405,25 +453,42 @@ export const CreateForm: React.FC = () => {
                         Batch: {form.accessBatch}
                       </span>
                     </div>
-                    <span
-                      title="Projects submitted under this form"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        flexShrink: 0,
-                        backgroundColor: '#eff6ff',
-                        color: '#1d4ed8',
-                        border: '1px solid #bfdbfe',
-                        padding: '4px 10px',
-                        borderRadius: 999,
-                        fontSize: 12,
-                        fontWeight: 700,
-                      }}
-                    >
-                      <FolderKanban size={13} />
-                      {projectCount} {projectCount === 1 ? 'Project' : 'Projects'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span
+                        title="Projects submitted under this form"
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+                          backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe',
+                          padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700,
+                        }}
+                      >
+                        <FolderKanban size={13} />
+                        {projectCount} {projectCount === 1 ? 'Project' : 'Projects'}
+                      </span>
+                      <div style={{ position: 'relative' }} onMouseDown={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          aria-label="Form actions"
+                          onClick={() => setOpenFormMenu((current) => current === form.formId ? null : form.formId)}
+                          style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)', borderRadius: 8, background: 'var(--surface)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                        {openFormMenu === form.formId && (
+                          <div style={{ position: 'absolute', top: 36, right: 0, width: 170, padding: 6, background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: 10, boxShadow: '0 14px 34px rgba(15,23,42,0.18)', zIndex: 100 }}>
+                            {[
+                              { label: 'View Details', icon: <Eye size={14} />, action: () => navigate(`/admin/form-details/${form.formId}`) },
+                              { label: 'Edit Form', icon: <Pencil size={14} />, action: () => setEditFormCandidate({ ...form }) },
+                              { label: 'Delete Form', icon: <Trash2 size={14} />, danger: true, action: () => setDeleteFormCandidate(form) },
+                            ].map((item) => (
+                              <button key={item.label} type="button" onClick={() => { setOpenFormMenu(null); item.action(); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px', border: 0, borderRadius: 7, background: 'transparent', color: item.danger ? 'var(--danger)' : 'var(--text-primary)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }}>
+                                {item.icon}{item.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {createdLabel && (
@@ -454,6 +519,41 @@ export const CreateForm: React.FC = () => {
             })}
           </div>
         )}
+        {deleteFormCandidate && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(15,23,42,0.52)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseDown={() => !deletingForm && setDeleteFormCandidate(null)}>
+            <Card elevation={3} style={{ width: 'min(460px, 92vw)', padding: 24 }} onMouseDown={(event: React.MouseEvent) => event.stopPropagation()}>
+              <AlertTriangle size={34} color="var(--danger)" />
+              <h2 style={{ fontSize: 20, margin: '14px 0 8px' }}>Delete Form</h2>
+              <p style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>Are you sure you want to delete this Form? <strong>{deleteFormCandidate.accessBranch} · {deleteFormCandidate.accessBatch}</strong>. This action is irreversible.</p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+                <Button variant="outline" onClick={() => setDeleteFormCandidate(null)} disabled={deletingForm}>Cancel</Button>
+                <Button variant="danger" onClick={handleDeleteForm} isLoading={deletingForm}>Confirm Delete</Button>
+              </div>
+            </Card>
+          </div>
+        )}
+        {editFormCandidate && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseDown={() => !savingForm && setEditFormCandidate(null)}>
+            <Card elevation={3} style={{ width: 'min(520px, 92vw)', padding: 24 }} onMouseDown={(event: React.MouseEvent) => event.stopPropagation()}>
+              <h2 style={{ fontSize: 20, margin: '0 0 6px' }}>Edit Form</h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: '0 0 18px' }}>Update the eligible branches and batches. Values with linked project submissions cannot be removed.</p>
+              <div style={{ display: 'grid', gap: 14 }}>
+                <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 650 }}>
+                  Branches <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>(comma separated)</span>
+                  <input value={editFormCandidate.accessBranch || ''} onChange={(event) => setEditFormCandidate((current) => current ? { ...current, accessBranch: event.target.value } : current)} style={{ padding: '10px 12px', border: '1px solid var(--border-color)', borderRadius: 8, background: 'var(--background)' }} />
+                </label>
+                <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 650 }}>
+                  Batches <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>(comma separated)</span>
+                  <input value={editFormCandidate.accessBatch || ''} onChange={(event) => setEditFormCandidate((current) => current ? { ...current, accessBatch: event.target.value } : current)} style={{ padding: '10px 12px', border: '1px solid var(--border-color)', borderRadius: 8, background: 'var(--background)' }} />
+                </label>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
+                <Button variant="outline" onClick={() => setEditFormCandidate(null)} disabled={savingForm}>Cancel</Button>
+                <Button variant="primary" onClick={handleUpdateForm} isLoading={savingForm}>Save Changes</Button>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     );
   }
@@ -481,30 +581,40 @@ export const CreateForm: React.FC = () => {
           marginBottom: 16,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
           <button
             type="button"
             onClick={() => setIsCreating(false)}
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-secondary)',
+              gap: 8,
+              background: 'var(--surface)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 10,
+              color: 'var(--text-primary)',
               cursor: 'pointer',
               fontSize: 14,
-              padding: '6px 0',
+              fontWeight: 650,
+              padding: '9px 14px',
+              boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
+              transition: 'border-color 150ms ease, color 150ms ease, transform 150ms ease, box-shadow 150ms ease',
+            }}
+            onMouseEnter={(event) => {
+              event.currentTarget.style.borderColor = 'var(--primary)';
+              event.currentTarget.style.color = 'var(--primary)';
+              event.currentTarget.style.transform = 'translateX(-2px)';
+              event.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.12)';
+            }}
+            onMouseLeave={(event) => {
+              event.currentTarget.style.borderColor = 'var(--border-color)';
+              event.currentTarget.style.color = 'var(--text-primary)';
+              event.currentTarget.style.transform = 'translateX(0)';
+              event.currentTarget.style.boxShadow = '0 1px 2px rgba(15, 23, 42, 0.06)';
             }}
           >
-            <ArrowLeft size={16} /> Back
+            <ArrowLeft size={17} strokeWidth={2.2} /> Back
           </button>
-          <div>
-            <h1 style={{ fontSize: 22, color: 'var(--text-primary)', margin: 0 }}>Create Enrollment Form</h1>
-            <p style={{ color: 'var(--text-secondary)', margin: '2px 0 0', fontSize: 13 }}>
-              Define audience & schema — preview updates live
-            </p>
-          </div>
         </div>
       </div>
 

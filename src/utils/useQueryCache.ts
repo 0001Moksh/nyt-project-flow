@@ -31,7 +31,7 @@ export function useQueryCache<T>({
     refetchInterval,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-    refetchOnMount: 'always',
+    refetchOnMount: true,
     retry: 1,
   });
 }

@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Search,
   Trash2,
+  RotateCw,
 } from 'lucide-react';
 import { useToastStore } from '../../utils/toastStore';
 import { AdminProjectDetailDrawer } from './AdminProjectDetailDrawer';
@@ -68,6 +69,7 @@ export const AdminSupervisors: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
   const [viewProjectId, setViewProjectId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [filterDepartment, setFilterDepartment] = useState('ALL');
@@ -90,7 +92,15 @@ export const AdminSupervisors: React.FC = () => {
     'table_cols_supervisors',
     DEFAULT_VISIBLE
   );
-  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(DEFAULT_ORDER);
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('table_cols_supervisors_order') || '[]');
+      const valid = Array.isArray(saved) ? saved.filter((key): key is ColumnKey => DEFAULT_ORDER.includes(key)) : [];
+      return [...valid, ...DEFAULT_ORDER.filter((key) => !valid.includes(key))];
+    } catch {
+      return DEFAULT_ORDER;
+    }
+  });
   const [isColumnPickerOpen, setIsColumnPickerOpen] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement>(null);
 
@@ -99,6 +109,10 @@ export const AdminSupervisors: React.FC = () => {
 
   const dragCol = useRef<ColumnKey | null>(null);
   const [dragOverCol, setDragOverCol] = useState<ColumnKey | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('table_cols_supervisors_order', JSON.stringify(columnOrder));
+  }, [columnOrder]);
 
   useEffect(() => {
     fetchData();
@@ -125,8 +139,9 @@ export const AdminSupervisors: React.FC = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, [isColumnPickerOpen, openHeaderFilter]);
 
-  const fetchData = async () => {
-    setIsLoading(true);
+  const fetchData = async (background = false) => {
+    if (background) setIsRefreshing(true);
+    else setIsLoading(true);
     try {
       const [supRes, projRes] = await Promise.all([
         api.get('/supervisors').catch(() => ({ data: [] })),
@@ -138,6 +153,7 @@ export const AdminSupervisors: React.FC = () => {
       console.error(err);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -785,6 +801,16 @@ export const AdminSupervisors: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchData(true)}
+            disabled={isRefreshing}
+            title="Refresh supervisor table"
+            style={{ width: 34, minWidth: 34, padding: 7 }}
+          >
+            <RotateCw size={15} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : undefined }} />
+          </Button>
           <Button variant="outline" size="sm" leftIcon={<Download size={15} />} onClick={exportReport}>
             Export Report
           </Button>

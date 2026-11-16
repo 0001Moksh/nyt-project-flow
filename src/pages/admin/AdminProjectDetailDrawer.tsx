@@ -120,15 +120,21 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
 
     return (
     <div
-      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'flex-end', zIndex: 950 }}
+      // This drawer can be opened from tables with high-z-index header menus.
+      // Keep the complete overlay above those controls so table cells cannot
+      // visually cut through the project detail panel.
+      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.55)', display: 'flex', justifyContent: 'flex-end', zIndex: 12000 }}
       onClick={onClose}
     >
       <div
-        style={{ width: '800px', maxWidth: '94vw', height: '100%', backgroundColor: 'var(--surface)', overflowY: 'auto', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Project details"
+        style={{ width: 'min(800px, 100vw)', height: '100%', backgroundColor: 'var(--surface)', overflowY: 'auto', overscrollBehavior: 'contain', boxShadow: '-4px 0 24px rgba(0,0,0,0.18)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 10, padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
+        <div style={{ position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 1, padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start' }}>
+          <div style={{ minWidth: 0 }}>
             <h2 style={{ margin: '0 0 8px', fontSize: '22px' }}>{project?.projectTitle || 'Project details'}</h2>
             <div style={{ display: 'flex', gap: '16px', color: 'var(--text-secondary)', fontSize: '13px', flexWrap: 'wrap' }}>
               <span>Leader: <strong>{project?.leaderName || '—'}</strong></span>
@@ -144,7 +150,8 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
           </div>
           <button
             onClick={onClose}
-            style={{ background: 'var(--surface-hover)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}
+            aria-label="Close project details"
+            style={{ flex: '0 0 auto', background: 'var(--surface-hover)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}
           >
             <X size={20} />
           </button>
@@ -401,7 +408,7 @@ export const AdminProjectDetailDrawer: React.FC<AdminProjectDetailDrawerProps> =
             alignItems: 'center',
             justifyContent: 'center',
             padding: '20px',
-            zIndex: 1000,
+            zIndex: 12001,
           }}
           onClick={() => setPreviewFile(null)}
         >

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../utils/authStore';
 import { Card, Button, Loader } from '../components';
 import { useToastStore } from '../utils/toastStore';
-import { api } from '../services/api';
+import { api, API_BASE_URL } from '../services/api';
 import { MessageSquare, Send, Paperclip, Mail, Users } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -46,9 +46,13 @@ export const Chat: React.FC = () => {
         import('@stomp/stompjs').then(({ Client }) => {
             if (cancelled) return;
 
-            const WS_BASE_URL = import.meta.env.PROD
-              ? 'wss://college-project-backend-r7f9.onrender.com/ws-chat'
-              : 'ws://localhost:8080/ws-chat';
+            const socketUrl = new URL(API_BASE_URL, window.location.origin);
+            socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+            socketUrl.pathname = '/ws-chat';
+            socketUrl.search = '';
+            // Vercel HTTP rewrites do not proxy persistent WebSocket connections.
+            const WS_BASE_URL = import.meta.env.VITE_WS_URL || (import.meta.env.PROD
+                ? 'wss://college-project-backend-r7f9.onrender.com/ws-chat' : socketUrl.toString());
 
             client = new Client({
                 brokerURL: WS_BASE_URL,

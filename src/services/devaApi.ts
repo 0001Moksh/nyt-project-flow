@@ -1,14 +1,12 @@
 import axios from 'axios';
 import { useToastStore } from '../utils/toastStore';
+import { API_BASE_URL } from './api';
 
 const PRIMARY_DEVA_URL =
   import.meta.env.VITE_DEVA_API_BASE_URL ||
-  'http://localhost:8000/api/v1/agent';
+  (import.meta.env.PROD ? `${API_BASE_URL.replace(/\/$/, '')}/deva` : 'http://localhost:8000/api/v1/agent');
 
-const FALLBACK_DEVA_URL =
-  import.meta.env.PROD
-    ? 'https://college-project-backend-r7f9.onrender.com/api/deva'
-    : 'http://localhost:8080/api/deva';
+const FALLBACK_DEVA_URL = `${API_BASE_URL.replace(/\/$/, '')}/deva`;
 
 const DEVA_API_KEY = import.meta.env.VITE_DEVA_API_KEY || 'deva_admin_secret_api_key_2026';
 

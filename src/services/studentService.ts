@@ -19,6 +19,7 @@ export interface ProjectCreateRequest {
   formId: string;
   projectTitle: string;
   projectDescription: string;
+  customFieldsJson?: string;
 }
 
 export interface ProjectResponse {
@@ -27,6 +28,7 @@ export interface ProjectResponse {
   formId: string;
   projectTitle: string;
   projectDescription: string;
+  customFieldsJson?: string;
   status: string;
   createdAt: string;
 }

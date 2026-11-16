@@ -18,7 +18,6 @@ export const Dashboard: React.FC = () => {
     const [activeProjects, setActiveProjects] = useState<any[]>([]);
 
     // Extended Data Tracking
-    const [teamMembersList, setTeamMembersList] = useState<any[]>([]);
     const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
     const [meetings, setMeetings] = useState<any[]>([]);
     const [performanceScore, setPerformanceScore] = useState(100);
@@ -64,7 +63,6 @@ export const Dashboard: React.FC = () => {
             const myInvites: any[] = [];
             const myProjects: any[] = [];
             const myIncomingReqs: any[] = [];
-            const myMembersGrid: any[] = [];
 
             allMembers.forEach((tm: any) => {
                 const joined = JSON.parse(tm.joinMemberArray || '[]');
@@ -94,13 +92,6 @@ export const Dashboard: React.FC = () => {
                         teamMembersCount: joined.length,
                         pendingCount: pending.length
                     });
-
-                    // Populate the active members grid for this project
-                    const leaderCard = { ...leaderInfo, status: 'APPROVED', isLeader: true };
-                    const joinedCards = joined.map((id: string) => ({ ...allStudents.find((s: any) => s.studentId === id), status: 'APPROVED', isLeader: false })).filter((s: any) => s.studentId !== leaderInfo?.studentId);
-                    const pendingCards = pending.map((id: string) => ({ ...allStudents.find((s: any) => s.studentId === id), status: 'PENDING APPROVAL', isLeader: false }));
-
-                    myMembersGrid.push(leaderCard, ...joinedCards, ...pendingCards);
 
                     // If I am the leader, populate my Incoming Requests
                     if (teamInfo.leaderId === user.id) {
@@ -137,10 +128,6 @@ export const Dashboard: React.FC = () => {
             } else {
                 setMeetings([]);
             }
-
-            // Deduplicate members list based on ID
-            const uniqueMembers = Array.from(new Map(myMembersGrid.filter(m => m.studentId).map(m => [m.studentId, m])).values());
-            setTeamMembersList(uniqueMembers);
 
             const me = allStudents.find((s: any) => s.studentId === user.id);
             setMyStudentInfo(me);
@@ -206,32 +193,6 @@ export const Dashboard: React.FC = () => {
             fetchData();
         } catch (err) {
             addToast('Failed to process action', 'error');
-        }
-    };
-
-    const handleCompleteTeam = async () => {
-        const currentProject = activeProjects[0];
-        if (!currentProject) return;
-        try {
-            const { data: tm } = await api.get(`/team-members/${currentProject.teamId}`);
-            let joined = JSON.parse(tm.joinMemberArray || '[]');
-            let pending = JSON.parse(tm.notJoinMemberArray || '[]');
-            let rejected = JSON.parse(tm.rejectedMemberArray || '[]');
-
-            // Move all pending to rejected
-            rejected = [...rejected, ...pending];
-            pending = [];
-
-            await api.put(`/team-members/${currentProject.teamId}`, {
-                joinMemberIds: joined,
-                notJoinMemberIds: pending,
-                rejectedMemberIds: rejected
-            });
-            
-            addToast('Team marked as complete. All pending invitations have been closed.', 'success');
-            fetchData();
-        } catch (err) {
-            addToast('Failed to complete team.', 'error');
         }
     };
 
@@ -387,46 +348,6 @@ export const Dashboard: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Active Members */}
-                    <Card elevation={1} style={{ padding: '0', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
-                        <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fdfdfd' }}>
-                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Active Members</h3>
-                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                                {currentProject.leaderId === user.id && (
-                                    <Button variant="outline" size="sm" onClick={handleCompleteTeam}>Complete Team</Button>
-                                )}
-                                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                                    {teamMembersList.filter((m: any) => m.status === 'APPROVED').length}/{teamMembersList.length || 0} joined
-                                </span>
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            {teamMembersList.map((tm, idx) => (
-                                <div key={idx} style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: idx !== teamMembersList.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: tm.status === 'APPROVED' ? 'var(--primary-glow)' : 'var(--surface-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: tm.status === 'APPROVED' ? 'var(--primary)' : 'var(--text-secondary)' }}>
-                                            {tm.name?.charAt(0) || '?'}
-                                        </div>
-                                        <div>
-                                            <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>
-                                                {tm.name} {tm.studentId === user.id ? '(You)' : ''}
-                                            </div>
-                                            <div style={{ fontSize: '13px', color: 'var(--text-disabled)' }}>
-                                                {tm.isLeader ? 'Team Lead' : 'Team Member'} • {tm.rollNo || 'N/A'} • {tm.mail || 'No Email'}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {tm.status === 'APPROVED' ? (
-                                        <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: '#e6f4ea', color: '#1e8e3e', padding: '4px 12px', borderRadius: '12px' }}>APPROVED</span>
-                                    ) : (
-                                        <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: '#fef3c7', color: '#d97706', padding: '4px 12px', borderRadius: '12px' }}>PENDING APPROVAL</span>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
                 </div>
             ) : (
                 <Card elevation={1} style={{ padding: '32px', color: 'var(--text-secondary)' }}>

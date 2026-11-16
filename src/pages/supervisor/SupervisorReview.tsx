@@ -100,7 +100,8 @@ export const SupervisorReview: React.FC = () => {
                 await api.patch(`/submissions/${ep}/${activeSub[`${ep}Id`] || activeSub.finalId || activeSub.synopsisId}/supervisor-review`, {
                     approved,
                     comment: `${existingComment}SUPERVISOR FEEDBACK: ${feedback}`,
-                    supervisorId: project.supervisorId
+                    supervisorId: project.supervisorId,
+                    marks: approved ? score : null,
                 });
             }
 

@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { api } from '../services/api';
+import { queryClient } from './queryClient';
 
 interface User {
   id: string;
@@ -12,7 +14,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isInitialized: boolean;
   login: (userData: User) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   initialize: () => void;
 }
 
@@ -48,13 +50,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   login: (userData: User) => {
+    queryClient.clear();
     localStorage.setItem('mockSessionUser', JSON.stringify(userData));
     localStorage.setItem('userId', userData.id); // for API interceptor
     localStorage.setItem('userRole', userData.role);
     set({ user: userData, isAuthenticated: true, isInitialized: true });
   },
 
-  logout: () => {
+  logout: async () => {
+    // Do not report a successful logout if the server session could not be revoked.
+    await api.post('/session/logout');
+    queryClient.clear();
     localStorage.removeItem('mockSessionUser');
     localStorage.removeItem('userId');
     localStorage.removeItem('userRole');

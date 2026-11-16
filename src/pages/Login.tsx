@@ -41,11 +41,13 @@ export const Login: React.FC = () => {
 
     setIsLoading(true);
     const normalizedEmail = email.trim().toLowerCase();
+    const loginConfig = { validateStatus: () => true, skipGlobalErrorToast: true } as any;
+    const isNetworkFailure = (error: any) => !error?.response;
 
     try {
       // 1. Admin login (dedicated endpoint — avoids wrong student/supervisor error messages)
       try {
-        const adminRes = await api.post('/admins/login', { email: normalizedEmail, password }, { validateStatus: () => true });
+        const adminRes = await api.post('/admins/login', { email: normalizedEmail, password }, loginConfig);
         if (adminRes.status >= 200 && adminRes.status < 300 && adminRes.data?.adminId) {
           const matchedAdmin = adminRes.data;
           login({ id: matchedAdmin.adminId, name: matchedAdmin.name || 'Admin', email: normalizedEmail, role: 'ADMIN' });
@@ -57,13 +59,13 @@ export const Login: React.FC = () => {
           addToast(adminRes.data.message, 'error');
           return;
         }
-      } catch {
-        // continue to other roles
+      } catch (error: any) {
+        if (isNetworkFailure(error)) throw error;
       }
 
       // 2. Supervisor login with status + first-time validation
       try {
-        const supervisorRes = await api.post('/supervisor/login', { email: normalizedEmail, password }, { validateStatus: () => true });
+        const supervisorRes = await api.post('/supervisor/login', { email: normalizedEmail, password }, loginConfig);
         if (supervisorRes.status >= 200 && supervisorRes.status < 300 && supervisorRes.data?.supervisorId) {
           const matchedSupervisor = supervisorRes.data;
           if (matchedSupervisor.requiresPasswordSetup) {
@@ -87,13 +89,13 @@ export const Login: React.FC = () => {
           addToast(supervisorRes.data.message, 'error');
           return;
         }
-      } catch {
-        // continue to student
+      } catch (error: any) {
+        if (isNetworkFailure(error)) throw error;
       }
 
       // 3. Student login
       try {
-        const studentRes = await api.post('/student/login', { email: normalizedEmail, password }, { validateStatus: () => true });
+        const studentRes = await api.post('/student/login', { email: normalizedEmail, password }, loginConfig);
         if (studentRes.status >= 200 && studentRes.status < 300 && studentRes.data?.studentId) {
           const matchedStudent = studentRes.data;
           login({ id: matchedStudent.studentId, name: matchedStudent.name, email: normalizedEmail, role: 'STUDENT' });
@@ -105,14 +107,14 @@ export const Login: React.FC = () => {
           addToast(studentRes.data.message === 'Invalid email or password' ? 'Invalid email or password' : studentRes.data.message, 'error');
           return;
         }
-      } catch {
-        // fall through
+      } catch (error: any) {
+        if (isNetworkFailure(error)) throw error;
       }
 
       addToast('Invalid email or password', 'error');
     } catch (error: any) {
       console.error(error);
-      addToast(error.response?.data?.message || 'Network error occurred.', 'error');
+      addToast(error.response?.data?.message || 'Backend is unavailable. Check that the correct local server is running.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -133,6 +135,8 @@ export const Login: React.FC = () => {
       const supervisorName = pendingSupervisorLogin?.name || 'Supervisor';
       const supervisorId = pendingSupervisorLogin?.id;
       if (supervisorId) {
+        // Establish a server-authenticated session after first-time setup.
+        await api.post('/supervisor/login', { email: supervisorEmail, password });
         login({ id: supervisorId, name: supervisorName, email: supervisorEmail, role: 'SUPERVISOR' });
         addToast('Password set successfully. Welcome!', 'success');
         navigate('/supervisor/dashboard');

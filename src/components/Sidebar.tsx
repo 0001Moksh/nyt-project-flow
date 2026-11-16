@@ -19,9 +19,13 @@ export const Sidebar: React.FC = () => {
 
   if (!user) return null;
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch {
+      // The API interceptor displays the failure; keep the session visible for retry.
+    }
   };
 
   const getLinks = () => {

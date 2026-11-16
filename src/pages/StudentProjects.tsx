@@ -9,6 +9,7 @@ import { getPreviewUrl } from '../utils/filePreview';
 import { isValidMeetingLink, openMeetingLink } from '../utils/meetingLinks';
 import { cleanProjectDescription } from '../utils/projectDescription';
 import { DeliverableUploader } from '../components/DeliverableUploader';
+import { useToastStore } from '../utils/toastStore';
 
 const STAGE_LABELS: Record<string, string> = {
     SYNOPSIS: 'Synopsis',
@@ -33,7 +34,9 @@ const templateToAttachment = (template: Template): FormAttachment => ({
     fileUrl: template.fileUrl,
     uploadedAt: template.createdAt,
     source: template.sourceType,
-    stage: template.stageId
+    stage: template.stageId,
+    description: template.description,
+    allowedFormats: template.allowedFormat || template.type,
 });
 
 const getStageLabel = (stage?: string) =>
@@ -51,15 +54,18 @@ const stageEndpoint = (stage?: string) => {
 
 const getSubmissionStatusLabel = (sub?: any) => {
     const status = String(sub?.status || sub?.teamReviewStatus || 'PENDING').toUpperCase();
-    if (status === 'APPROVED') return 'Approved';
+    if (status === 'APPROVED' || status === 'APPROVED_FINAL') return 'Approved';
+    if (status.includes('CHANGES_REQUESTED_BY_ADMIN')) return 'Changes Requested by Admin';
+    if (status.includes('CHANGES_REQUESTED_BY_SUPERVISOR')) return 'Changes Requested by Supervisor';
     if (status === 'REJECTED' || status === 'REVISION') return 'Team Revision Needed';
-    if (status.includes('SUPERVISOR')) return 'Under Supervisor Review';
+    if (status.includes('PENDING_ADMIN')) return 'Under Admin Review';
+    if (status.includes('PENDING_SUPERVISOR')) return 'Under Supervisor Review';
     return 'Pending Team Approval';
 };
 
 const getReviewerLabel = (sub?: any) => {
     const status = String(sub?.status || sub?.teamReviewStatus || 'PENDING').toUpperCase();
-    if (status === 'APPROVED') return 'Admin';
+    if (status === 'APPROVED' || status === 'APPROVED_FINAL' || status.includes('ADMIN')) return 'Admin';
     if (status === 'REJECTED' || status === 'REVISION') return 'Team Members';
     if (status.includes('SUPERVISOR')) return 'Supervisor';
     return 'Team Members';
@@ -114,6 +120,9 @@ export const StudentProjects: React.FC = () => {
     const [submissionsByStage, setSubmissionsByStage] = useState<Record<string, any[]>>({});
     const [processingReviewId, setProcessingReviewId] = useState<string | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [pendingInviteCount, setPendingInviteCount] = useState(0);
+    const [completingTeam, setCompletingTeam] = useState(false);
+    const addToast = useToastStore((state) => state.addToast);
 
     // ✅ All hooks must be called unconditionally before any early returns
     const submissionRows = useMemo(
@@ -185,12 +194,18 @@ export const StudentProjects: React.FC = () => {
                     myProject = { ...projInfo, leaderId: teamInfo.leaderId };
                     myLeader = allStudents.find((s: any) => s.studentId === teamInfo.leaderId);
 
+                    const pending = JSON.parse(tm.notJoinMemberArray || '[]');
                     const joinedCards = joined.map((id: string) => {
                         const s = allStudents.find((stu: any) => stu.studentId === id);
-                        return { ...s, isLeader: false };
+                        return { ...s, isLeader: false, inviteStatus: 'ACCEPTED' };
                     }).filter((s: any) => s.studentId !== myLeader?.studentId);
+                    const pendingCards = pending.map((id: string) => {
+                        const s = allStudents.find((stu: any) => stu.studentId === id);
+                        return { ...s, isLeader: false, inviteStatus: 'PENDING' };
+                    }).filter((s: any) => s.studentId);
 
-                    myMembersGrid = [{ ...myLeader, isLeader: true }, ...joinedCards];
+                    myMembersGrid = [{ ...myLeader, isLeader: true, inviteStatus: 'ACCEPTED' }, ...joinedCards, ...pendingCards];
+                    setPendingInviteCount(pending.length);
 
                     if (projInfo.supervisorId) {
                         mySupervisor = allSupervisors.find((s: any) => s.supervisorId === projInfo.supervisorId);
@@ -243,6 +258,30 @@ export const StudentProjects: React.FC = () => {
         }
     };
 
+    const handleCompleteTeam = async () => {
+        if (!project?.teamId || pendingInviteCount === 0) return;
+        setCompletingTeam(true);
+        try {
+            const { data: teamState } = await api.get(`/team-members/${project.teamId}`);
+            const joined = JSON.parse(teamState.joinMemberArray || '[]');
+            const pending = JSON.parse(teamState.notJoinMemberArray || '[]');
+            const rejected = JSON.parse(teamState.rejectedMemberArray || '[]');
+            await api.put(`/team-members/${project.teamId}`, {
+                joinMemberIds: joined,
+                notJoinMemberIds: [],
+                rejectedMemberIds: Array.from(new Set([...rejected, ...pending])),
+            });
+            setPendingInviteCount(0);
+            setMembers((current) => current.filter((member) => member.inviteStatus !== 'PENDING'));
+            setTeamMembers((current) => current.filter((member) => member.inviteStatus !== 'PENDING'));
+            addToast('Team marked as complete. Pending invitations were closed.', 'success');
+        } catch (error: any) {
+            addToast(error?.response?.data?.message || 'Failed to complete team.', 'error');
+        } finally {
+            setCompletingTeam(false);
+        }
+    };
+
     // ---------- Early returns only after all hooks ----------
     if (isLoading) {
         return (
@@ -286,7 +325,7 @@ export const StudentProjects: React.FC = () => {
 
     const activeTeamSubmission = submissionRows[0] || null;
     const activeTeamStageEndpoint = activeTeamSubmission?._stageKey;
-    const isTeamRevision = ['REJECTED', 'REVISION'].includes(String(activeTeamSubmission?.status || '').toUpperCase());
+    const isTeamRevision = ['REJECTED', 'REVISION', 'CHANGES_REQUESTED_BY_SUPERVISOR', 'CHANGES_REQUESTED_BY_ADMIN'].includes(String(activeTeamSubmission?.status || '').toUpperCase());
     const isUnderSupervisor = String(activeTeamSubmission?.status || '').toUpperCase().includes('APPROVED');
     const showPeerApproval = teamMembers.length > 1 && Boolean(activeTeamSubmission && activeTeamStageEndpoint);
     const activeTeamSubmissionId = activeTeamSubmission ? (activeTeamSubmission[`${activeTeamStageEndpoint}Id`] || activeTeamSubmission.id) : null;
@@ -520,7 +559,14 @@ export const StudentProjects: React.FC = () => {
                                 <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <Users size={15} color="var(--primary)" /> Team
                                 </h3>
-                                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>{members.length}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {isLeader && pendingInviteCount > 0 && (
+                                        <Button variant="outline" size="sm" onClick={handleCompleteTeam} isLoading={completingTeam} style={{ padding: '4px 8px', fontSize: 11 }}>
+                                            Complete Team
+                                        </Button>
+                                    )}
+                                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>{members.filter((member) => member.inviteStatus !== 'PENDING').length}/{members.length}</span>
+                                </div>
                             </div>
                             <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
                                 {members.length === 0 && (
@@ -538,6 +584,9 @@ export const StudentProjects: React.FC = () => {
                                                 </span>
                                                 {member.isLeader && (
                                                     <span style={{ fontSize: '9px', fontWeight: 700, backgroundColor: '#dbeafe', color: '#1d4ed8', padding: '1px 6px', borderRadius: '8px' }}>LEAD</span>
+                                                )}
+                                                {member.inviteStatus === 'PENDING' && (
+                                                    <span style={{ fontSize: '9px', fontWeight: 700, backgroundColor: '#fef3c7', color: '#b45309', padding: '1px 6px', borderRadius: '8px' }}>PENDING</span>
                                                 )}
                                             </div>
                                             <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>

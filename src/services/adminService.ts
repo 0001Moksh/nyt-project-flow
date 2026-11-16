@@ -10,6 +10,8 @@ export interface Template {
   sourceType: string;
   fileUrl: string;
   createdAt: string;
+  /** Configured allowed format returned by the backend in Template.type. */
+  allowedFormat?: string;
 }
 
 export interface FormAttachment {
@@ -20,6 +22,8 @@ export interface FormAttachment {
   uploadedAt?: string;
   source?: 'UPLOAD' | 'LINK' | string;
   stage?: 'SYNOPSIS' | 'PROGRESS1' | 'PROGRESS2' | 'FINAL' | 'ALL' | 'GENERAL' | string;
+  description?: string;
+  allowedFormats?: string;
 }
 
 export interface FormCreateRequest {

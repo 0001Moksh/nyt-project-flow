@@ -43,6 +43,8 @@ const templateToAttachment = (template: Template): FormAttachment => ({
   uploadedAt: template.createdAt,
   source: template.sourceType,
   stage: template.stageId,
+  description: template.description,
+  allowedFormats: template.allowedFormat || template.type,
 });
 
 const PENDING_STATUSES = new Set([
@@ -264,7 +266,7 @@ export const DeliverableUploader: React.FC<DeliverableUploaderProps> = ({
             }}
           >
             {['SYNOPSIS', 'PROGRESS1', 'PROGRESS2', 'FINAL'].map((stage) => (
-              <option key={stage} value={stage}>
+              <option key={stage} value={stage} disabled={stage !== currentStage}>
                 {stage}
               </option>
             ))}
